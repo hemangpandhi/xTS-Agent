@@ -1,0 +1,387 @@
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+Android Compatibility Test Suite 17_r2 (16044444)
+OmniLab lab-4.373.0 cl/939739458 kokoro-1585 branch-main github-97aa7cbed355dcc0decae10ddfdd87c45c01a02d
+Use "help" to get more information on running commands. Use "dump bugreport" to generate a debug info file. Log dirs: [/tmp/ats_console_log]
+Args: [run, commandAndExit, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases]
+Using commandline arguments as starting command: [run, commandAndExit, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases]
+10-03 02:24:08 PDT I/AtsConsole: Replace command [run, commandAndExit, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases] by [[run, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases], [exit, -c, -s]]
+Command submitted.
+Stop reading input
+Will exit the console after all commands have executed.
+10-03 02:24:09 PDT I/AtsSessionPlugin: Command [1] scheduled, args=[cts --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --include-filter CtsBionicTestCases] {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:09 PDT I/AtsSessionPlugin: Command [1] started, args=[cts --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --include-filter CtsBionicTestCases] {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:09 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:12 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6532
+10-03 02:24:12 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6533
+10-03 02:24:12 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6530
+10-03 02:24:12 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6525
+10-03 02:24:12 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6526
+10-03 02:24:12 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6524
+10-03 02:24:12 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6529
+10-03 02:24:12 PDT I/AtsSessionPlugin: Command [1]'s invocations [b8add715-dd2c-4ef1-909e-84f863760adc] are waiting for devices. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:18 PDT I/MctsDynamicDownloadPlugin: Start to download MCTS (this will only happen at the first run, might take 10+ minutes) and prepare the test modules (this will take <1 minute), please wait... (You can also go to https://android.googlesource.com/platform/cts/+/main/tools/mcts/download_mcts.sh to use the script to manually download the files in advance to skip the downloading step) {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:18 PDT I/MctsDynamicDownloadPlugin: Finished MCTS test modules preparation. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:18 PDT I/AtsSessionPlugin: Command [1]'s invocation [b8add715-dd2c-4ef1-909e-84f863760adc] allocated devices [0.0.0.0:6532]. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:19 PDT I/LocalTestFlow: --------- Device: RunTest for xts-tradefed-test-cts (b8add715-dd2c-4ef1-909e-84f863760adc) --------- {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:19 PDT I/LocalTestRunner: Starting driver [TradefedTest] of test xts-tradefed-test-cts {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:19 PDT I/LocalTestRunner: TradefedTest is starting {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:19 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:24:20 PDT I/TradefedTest: TF started, pid=4156356 {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:24:21 D/ConfigurationFactory: Searching the 'config/' config path
+10-03 18:24:21 I/TradefedInvocationAgent: Runtime info file path: /tmp/olc_server_gen_files/session_fcb424ad-afe4-4d4c-9ecf-e8187ee12264/job_gen_xts-tradefed-test-job_f7ffa6a6-3c17-4eca-8302-6ac938a9d1e4/test_b8add715-dd2c-4ef1-909e-84f863760adc/tf_runtime_info
+10-03 18:24:21 I/TradefedInvocationAgent: Test module results file path: /tmp/olc_server_gen_files/session_fcb424ad-afe4-4d4c-9ecf-e8187ee12264/job_gen_xts-tradefed-test-job_f7ffa6a6-3c17-4eca-8302-6ac938a9d1e4/test_b8add715-dd2c-4ef1-909e-84f863760adc/tf_test_module_results
+10-03 02:24:22 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6531
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+10-03 18:24:23 D/TradefedFeatureServer: Starting feature server.
+10-03 18:24:23 D/GlobalConfiguration: Resolve and remote files from @Option
+Android Compatibility Test Suite 17_r2 (16044444)
+Use "help" or "help all" to get more information on running commands.
+Non-interactive mode: Running initial command then exiting.
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6526
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6532
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6533
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6529
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6524
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6530
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6525
+Using commandline arguments as starting command: [run, commandAndExit, cts, --include-filter, CtsBionicTestCases, --enable-default-logs, false, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, -s, 0.0.0.0:6532]
+10-03 18:24:23 I/DeviceManager: Detected new device 0.0.0.0:6531
+10-03 18:24:24 I/CommandScheduler: Received shutdown request.
+10-03 18:24:24 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:24:24 I/TestInvocation: Starting invocation for 'cts' with '[ DeviceBuildInfo{bid=16044444, serial=0.0.0.0:6532} on device '0.0.0.0:6532'] 
+10-03 02:24:27 PDT I/AtsSessionPlugin: Updated invocation info of test [b8add715-dd2c-4ef1-909e-84f863760adc]: invocation { command_id: "1" start_time { seconds: 1791019458 nanos: 695263505 } device_id: "0.0.0.0:6532" state_summary: "(not invoked)" } start_time { seconds: 1791019458 nanos: 695263505 } {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:24:27 E/AaptParser: aapt2 dump badging stderr: W/ziparchive(4161156): Unable to open 'badging': No such file or directory
+badging: error: No such file or directory.
+10-03 18:24:27 E/AaptParser: Failed to run aapt2 on /tmp/services10859840421167951498.apk. stdout: 
+10-03 18:24:27 E/AndroidJUnitTest: AaptParser failed for file services10859840421167951498.apk. The APK won't be installed
+com.android.tradefed.targetprep.TargetSetupError[AAPT_PARSER_FAILED|520050|DEPENDENCY_ISSUE]: AaptParser failed for file services10859840421167951498.apk. The APK won't be installed
+	at com.android.tradefed.targetprep.TestAppInstallSetup.parsePackageName(TestAppInstallSetup.java:831)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.resolveApkFiles(TestAppInstallSetup.java:719)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.setUp(TestAppInstallSetup.java:465)
+	at com.android.tradefed.testtype.AndroidJUnitTest.run(AndroidJUnitTest.java:422)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.instrument(ApkInstrumentationPreparer.java:160)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.run(ApkInstrumentationPreparer.java:90)
+	at com.android.compatibility.common.tradefed.targetprep.PreconditionPreparer.setUp(PreconditionPreparer.java:72)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparationOnDevice(InvocationExecution.java:676)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparersSetup(InvocationExecution.java:577)
+	at com.android.tradefed.invoker.InvocationExecution.doSetup(InvocationExecution.java:411)
+	at com.android.tradefed.invoker.TestInvocation.prepareAndRun(TestInvocation.java:678)
+	at com.android.tradefed.invoker.TestInvocation.performInvocation(TestInvocation.java:310)
+	at com.android.tradefed.invoker.TestInvocation.invoke(TestInvocation.java:1558)
+	at com.android.tradefed.command.CommandScheduler$InvocationThread.run(CommandScheduler.java:723)
+10-03 02:24:32 PDT I/AtsSessionPlugin: Updated invocation info of test [b8add715-dd2c-4ef1-909e-84f863760adc]: invocation { command_id: "1" start_time { seconds: 1791019458 nanos: 695263505 } device_id: "0.0.0.0:6532" state_summary: "running cts on build(s) \'DeviceBuildInfo{bid=16044444, serial=0.0.0.0:6532}\'" } start_time { seconds: 1791019458 nanos: 695263505 } {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:24:34 I/DeviceManager: Detected new device 0.0.0.0:6527
+10-03 02:24:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6527
+10-03 18:24:39 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:24:50 E/WifiCheck: Device has no network connection, no ssid provided, some modules of CTS require an active network connection
+10-03 18:24:53 E/AaptParser: aapt2 dump badging stderr: W/ziparchive(4176279): Unable to open 'badging': No such file or directory
+badging: error: No such file or directory.
+10-03 18:24:53 E/AaptParser: Failed to run aapt2 on /tmp/services7452228423160348916.apk. stdout: 
+10-03 18:24:53 E/AndroidJUnitTest: AaptParser failed for file services7452228423160348916.apk. The APK won't be installed
+com.android.tradefed.targetprep.TargetSetupError[AAPT_PARSER_FAILED|520050|DEPENDENCY_ISSUE]: AaptParser failed for file services7452228423160348916.apk. The APK won't be installed
+	at com.android.tradefed.targetprep.TestAppInstallSetup.parsePackageName(TestAppInstallSetup.java:831)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.resolveApkFiles(TestAppInstallSetup.java:719)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.setUp(TestAppInstallSetup.java:465)
+	at com.android.tradefed.testtype.AndroidJUnitTest.run(AndroidJUnitTest.java:422)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.instrument(ApkInstrumentationPreparer.java:160)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.run(ApkInstrumentationPreparer.java:90)
+	at com.android.compatibility.common.tradefed.targetprep.DeviceInfoCollector.setUp(DeviceInfoCollector.java:152)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparationOnDevice(InvocationExecution.java:676)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparersSetup(InvocationExecution.java:577)
+	at com.android.tradefed.invoker.InvocationExecution.doSetup(InvocationExecution.java:411)
+	at com.android.tradefed.invoker.TestInvocation.prepareAndRun(TestInvocation.java:678)
+	at com.android.tradefed.invoker.TestInvocation.performInvocation(TestInvocation.java:310)
+	at com.android.tradefed.invoker.TestInvocation.invoke(TestInvocation.java:1558)
+	at com.android.tradefed.command.CommandScheduler$InvocationThread.run(CommandScheduler.java:723)
+10-03 18:24:54 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:25:09 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:25:24 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:25:39 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:25:54 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:26:09 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:26:15 W/PropertyCheck: Expected "user" but found "userdebug" for property: ro.build.type
+10-03 18:26:15 W/PropertyCheck: Property "persist.sys.test_harness" not found on device, cannot verify value "false" 
+10-03 18:26:22 D/ITestSuite: [Total Unique Modules = 1]
+10-03 18:26:22 I/ITestSuite: 0.0.0.0:6532 running 1 modules: [x86_64 CtsBionicTestCases]
+10-03 18:26:24 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:26:24 D/ModuleDefinition: Running module x86_64 CtsBionicTestCases
+10-03 18:26:24 W/NativeDevice: Adb Shell Command : adb -s 0.0.0.0:6532 shell ls '/data/local/tests/unrestricted/CtsBionicTestCases'
+10-03 18:26:24 W/NativeDevice: Adb Shell Command exited with status: FAILED
+10-03 18:26:24 W/NativeDevice: Adb Shell Command shell stdout:
+
+10-03 18:26:24 W/NativeDevice: Adb Shell Command shell stderr:
+ls: /data/local/tests/unrestricted/CtsBionicTestCases: No such file or directory
+
+10-03 18:26:39 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:26:54 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:27:09 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:27:24 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:27:33 I/ModuleListener: [21/3351] 0.0.0.0:6532 CtsBionicTestCases heap_tagging_level_DeathTest#tagged_pointer_dies IGNORED
+10-03 18:27:33 I/ModuleListener: [44/3351] 0.0.0.0:6532 CtsBionicTestCases scs_DeathTest#stack_overflow IGNORED
+10-03 18:27:33 I/ModuleListener: [298/3351] 0.0.0.0:6532 CtsBionicTestCases PageSize16KiBCompatTest_DeathTest#AppDlopenErrIsFatal IGNORED
+10-03 18:27:33 I/ModuleListener: [301/3351] 0.0.0.0:6532 CtsBionicTestCases aeabi#read_tp IGNORED
+10-03 18:27:33 I/ModuleListener: [530/3351] 0.0.0.0:6532 CtsBionicTestCases fenv#fesetround_fegetround_FE_TONEARESTFROMZERO IGNORED
+10-03 18:27:33 I/ModuleListener: [563/3351] 0.0.0.0:6532 CtsBionicTestCases getauxval#arm_has_AT_HWCAP2 IGNORED
+10-03 18:27:33 I/ModuleListener: [613/3351] 0.0.0.0:6532 CtsBionicTestCases grp#initgroups IGNORED
+10-03 18:27:33 I/ModuleListener: [621/3351] 0.0.0.0:6532 CtsBionicTestCases heap_tagging_level#sync_async_bad_accesses_die IGNORED
+10-03 18:27:33 I/ModuleListener: [623/3351] 0.0.0.0:6532 CtsBionicTestCases heap_tagging_level#tagging_level_transitions IGNORED
+10-03 18:27:33 I/ModuleListener: [624/3351] 0.0.0.0:6532 CtsBionicTestCases heap_tagging_level#tagging_level_transition_sync_none IGNORED
+10-03 18:27:33 I/ModuleListener: [695/3351] 0.0.0.0:6532 CtsBionicTestCases libgen#basename_r IGNORED
+10-03 18:27:33 I/ModuleListener: [696/3351] 0.0.0.0:6532 CtsBionicTestCases libgen#dirname_r IGNORED
+10-03 18:27:33 I/ModuleListener: [719/3351] 0.0.0.0:6532 CtsBionicTestCases malloc#pvalloc_overflow IGNORED
+10-03 18:27:33 I/ModuleListener: [720/3351] 0.0.0.0:6532 CtsBionicTestCases malloc#valloc_overflow IGNORED
+10-03 18:27:33 I/ModuleListener: [721/3351] 0.0.0.0:6532 CtsBionicTestCases malloc#valloc_std IGNORED
+10-03 18:27:33 I/ModuleListener: [742/3351] 0.0.0.0:6532 CtsBionicTestCases malloc#disable_mte IGNORED
+10-03 18:27:33 I/ModuleListener: [755/3351] 0.0.0.0:6532 CtsBionicTestCases malloc#pvalloc_std IGNORED
+10-03 18:27:33 I/ModuleListener: [1112/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagGlobalsTest#RelrRegressionTestForb314038442 IGNORED
+10-03 18:27:33 I/ModuleListener: [1113/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagGlobalsTest#RelrRegressionTestForb314038442WithMteGlobals IGNORED
+10-03 18:27:33 I/ModuleListener: [1262/3351] 0.0.0.0:6532 CtsBionicTestCases pthread#pthread_mutex_pi_count_limit IGNORED
+10-03 18:27:33 I/ModuleListener: [1268/3351] 0.0.0.0:6532 CtsBionicTestCases pthread#pthread_mutex_owner_tid_limit IGNORED
+10-03 18:27:33 I/ModuleListener: [1278/3351] 0.0.0.0:6532 CtsBionicTestCases pthread#pthread_mutex_lock_null_32 IGNORED
+10-03 18:27:33 I/ModuleListener: [1279/3351] 0.0.0.0:6532 CtsBionicTestCases pthread#pthread_mutex_unlock_null_32 IGNORED
+10-03 18:27:33 I/ModuleListener: [1293/3351] 0.0.0.0:6532 CtsBionicTestCases pthread#pthread_attr_setinheritsched_PTHREAD_INHERIT_SCHED_takes_effect IGNORED
+10-03 18:27:33 I/ModuleListener: [1294/3351] 0.0.0.0:6532 CtsBionicTestCases pthread#pthread_attr_setinheritsched_PTHREAD_EXPLICIT_SCHED_takes_effect IGNORED
+10-03 18:27:33 I/ModuleListener: [1295/3351] 0.0.0.0:6532 CtsBionicTestCases pthread#pthread_attr_setinheritsched__takes_effect_despite_SCHED_RESET_ON_FORK IGNORED
+10-03 18:27:33 I/ModuleListener: [1769/3351] 0.0.0.0:6532 CtsBionicTestCases stdio_nofortify#fread_fwrite_int_overflow IGNORED
+10-03 18:27:34 I/ModuleListener: [2033/3351] 0.0.0.0:6532 CtsBionicTestCases stdio#fread_fwrite_int_overflow IGNORED
+10-03 18:27:34 I/ModuleListener: [2487/3351] 0.0.0.0:6532 CtsBionicTestCases sys_cachectl#__riscv_flush_icache IGNORED
+10-03 18:27:34 I/ModuleListener: [2498/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_misaligned_scalar IGNORED
+10-03 18:27:34 I/ModuleListener: [2499/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_misaligned_vector IGNORED
+10-03 18:27:34 I/ModuleListener: [2500/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_cpu_perf IGNORED
+10-03 18:27:34 I/ModuleListener: [2501/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_extensions IGNORED
+10-03 18:27:34 I/ModuleListener: [2502/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_scalar_perf IGNORED
+10-03 18:27:34 I/ModuleListener: [2503/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_vector_perf IGNORED
+10-03 18:27:34 I/ModuleListener: [2504/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_fail IGNORED
+10-03 18:27:34 I/ModuleListener: [2505/3351] 0.0.0.0:6532 CtsBionicTestCases sys_hwprobe#__riscv_hwprobe_syscall_vdso IGNORED
+10-03 18:27:34 I/ModuleListener: [2527/3351] 0.0.0.0:6532 CtsBionicTestCases sys_msg#smoke IGNORED
+10-03 18:27:34 I/ModuleListener: [2568/3351] 0.0.0.0:6532 CtsBionicTestCases sys_sem#smoke IGNORED
+10-03 18:27:34 I/ModuleListener: [2576/3351] 0.0.0.0:6532 CtsBionicTestCases sys_shm#smoke IGNORED
+10-03 18:27:34 I/ModuleListener: [2596/3351] 0.0.0.0:6532 CtsBionicTestCases sys_stat#mkfifo IGNORED
+10-03 18:27:34 I/ModuleListener: [2677/3351] 0.0.0.0:6532 CtsBionicTestCases properties#__system_property_add_appcompat IGNORED
+10-03 18:27:34 I/ModuleListener: [2678/3351] 0.0.0.0:6532 CtsBionicTestCases properties#__system_property_getprop_appcompat IGNORED
+10-03 18:27:34 I/ModuleListener: [2689/3351] 0.0.0.0:6532 CtsBionicTestCases properties#__system_property_reload_valid IGNORED
+10-03 18:27:34 I/ModuleListener: [3158/3351] 0.0.0.0:6532 CtsBionicTestCases dl#disable_ld_config_file IGNORED
+10-03 18:27:34 I/ModuleListener: [3260/3351] 0.0.0.0:6532 CtsBionicTestCases link#dl_unwind_find_exidx IGNORED
+10-03 18:27:34 I/ModuleListener: [3261/3351] 0.0.0.0:6532 CtsBionicTestCases PageSize16KiBCompatTest#ElfAlignment4KiB_LoadElf IGNORED
+10-03 18:27:34 I/ModuleListener: [3262/3351] 0.0.0.0:6532 CtsBionicTestCases PageSize16KiBCompatTest#RWX_MiddlePageProtection IGNORED
+10-03 18:27:34 I/ModuleListener: [3263/3351] 0.0.0.0:6532 CtsBionicTestCases PageSize16KiBCompatTest#ElfAlignment4KiB_NonAdajacentWritableSegments_LoadElf IGNORED
+10-03 18:27:34 I/ModuleListener: [3264/3351] 0.0.0.0:6532 CtsBionicTestCases PageSize16KiBCompatTest#ElfAlignment4KiB_ExecutalbeSegmentsSeparatedByWritableSegment_LoadElf IGNORED
+10-03 18:27:34 I/ModuleListener: [3265/3351] 0.0.0.0:6532 CtsBionicTestCases PageSize16KiBCompatTest#ElfAlignment4KiB_LoadElf_perAppOption IGNORED
+10-03 18:27:34 I/ModuleListener: [3266/3351] 0.0.0.0:6532 CtsBionicTestCases PageSize16KiBCompatTest#RELRO_Protection IGNORED
+10-03 18:27:34 I/ModuleListener: [3313/3351] 0.0.0.0:6532 CtsBionicTestCases DlExtRelroSharingTest#VerifyMemorySaving IGNORED
+10-03 18:27:34 I/ModuleListener: [3320/3351] 0.0.0.0:6532 CtsBionicTestCases elftls_dl#tlsdesc_missing_weak IGNORED
+10-03 18:27:34 I/ModuleListener: [3329/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagNoteTest#SEGV/disabled IGNORED
+10-03 18:27:34 I/ModuleListener: [3330/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagNoteTest#SEGV/disabled_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3331/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagNoteTest#SEGV/async IGNORED
+10-03 18:27:34 I/ModuleListener: [3332/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagNoteTest#SEGV/async_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3333/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagNoteTest#SEGV/sync IGNORED
+10-03 18:27:34 I/ModuleListener: [3334/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagNoteTest#SEGV/sync_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3335/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagGlobalsTest/MemtagGlobalsTest#test/MemtagGlobalsTest IGNORED
+10-03 18:27:34 I/ModuleListener: [3336/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagGlobalsTest/MemtagGlobalsTest#test/MemtagGlobalsTest_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3337/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/vfork_execve IGNORED
+10-03 18:27:34 I/ModuleListener: [3338/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/vfork_execve_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3339/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/vfork_execl IGNORED
+10-03 18:27:34 I/ModuleListener: [3340/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/vfork_execl_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3341/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/vfork_exit IGNORED
+10-03 18:27:34 I/ModuleListener: [3342/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/vfork_exit_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3343/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/longjmp IGNORED
+10-03 18:27:34 I/ModuleListener: [3344/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/longjmp_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3345/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/longjmp_sigaltstack IGNORED
+10-03 18:27:34 I/ModuleListener: [3346/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/longjmp_sigaltstack_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3347/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/android_mallopt IGNORED
+10-03 18:27:34 I/ModuleListener: [3348/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/android_mallopt_static IGNORED
+10-03 18:27:34 I/ModuleListener: [3349/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/exception_cleanup IGNORED
+10-03 18:27:34 I/ModuleListener: [3350/3351] 0.0.0.0:6532 CtsBionicTestCases MemtagStackTest#test/exception_cleanup_static IGNORED
+10-03 18:27:39 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:27:46 I/MonitoringUtils: Wifi Connectivity check failed on 0.0.0.0:6532. (Is your device connected to Wifi?), retrying in 5000ms
+10-03 18:27:54 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:28:02 I/MonitoringUtils: Wifi Connectivity check failed on 0.0.0.0:6532. (Is your device connected to Wifi?), retrying in 5000ms
+10-03 18:28:07 W/ITestSuite: System status checker [com.android.compatibility.common.tradefed.targetprep.NetworkConnectivityChecker] failed
+10-03 18:28:07 E/LeakedThreadStatusChecker: We have 4 threads instead of 1. List: [Thread[#138,Invocation-0.0.0.0:6532,5,Invocation-0.0.0.0:6532], Thread[#149,BackgroundDeviceAction-logcat -b all -v threadtime,uid,5,Invocation-0.0.0.0:6532], Thread[#326,Timer-1,5,Invocation-0.0.0.0:6532], Thread[#330,grpc-default-worker-ELG-3-1,5,Invocation-0.0.0.0:6532]]
+10-03 18:28:07 W/ITestSuite: System status checker [com.android.tradefed.suite.checker.LeakedThreadStatusChecker] failed
+10-03 18:28:08 W/DeviceSettingChecker: Setting in namespace global fails:
+ ota_disable_automatic_update is not found before module run
+10-03 18:28:08 W/ITestSuite: System status checker [com.android.tradefed.suite.checker.DeviceSettingChecker] failed
+10-03 18:28:08 W/ITestSuite: There are failed system status checkers: {com.android.compatibility.common.tradefed.targetprep.NetworkConnectivityChecker=, com.android.tradefed.suite.checker.LeakedThreadStatusChecker=We have 4 threads instead of 1. List: [Thread[#138,Invocation-0.0.0.0:6532,5,Invocation-0.0.0.0:6532], Thread[#149,BackgroundDeviceAction-logcat -b all -v threadtime,uid,5,Invocation-0.0.0.0:6532], Thread[#326,Timer-1,5,Invocation-0.0.0.0:6532], Thread[#330,grpc-default-worker-ELG-3-1,5,Invocation-0.0.0.0:6532]], com.android.tradefed.suite.checker.DeviceSettingChecker=Setting in namespace global fails:
+ ota_disable_automatic_update is not found before module run
+}
+10-03 18:28:09 W/TestDevice: Already running as user id: 10. Nothing to be done.
+10-03 18:28:09 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 02:28:12 PDT I/AtsSessionPlugin: Updated invocation info of test [b8add715-dd2c-4ef1-909e-84f863760adc]: invocation { command_id: "1" start_time { seconds: 1791019458 nanos: 695263505 } device_id: "0.0.0.0:6532" state_summary: "tearing down" } start_time { seconds: 1791019458 nanos: 695263505 } {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:28:11 W/NativeDevice: Attempting to stop logcat when not capturing for 0.0.0.0:6532
+10-03 18:28:11 I/SuiteResultReporter: 
+============================================
+Generating result of one TF execution
+Generated result of one TF execution
+============================================
+10-03 18:28:12 D/ProtoResultReporter: process final logs: /tmp/16044444/cts/inv_16438364309236624675/inv_14240373617468627020/end_host_log_4070244072805358805.txt
+10-03 18:28:12 I/CommandScheduler: Updating command 1 with elapsed time 227865 ms
+10-03 18:28:12 E/CommandScheduler: Stray thread detected for command 1, [cts, --include-filter, CtsBionicTestCases, --enable-default-logs, false, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, -s, 0.0.0.0:6532]. 2 threads instead of 1
+10-03 18:28:12 E/CommandScheduler: List of remaining threads: [Thread[#138,Invocation-0.0.0.0:6532,5,Invocation-0.0.0.0:6532], Thread[#330,grpc-default-worker-ELG-3-1,5,Invocation-0.0.0.0:6532]]
+10-03 18:28:12 I/CommandScheduler: Waiting for invocation threads to complete
+10-03 18:28:12 I/CommandScheduler: Finalizing the logger and invocation.
+10-03 18:28:12 D/ActiveTrace: Finalizing trace: /tmp/invocation-trace11425834206359187196.perfetto-trace
+We have 2 threads instead of 1: [Thread[#138,Invocation-0.0.0.0:6532,5,Invocation-0.0.0.0:6532], Thread[#330,grpc-default-worker-ELG-3-1,5,Invocation-0.0.0.0:6532]]. Check the logs for list of threads.
+10-03 18:28:12 D/ProtoResultReporter: process final logs: /tmp/16044444/cts/inv_16438364309236624675/inv_14240373617468627020/invocation-trace_2618659739651766730.perfetto-trace.gz
+10-03 18:28:12 D/ProtoResultReporter: process final logs: /tmp/16044444/cts/inv_16438364309236624675/inv_14240373617468627020/invoc_complete_host_log_16346150870401655218.txt
+10-03 18:28:12 V/LogRegistry: Saved log to /tmp/tradefed_global_log_17714629222010750278.txt
+10-03 18:28:12 I/CommandScheduler: All done
+10-03 02:28:13 PDT I/TradefedTest: Finished running cts test. TF run command exit code: Optional[0] {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/LocalTestRunner: TradefedTest has ended {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/LocalTestRunner: Driver [TradefedTest] of test xts-tradefed-test-cts ended {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/TestCommandHistorySaver: Saving test command history... {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/AtsSessionPlugin: Command [1]'s invocations completed. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/TestRetryHandler: Using DefaultRetryStrategy. Will respect retry_level/test_attempts args. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/GenFileHandler: Start uploading test generated files {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_fcb424ad-afe4-4d4c-9ecf-e8187ee12264/job_gen_xts-tradefed-test-job_f7ffa6a6-3c17-4eca-8302-6ac938a9d1e4/test_b8add715-dd2c-4ef1-909e-84f863760adc/test_output.txt {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:13 PDT I/GenFileHandler: Finish uploading test generated files {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:14 PDT I/AtsSessionPlugin: Command [1]'s invocations [dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7] are waiting for devices. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:15 PDT I/MctsDynamicDownloadPlugin: Start to download MCTS (this will only happen at the first run, might take 10+ minutes) and prepare the test modules (this will take <1 minute), please wait... (You can also go to https://android.googlesource.com/platform/cts/+/main/tools/mcts/download_mcts.sh to use the script to manually download the files in advance to skip the downloading step) {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:22 PDT I/MctsDynamicDownloadPlugin: Finished MCTS test modules preparation. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:22 PDT I/AtsSessionPlugin: Command [1]'s invocation [dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7] allocated devices [0.0.0.0:6532]. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:22 PDT I/LocalTestFlow: --------- Device: RunTest for xts-tradefed-test-cts (dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7) --------- {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:22 PDT I/LocalTestRunner: Starting driver [TradefedTest] of test xts-tradefed-test-cts {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:22 PDT I/LocalTestRunner: TradefedTest is starting {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:22 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:28:22 PDT I/TradefedTest: TF started, pid=104545 {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:28:23 I/TradefedInvocationAgent: Runtime info file path: /tmp/olc_server_gen_files/session_fcb424ad-afe4-4d4c-9ecf-e8187ee12264/job_gen_xts-tradefed-test-job_f7ffa6a6-3c17-4eca-8302-6ac938a9d1e4/test_dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7/tf_runtime_info
+10-03 18:28:23 I/TradefedInvocationAgent: Test module results file path: /tmp/olc_server_gen_files/session_fcb424ad-afe4-4d4c-9ecf-e8187ee12264/job_gen_xts-tradefed-test-job_f7ffa6a6-3c17-4eca-8302-6ac938a9d1e4/test_dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7/tf_test_module_results
+10-03 18:28:23 D/ConfigurationFactory: Searching the 'config/' config path
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+10-03 18:28:24 D/TradefedFeatureServer: Starting feature server.
+10-03 18:28:24 D/GlobalConfiguration: Resolve and remote files from @Option
+Android Compatibility Test Suite 17_r2 (16044444)
+Use "help" or "help all" to get more information on running commands.
+Non-interactive mode: Running initial command then exiting.
+10-03 18:28:25 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+Using commandline arguments as starting command: [run, commandAndExit, cts, --include-filter, CtsBionicTestCases, --enable-default-logs, false, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, -s, 0.0.0.0:6532]
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6529
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6533
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6526
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6530
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6525
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6531
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6532
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6524
+10-03 18:28:25 I/DeviceManager: Detected new device 0.0.0.0:6527
+10-03 18:28:25 I/CommandScheduler: Received shutdown request.
+10-03 18:28:26 I/TestInvocation: Starting invocation for 'cts' with '[ DeviceBuildInfo{bid=16044444, serial=0.0.0.0:6532} on device '0.0.0.0:6532'] 
+10-03 02:28:27 PDT I/AtsSessionPlugin: Updated invocation info of test [dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7]: invocation { command_id: "1" start_time { seconds: 1791019702 nanos: 112930452 } device_id: "0.0.0.0:6532" state_summary: "(not invoked)" } start_time { seconds: 1791019702 nanos: 112930452 } {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:28:28 E/AaptParser: aapt2 dump badging stderr: W/ziparchive(107619): Unable to open 'badging': No such file or directory
+badging: error: No such file or directory.
+10-03 18:28:28 E/AaptParser: Failed to run aapt2 on /tmp/services16809397972236489024.apk. stdout: 
+10-03 18:28:28 E/AndroidJUnitTest: AaptParser failed for file services16809397972236489024.apk. The APK won't be installed
+com.android.tradefed.targetprep.TargetSetupError[AAPT_PARSER_FAILED|520050|DEPENDENCY_ISSUE]: AaptParser failed for file services16809397972236489024.apk. The APK won't be installed
+	at com.android.tradefed.targetprep.TestAppInstallSetup.parsePackageName(TestAppInstallSetup.java:831)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.resolveApkFiles(TestAppInstallSetup.java:719)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.setUp(TestAppInstallSetup.java:465)
+	at com.android.tradefed.testtype.AndroidJUnitTest.run(AndroidJUnitTest.java:422)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.instrument(ApkInstrumentationPreparer.java:160)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.run(ApkInstrumentationPreparer.java:90)
+	at com.android.compatibility.common.tradefed.targetprep.PreconditionPreparer.setUp(PreconditionPreparer.java:72)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparationOnDevice(InvocationExecution.java:676)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparersSetup(InvocationExecution.java:577)
+	at com.android.tradefed.invoker.InvocationExecution.doSetup(InvocationExecution.java:411)
+	at com.android.tradefed.invoker.TestInvocation.prepareAndRun(TestInvocation.java:678)
+	at com.android.tradefed.invoker.TestInvocation.performInvocation(TestInvocation.java:310)
+	at com.android.tradefed.invoker.TestInvocation.invoke(TestInvocation.java:1558)
+	at com.android.tradefed.command.CommandScheduler$InvocationThread.run(CommandScheduler.java:723)
+10-03 02:28:32 PDT I/AtsSessionPlugin: Updated invocation info of test [dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7]: invocation { command_id: "1" start_time { seconds: 1791019702 nanos: 112930452 } device_id: "0.0.0.0:6532" state_summary: "running cts on build(s) \'DeviceBuildInfo{bid=16044444, serial=0.0.0.0:6532}\'" } start_time { seconds: 1791019702 nanos: 112930452 } {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:28:39 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:28:45 E/WifiCheck: Device has no network connection, no ssid provided, some modules of CTS require an active network connection
+10-03 18:28:47 E/AaptParser: aapt2 dump badging stderr: W/ziparchive(118425): Unable to open 'badging': No such file or directory
+badging: error: No such file or directory.
+10-03 18:28:47 E/AaptParser: Failed to run aapt2 on /tmp/services12677795628626188931.apk. stdout: 
+10-03 18:28:47 E/AndroidJUnitTest: AaptParser failed for file services12677795628626188931.apk. The APK won't be installed
+com.android.tradefed.targetprep.TargetSetupError[AAPT_PARSER_FAILED|520050|DEPENDENCY_ISSUE]: AaptParser failed for file services12677795628626188931.apk. The APK won't be installed
+	at com.android.tradefed.targetprep.TestAppInstallSetup.parsePackageName(TestAppInstallSetup.java:831)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.resolveApkFiles(TestAppInstallSetup.java:719)
+	at com.android.tradefed.targetprep.TestAppInstallSetup.setUp(TestAppInstallSetup.java:465)
+	at com.android.tradefed.testtype.AndroidJUnitTest.run(AndroidJUnitTest.java:422)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.instrument(ApkInstrumentationPreparer.java:160)
+	at com.android.compatibility.common.tradefed.targetprep.ApkInstrumentationPreparer.run(ApkInstrumentationPreparer.java:90)
+	at com.android.compatibility.common.tradefed.targetprep.DeviceInfoCollector.setUp(DeviceInfoCollector.java:152)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparationOnDevice(InvocationExecution.java:676)
+	at com.android.tradefed.invoker.InvocationExecution.runPreparersSetup(InvocationExecution.java:577)
+	at com.android.tradefed.invoker.InvocationExecution.doSetup(InvocationExecution.java:411)
+	at com.android.tradefed.invoker.TestInvocation.prepareAndRun(TestInvocation.java:678)
+	at com.android.tradefed.invoker.TestInvocation.performInvocation(TestInvocation.java:310)
+	at com.android.tradefed.invoker.TestInvocation.invoke(TestInvocation.java:1558)
+	at com.android.tradefed.command.CommandScheduler$InvocationThread.run(CommandScheduler.java:723)
+10-03 18:28:54 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:29:09 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:29:24 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:29:39 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:29:54 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:30:07 W/PropertyCheck: Expected "user" but found "userdebug" for property: ro.build.type
+10-03 18:30:07 W/PropertyCheck: Property "persist.sys.test_harness" not found on device, cannot verify value "false" 
+10-03 18:30:09 D/CompatibilityTestSuite: No module that needed to run were found. nothing to do.
+10-03 18:30:09 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 18:30:09 W/TestDevice: Already running as user id: 10. Nothing to be done.
+10-03 02:30:12 PDT I/AtsSessionPlugin: Updated invocation info of test [dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7]: invocation { command_id: "1" start_time { seconds: 1791019702 nanos: 112930452 } device_id: "0.0.0.0:6532" state_summary: "tearing down" } start_time { seconds: 1791019702 nanos: 112930452 } {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 18:30:11 W/NativeDevice: Attempting to stop logcat when not capturing for 0.0.0.0:6532
+10-03 18:30:11 I/SuiteResultReporter: 
+============================================
+Generating result of one TF execution
+Generated result of one TF execution
+============================================
+10-03 18:30:12 D/ProtoResultReporter: process final logs: /tmp/16044444/cts/inv_12473804210991648332/inv_11850983678002708936/end_host_log_14438901195270702511.txt
+10-03 18:30:12 I/CommandScheduler: Updating command 1 with elapsed time 106638 ms
+10-03 18:30:12 I/CommandScheduler: Waiting for invocation threads to complete
+10-03 18:30:12 I/CommandScheduler: Finalizing the logger and invocation.
+10-03 18:30:12 D/ActiveTrace: Finalizing trace: /tmp/invocation-trace13046297547138325977.perfetto-trace
+10-03 18:30:12 D/ProtoResultReporter: process final logs: /tmp/16044444/cts/inv_12473804210991648332/inv_11850983678002708936/invocation-trace_13583556074780450109.perfetto-trace.gz
+10-03 18:30:12 D/ProtoResultReporter: process final logs: /tmp/16044444/cts/inv_12473804210991648332/inv_11850983678002708936/invoc_complete_host_log_15431419097868441559.txt
+10-03 18:30:12 V/LogRegistry: Saved log to /tmp/tradefed_global_log_16828788000779658164.txt
+10-03 18:30:12 I/CommandScheduler: All done
+10-03 02:30:12 PDT I/TradefedTest: Finished running cts test. TF run command exit code: Optional[0] {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/LocalTestRunner: TradefedTest has ended {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/LocalTestRunner: Driver [TradefedTest] of test xts-tradefed-test-cts ended {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/TestCommandHistorySaver: Saving test command history... {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/AtsSessionPlugin: Command [1]'s invocations completed. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/TestRetryHandler: Using DefaultRetryStrategy. Will respect retry_level/test_attempts args. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/GenFileHandler: Start uploading test generated files {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_fcb424ad-afe4-4d4c-9ecf-e8187ee12264/job_gen_xts-tradefed-test-job_f7ffa6a6-3c17-4eca-8302-6ac938a9d1e4/test_dab7a8fa-3d12-45d9-b3bf-b4f9ae0bb8c7/test_output.txt {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:13 PDT I/GenFileHandler: Finish uploading test generated files {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+10-03 02:30:14 PDT I/RunCommandHandler: Command [1] is done and start to handle result which may take several minutes based on the session scale. {olc_session_id=fcb424ad, olc_client_id=ats-console-33db1dc6}
+run_command session_id: [fcb424ad-afe4-4d4c-9ecf-e8187ee12264], command_id: [1], result: COMPLETED.
+command_line_args: cts --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --include-filter CtsBionicTestCases
+
+============================================
+================= Results ==================
+=============== Consumed Time ==============
+    x86_64 CtsBionicTestCases: 41s
+Total aggregated tests run time: 41s
+============== TOP 1 Slow Modules ==============
+    x86_64 CtsBionicTestCases: 80.79 tests/sec [3351 tests / 41477 msec]
+============== Modules Preparation Times ==============
+    x86_64 CtsBionicTestCases => prep = 29229 ms || clean = 488 ms
+Total preparation time: 29s  ||  Total tear down time: 488 ms
+=======================================================
+=============== Summary ===============
+Total Run time: 5m 46s
+1/1 modules completed
+Total Tests       : 3351
+PASSED            : 3275
+FAILED            : 0
+IGNORED           : 76
+============== End of Results ==============
+============================================
+=========== Result/Log Location ============
+LOG DIRECTORY               : /opt/xts/android-cts/logs/2026.10.03_18.24.09.368_2385
+RESULT DIRECTORY            : /opt/xts/android-cts/results/2026.10.03_18.24.09.368_2385
+=================== End ====================
+No running sessions. Exit the console now.
+Exiting...
+Stop line reader
+Input interrupted; quitting...
+Saved log to /tmp/ats_console_log/

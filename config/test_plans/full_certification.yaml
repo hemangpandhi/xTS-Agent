@@ -1,0 +1,216 @@
+# Full AAOS Certification Test Plan — Target: 2 days (48 hours)
+# This plan executes all xTS suites with multi-device sharding and auto-retry
+# to achieve complete certification testing within the 2-day window.
+
+plan:
+  name: "full_aaos_certification"
+  description: "Complete xTS execution for AAOS Google Automotive Services (GAS) certification"
+  target_completion_hours: 48
+  parallel_execution: false           # Suites run sequentially (TradeFed uses all devices per suite)
+
+device_requirements:
+  min_devices: 6                      # Minimum 6 devices for 2-day target
+  device_type: "any"                 # aaos | emulator | any
+  health_check: true
+  reboot_between_suites: true
+  min_battery_level: 30
+
+suites:
+  # Priority order determines execution sequence.
+  # CTS is largest (~1M+ tests) so runs first with maximum sharding.
+
+  - name: cts
+    enabled: true
+    priority: 1
+    package_path: "/opt/xts/android-cts"
+    command: "cts-tradefed"
+    plan: "cts"
+    description: "Compatibility Test Suite - API compatibility and Android framework behavior"
+    sharding:
+      enabled: true
+      shard_count: auto               # auto = number of available devices
+      dynamic_sharding: true
+      intra_module_sharding: true
+    retry:
+      strategy: "RETRY_ANY_FAILURE"
+      max_attempts: 3
+      isolation_grade: "REBOOT_ISOLATED"
+      reboot_at_last_retry: true
+    artifacts:
+      logcat_on_failure: true
+      screenshot_on_failure: true
+      bugreport_on_failure: true
+    timeout_hours: 20
+    extra_args:
+      - "--skip-system-status-check"
+    exclude_filters:
+      file: "config/known_failures/cts_known_failures.txt"
+    modules: []                        # Empty = run all modules
+
+  - name: vts
+    enabled: true
+    priority: 2
+    package_path: "/opt/xts/android-vts"
+    command: "vts-tradefed"
+    plan: "vts"
+    description: "Vendor Test Suite - HAL, kernel, and vendor interfaces (Treble compliance)"
+    sharding:
+      enabled: true
+      shard_count: auto
+      dynamic_sharding: true
+    retry:
+      strategy: "RETRY_ANY_FAILURE"
+      max_attempts: 3
+      isolation_grade: "REBOOT_ISOLATED"
+      reboot_at_last_retry: true
+    artifacts:
+      logcat_on_failure: true
+      screenshot_on_failure: true
+      bugreport_on_failure: true
+    timeout_hours: 12
+    extra_args: []
+    exclude_filters:
+      file: "config/known_failures/vts_known_failures.txt"
+    modules: []
+
+  - name: sts
+    enabled: true
+    priority: 3
+    package_path: "/opt/xts/android-sts"
+    command: "sts-tradefed"
+    plan: "sts-dynamic-full"
+    description: "Security Test Suite - Security patch verification against Android Security Bulletins"
+    sharding:
+      enabled: true
+      shard_count: auto
+    retry:
+      strategy: "RETRY_ANY_FAILURE"
+      max_attempts: 2
+      isolation_grade: "REBOOT_ISOLATED"
+    artifacts:
+      logcat_on_failure: true
+      bugreport_on_failure: true
+    timeout_hours: 6
+    extra_args: []
+    exclude_filters: {}
+    modules: []
+
+  - name: gts
+    enabled: true
+    priority: 4
+    package_path: "/opt/xts/android-gts"
+    command: "gts-tradefed"
+    plan: "gts"
+    description: "Google Test Suite - Google services (GMS/GAS) certification"
+    sharding:
+      enabled: true
+      shard_count: auto
+    retry:
+      strategy: "RETRY_ANY_FAILURE"
+      max_attempts: 3
+      isolation_grade: "REBOOT_ISOLATED"
+      reboot_at_last_retry: true
+    artifacts:
+      logcat_on_failure: true
+      screenshot_on_failure: true
+      bugreport_on_failure: true
+    timeout_hours: 8
+    extra_args: []
+    exclude_filters: {}
+    modules: []
+
+  - name: ats
+    enabled: true
+    priority: 5
+    package_path: "/opt/xts/android-ats"
+    command: "ats-tradefed"
+    plan: "ats"
+    description: "Automotive Test Suite - VHAL, HVAC, vehicle-specific features"
+    sharding:
+      enabled: true
+      shard_count: auto
+    retry:
+      strategy: "RETRY_ANY_FAILURE"
+      max_attempts: 2
+      isolation_grade: "REBOOT_ISOLATED"
+    artifacts:
+      logcat_on_failure: true
+      screenshot_on_failure: true
+      bugreport_on_failure: true
+    timeout_hours: 4
+    extra_args: []
+    exclude_filters: {}
+    modules: []
+
+  - name: catbox
+    enabled: true
+    priority: 6
+    package_path: "/opt/xts/android-catbox"
+    command: "catbox-tradefed"
+    plan: "catbox-functional"
+    description: "Complete Automotive Tests in a Box - Functional testing via Spectatio framework"
+    sharding:
+      enabled: true
+      shard_count: auto
+    retry:
+      strategy: "RETRY_ANY_FAILURE"
+      max_attempts: 2
+      isolation_grade: "REBOOT_ISOLATED"
+    artifacts:
+      logcat_on_failure: true
+      screenshot_on_failure: true
+    timeout_hours: 4
+    extra_args: []
+    exclude_filters: {}
+    modules: []
+    # CATBox-specific sub-plans (can be run individually)
+    sub_plans:
+      - "catbox-functional-appgrid"
+      - "catbox-functional-dial"
+      - "catbox-functional-bluetooth-audio"
+      - "catbox-functional-display-setting"
+      - "catbox-functional-status-bar"
+      - "catbox-performance-cold-app-start-up-settings"
+      - "catbox-performance-cold-app-start-up-dialer"
+      - "catbox-performance-jank-appgrid"
+
+post_execution:
+  suite_retry:
+    enabled: true
+    max_suite_retries: 2
+    retry_type: "FAILED"              # FAILED | NOT_EXECUTED | BOTH
+    cooldown_secs: 60
+
+  agent_retry:
+    enabled: true
+    max_retries: 2
+    classify_before_retry: true
+    rules:
+      infrastructure_failure:
+        action: "retry_with_reboot"
+        max_attempts: 3
+      flaky_test:
+        action: "retry"
+        max_attempts: 5
+      product_bug:
+        action: "skip_and_report"
+      environment_issue:
+        action: "report_with_fix_suggestion"
+      test_bug:
+        action: "skip_and_report"
+
+  rca:
+    enabled: true
+    ai_powered: false                 # Set true if Gemini API key available
+    failure_classification: true
+    generate_report: true
+    baseline_path: ""                 # Path to baseline test_result.xml for regression detection
+
+  reporting:
+    html_report: true
+    junit_xml: true
+    json_summary: true
+    regression_report: true
+    notifications:
+      slack_webhook: ""
+      email: []

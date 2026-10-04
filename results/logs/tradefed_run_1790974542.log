@@ -1,0 +1,6 @@
+Mock TradeFed Execution Engine
+Args: run commandAndExit default --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --include-filter * --user 10
+Executing Android Tests on device...
+Session 883 completed
+Saved log to /tmp/results/2026.10.03_05.55.47
+Execution successful

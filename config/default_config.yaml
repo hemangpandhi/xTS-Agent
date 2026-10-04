@@ -1,0 +1,97 @@
+# xTS Agent - Global Default Configuration
+# Override per test plan in config/test_plans/*.yaml
+
+agent:
+  name: "xTS Agent"
+  version: "1.0.0"
+  log_level: "INFO"                    # DEBUG | INFO | WARNING | ERROR
+  log_dir: "logs"
+  results_dir: "results"
+  database_path: "results/xts_agent.db"
+
+paths:
+  xts_packages_dir: "/opt/xts"         # Base directory for downloaded xTS packages
+  tools_dir: "/opt/xts/tools"
+  java_home: ""                        # Auto-detect if empty
+  android_sdk: ""                      # Auto-detect from ANDROID_HOME if empty
+  adb_path: ""                         # Auto-detect from PATH if empty
+
+device:
+  health_check_interval_secs: 300       # Device health check every 5 minutes
+  min_battery_level: 20                 # Minimum battery percentage
+  adb_timeout_secs: 30                  # ADB command timeout
+  reboot_timeout_secs: 120              # Device reboot timeout
+  screen_timeout: 2147483647            # Keep screen always on during tests
+  disable_screen_lock: true
+  connect_wifi: true
+  wifi_ssid: ""                         # Test WiFi SSID (configure per environment)
+  wifi_password: ""
+
+execution:
+  default_timeout_hours: 48             # Overall plan timeout
+  suite_timeout_hours: 24               # Per-suite timeout
+  kill_tradefed_on_timeout: true
+  max_concurrent_suites: 1             # Run suites sequentially by default
+  reboot_between_suites: true
+  cooldown_between_suites_secs: 60
+
+sharding:
+  default_mode: "auto"                  # auto | fixed | disabled
+  max_shard_count: 16                   # Upper limit on shard count
+  dynamic_sharding: true                # Use TradeFed dynamic sharding
+  token_sharding: false                 # Enable for heterogeneous devices
+  intra_module_sharding: true           # Split large modules across shards
+
+retry:
+  intra_module:
+    max_testcase_run_count: 3
+    strategy: "RETRY_ANY_FAILURE"
+    isolation_grade: "REBOOT_ISOLATED"
+    reboot_at_last_retry: true
+  suite_retry:
+    enabled: true
+    max_retries: 2
+    retry_type: "FAILED"                # FAILED | NOT_EXECUTED | BOTH
+    cooldown_secs: 60
+  agent_retry:
+    enabled: true
+    max_retries: 2
+    classify_before_retry: true
+
+diagnostics:
+  logcat_on_failure: true
+  screenshot_on_failure: true
+  bugreport_on_failure: true
+  collect_tombstones: true
+  collect_anr_traces: true
+  max_logcat_size_mb: 50
+
+rca:
+  enabled: true
+  ai_powered: false                     # Set true and provide api_key for Gemini
+  ai_api_key: ""                        # Gemini API key
+  ai_model: "gemini-2.0-flash"
+  patterns_file: "config/known_failures/patterns.yaml"
+  classify_failures: true
+  generate_report: true
+
+reporting:
+  formats:
+    - html
+    - junit
+    - json
+  html_report: true
+  junit_xml: true                       # GitLab-compatible
+  json_summary: true
+  include_stack_traces: true
+  include_logcat_excerpts: true
+  max_logcat_excerpt_lines: 100
+  notifications:
+    slack_webhook: ""                   # Slack webhook URL
+    email: []                           # Email recipients
+
+ats2:
+  enabled: false                        # Set true to use OmniLab ATS 2.0
+  base_url: ""                          # ATS 2.0 server URL
+  api_key: ""                           # CI/CD API key
+  timeout_secs: 30

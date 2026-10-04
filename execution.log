@@ -1,0 +1,5 @@
+INFO:xts_agent.orchestrator:Loaded plan: Full CTS Sharded Run
+INFO:xts_agent.orchestrator:Running plan Full CTS Sharded Run (dry_run=False, auto_retry=False)
+INFO:xts_agent.execution.test_plan_executor:Preparing to execute suite: cts (plan: cts-virtual-device)
+INFO:xts_agent.execution.test_plan_executor:Allocated 11 devices: ['0.0.0.0:6522', '0.0.0.0:6524', '0.0.0.0:6525', '0.0.0.0:6526', '0.0.0.0:6527', '0.0.0.0:6529', '0.0.0.0:6530', '0.0.0.0:6531', '0.0.0.0:6532', '0.0.0.0:6533', '0.0.0.0:6534']
+INFO:xts_agent.execution.test_plan_executor:Executing: ./cts-tradefed run commandAndExit cts-virtual-device --shard-count 11 --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --exclude-filter CtsNpuManagerMoblyTestCases --exclude-filter CtsWifiMoblyTestCases

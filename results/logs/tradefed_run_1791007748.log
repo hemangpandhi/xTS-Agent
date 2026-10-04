@@ -1,0 +1,112 @@
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+Android Compatibility Test Suite 17_r2 (16044444)
+OmniLab lab-4.373.0 cl/939739458 kokoro-1585 branch-main github-97aa7cbed355dcc0decae10ddfdd87c45c01a02d
+Use "help" to get more information on running commands. Use "dump bugreport" to generate a debug info file. Log dirs: [/tmp/ats_console_log]
+Args: [run, commandAndExit, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases, --user, 10]
+Using commandline arguments as starting command: [run, commandAndExit, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases, --user, 10]
+10-02 23:09:10 PDT I/AtsConsole: Replace command [run, commandAndExit, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases, --user, 10] by [[run, cts, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --include-filter, CtsBionicTestCases, --user, 10], [exit, -c, -s]]
+Command submitted.
+Stop reading input
+Will exit the console after all commands have executed.
+10-02 23:09:10 PDT I/AtsSessionPlugin: Command [1] scheduled, args=[cts --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --include-filter CtsBionicTestCases --user 10] {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:10 PDT I/AtsSessionPlugin: Command [1] started, args=[cts --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --include-filter CtsBionicTestCases --user 10] {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:11 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:13 PDT I/AtsSessionPlugin: Command [1]'s invocations [ab2ee917-f320-4b28-947c-0bc05a7ac725] are waiting for devices. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:13 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6520
+10-02 23:09:20 PDT I/MctsDynamicDownloadPlugin: Start to download MCTS (this will only happen at the first run, might take 10+ minutes) and prepare the test modules (this will take <1 minute), please wait... (You can also go to https://android.googlesource.com/platform/cts/+/main/tools/mcts/download_mcts.sh to use the script to manually download the files in advance to skip the downloading step) {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:20 PDT I/MctsDynamicDownloadPlugin: Finished MCTS test modules preparation. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:20 PDT I/AtsSessionPlugin: Command [1]'s invocation [ab2ee917-f320-4b28-947c-0bc05a7ac725] allocated devices [0.0.0.0:6520]. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:21 PDT I/LocalTestFlow: --------- Device: RunTest for xts-tradefed-test-cts (ab2ee917-f320-4b28-947c-0bc05a7ac725) --------- {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:21 PDT I/LocalTestRunner: Starting driver [TradefedTest] of test xts-tradefed-test-cts {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:21 PDT I/LocalTestRunner: TradefedTest is starting {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:21 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:21 PDT I/TradefedTest: TF started, pid=1797664 {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-03 15:09:22 I/TradefedInvocationAgent: Runtime info file path: /tmp/olc_server_gen_files/session_b3bbedd8-44c7-4c45-99c0-052268a1681a/job_gen_xts-tradefed-test-job_ccc4b31e-f9ac-4bd1-bf1d-9a2b47db80a8/test_ab2ee917-f320-4b28-947c-0bc05a7ac725/tf_runtime_info
+10-03 15:09:22 I/TradefedInvocationAgent: Test module results file path: /tmp/olc_server_gen_files/session_b3bbedd8-44c7-4c45-99c0-052268a1681a/job_gen_xts-tradefed-test-job_ccc4b31e-f9ac-4bd1-bf1d-9a2b47db80a8/test_ab2ee917-f320-4b28-947c-0bc05a7ac725/tf_test_module_results
+10-03 15:09:23 D/ConfigurationFactory: Searching the 'config/' config path
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+10-03 15:09:25 D/TradefedFeatureServer: Starting feature server.
+10-03 15:09:25 D/GlobalConfiguration: Resolve and remote files from @Option
+Android Compatibility Test Suite 17_r2 (16044444)
+Use "help" or "help all" to get more information on running commands.
+Non-interactive mode: Running initial command then exiting.
+10-03 15:09:25 I/DeviceManager: Detected new device 0.0.0.0:6520
+Using commandline arguments as starting command: [run, commandAndExit, cts, --include-filter, CtsBionicTestCases, --enable-default-logs, false, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10, -s, 0.0.0.0:6520]
+Failed to run command: com.android.tradefed.config.ConfigurationException[OPTION_CONFIGURATION_ERROR|500008|CUSTOMER_ISSUE]: Could not find option with name 'user'
+10-03 15:09:26 I/CommandScheduler: Received shutdown request.
+10-03 15:09:26 I/CommandScheduler: Waiting for invocation threads to complete
+10-03 15:09:26 V/LogRegistry: Saved log to /tmp/tradefed_global_log_14023406460473043310.txt
+10-03 15:09:26 I/CommandScheduler: All done
+10-02 23:09:26 PDT I/TradefedTest: Finished running cts test. TF run command exit code: Optional[0] {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:26 PDT I/LocalTestRunner: TradefedTest has ended {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:26 PDT I/LocalTestRunner: Driver [TradefedTest] of test xts-tradefed-test-cts ended {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:26 PDT I/TestCommandHistorySaver: Saving test command history... {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:27 PDT I/AtsSessionPlugin: Command [1]'s invocations completed. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:27 PDT I/TestRetryHandler: Using DefaultRetryStrategy. Will respect retry_level/test_attempts args. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:27 PDT I/GenFileHandler: Start uploading test generated files {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:27 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_b3bbedd8-44c7-4c45-99c0-052268a1681a/job_gen_xts-tradefed-test-job_ccc4b31e-f9ac-4bd1-bf1d-9a2b47db80a8/test_ab2ee917-f320-4b28-947c-0bc05a7ac725/test_output.txt {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:27 PDT I/GenFileHandler: Finish uploading test generated files {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:29 PDT I/AtsSessionPlugin: Command [1]'s invocations [d60c36ae-f7f2-4352-934e-933b29e9e565] are waiting for devices. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:30 PDT I/MctsDynamicDownloadPlugin: Start to download MCTS (this will only happen at the first run, might take 10+ minutes) and prepare the test modules (this will take <1 minute), please wait... (You can also go to https://android.googlesource.com/platform/cts/+/main/tools/mcts/download_mcts.sh to use the script to manually download the files in advance to skip the downloading step) {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:37 PDT I/MctsDynamicDownloadPlugin: Finished MCTS test modules preparation. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:37 PDT I/AtsSessionPlugin: Command [1]'s invocation [d60c36ae-f7f2-4352-934e-933b29e9e565] allocated devices [0.0.0.0:6520]. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:37 PDT I/LocalTestFlow: --------- Device: RunTest for xts-tradefed-test-cts (d60c36ae-f7f2-4352-934e-933b29e9e565) --------- {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:37 PDT I/LocalTestRunner: Starting driver [TradefedTest] of test xts-tradefed-test-cts {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:37 PDT I/LocalTestRunner: TradefedTest is starting {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:37 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:37 PDT I/TradefedTest: TF started, pid=1800359 {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-03 15:09:38 D/ConfigurationFactory: Searching the 'config/' config path
+10-03 15:09:38 I/TradefedInvocationAgent: Runtime info file path: /tmp/olc_server_gen_files/session_b3bbedd8-44c7-4c45-99c0-052268a1681a/job_gen_xts-tradefed-test-job_ccc4b31e-f9ac-4bd1-bf1d-9a2b47db80a8/test_d60c36ae-f7f2-4352-934e-933b29e9e565/tf_runtime_info
+10-03 15:09:38 I/TradefedInvocationAgent: Test module results file path: /tmp/olc_server_gen_files/session_b3bbedd8-44c7-4c45-99c0-052268a1681a/job_gen_xts-tradefed-test-job_ccc4b31e-f9ac-4bd1-bf1d-9a2b47db80a8/test_d60c36ae-f7f2-4352-934e-933b29e9e565/tf_test_module_results
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+10-03 15:09:39 D/TradefedFeatureServer: Starting feature server.
+10-03 15:09:39 D/GlobalConfiguration: Resolve and remote files from @Option
+Android Compatibility Test Suite 17_r2 (16044444)
+Use "help" or "help all" to get more information on running commands.
+Non-interactive mode: Running initial command then exiting.
+Using commandline arguments as starting command: [run, commandAndExit, cts, --include-filter, CtsBionicTestCases, --enable-default-logs, false, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10, -s, 0.0.0.0:6520]
+10-03 15:09:39 I/DeviceManager: Detected new device 0.0.0.0:6520
+Failed to run command: com.android.tradefed.config.ConfigurationException[OPTION_CONFIGURATION_ERROR|500008|CUSTOMER_ISSUE]: Could not find option with name 'user'
+10-03 15:09:40 I/CommandScheduler: Received shutdown request.
+10-03 15:09:40 I/CommandScheduler: Waiting for invocation threads to complete
+10-03 15:09:40 V/LogRegistry: Saved log to /tmp/tradefed_global_log_8138882631978464219.txt
+10-03 15:09:40 I/CommandScheduler: All done
+10-02 23:09:41 PDT I/TradefedTest: Finished running cts test. TF run command exit code: Optional[0] {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/LocalTestRunner: TradefedTest has ended {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/LocalTestRunner: Driver [TradefedTest] of test xts-tradefed-test-cts ended {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/TestCommandHistorySaver: Saving test command history... {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/AtsSessionPlugin: Command [1]'s invocations completed. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/TestRetryHandler: Using DefaultRetryStrategy. Will respect retry_level/test_attempts args. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/GenFileHandler: Start uploading test generated files {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_b3bbedd8-44c7-4c45-99c0-052268a1681a/job_gen_xts-tradefed-test-job_ccc4b31e-f9ac-4bd1-bf1d-9a2b47db80a8/test_d60c36ae-f7f2-4352-934e-933b29e9e565/test_output.txt {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:41 PDT I/GenFileHandler: Finish uploading test generated files {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+10-02 23:09:43 PDT I/RunCommandHandler: Command [1] is done and start to handle result which may take several minutes based on the session scale. {olc_session_id=b3bbedd8, olc_client_id=ats-console-2e1dd06b}
+run_command session_id: [b3bbedd8-44c7-4c45-99c0-052268a1681a], command_id: [1], result: COMPLETED.
+command_line_args: cts --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --include-filter CtsBionicTestCases --user 10
+
+============================================
+================= Results ==================
+=============== Summary ===============
+0/0 modules completed
+Total Tests       : 0
+PASSED            : 0
+FAILED            : 0
+============== End of Results ==============
+============================================
+=========== Result/Log Location ============
+LOG DIRECTORY               : /opt/xts/android-cts/logs/2026.10.03_15.09.10.744_6885
+=================== End ====================
+No running sessions. Exit the console now.
+Exiting...
+Stop line reader
+Input interrupted; quitting...
+Saved log to /tmp/ats_console_log/

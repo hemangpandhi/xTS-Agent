@@ -1,0 +1,17 @@
+name: "Official CTS Run"
+description: "Executing real Google CTS TradeFed engine"
+suites:
+  - name: "cts"
+    priority: 100
+    plan: "cts"
+    enabled: true
+    sharding:
+      shard_count: 1
+    device_requirements:
+      min_devices: 1
+    retry:
+      max_retries: 0
+      strategy: "RETRY_ANY_FAILURE"
+    exclude_filters: []
+    include_filters:
+      - "CtsBionicTestCases"

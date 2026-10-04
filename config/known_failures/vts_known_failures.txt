@@ -1,0 +1,4 @@
+# VTS Known Failure Exclusion Filters
+# ====================================
+# Format: <ModuleName> <TestClass>#<TestMethod>
+# ─── Add your exclusions below this line ─────────────────────

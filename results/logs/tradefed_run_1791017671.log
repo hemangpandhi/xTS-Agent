@@ -1,0 +1,223 @@
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+Android Compatibility Test Suite 17_r2 (16044444)
+OmniLab lab-4.373.0 cl/939739458 kokoro-1585 branch-main github-97aa7cbed355dcc0decae10ddfdd87c45c01a02d
+Use "help" to get more information on running commands. Use "dump bugreport" to generate a debug info file. Log dirs: [/tmp/ats_console_log]
+Args: [run, commandAndExit, cts, --shard-count, 6, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10]
+Using commandline arguments as starting command: [run, commandAndExit, cts, --shard-count, 6, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10]
+10-03 01:54:33 PDT I/AtsConsole: Replace command [run, commandAndExit, cts, --shard-count, 6, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10] by [[run, cts, --shard-count, 6, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10], [exit, -c, -s]]
+Command submitted.
+Stop reading input
+Will exit the console after all commands have executed.
+10-03 01:54:34 PDT I/AtsSessionPlugin: Command [1] scheduled, args=[cts --shard-count 6 --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --user 10] {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:34 PDT I/AtsSessionPlugin: Command [1] started, args=[cts --shard-count 6 --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --user 10] {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:34 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:36 PDT I/AtsSessionPlugin: Command [1]'s invocations [e9217dc1-6914-4739-9035-ca872a38358f] are waiting for devices. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6532
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6522
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6530
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6531
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6525
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6534
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6524
+10-03 01:54:36 PDT I/LocalDeviceDispatch: New device 0.0.0.0:6527
+10-03 01:54:43 PDT I/MctsDynamicDownloadPlugin: Start to download MCTS (this will only happen at the first run, might take 10+ minutes) and prepare the test modules (this will take <1 minute), please wait... (You can also go to https://android.googlesource.com/platform/cts/+/main/tools/mcts/download_mcts.sh to use the script to manually download the files in advance to skip the downloading step) {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:44 PDT I/MctsDynamicDownloadPlugin: Finished MCTS test modules preparation. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:44 PDT I/AtsSessionPlugin: Command [1]'s invocation [e9217dc1-6914-4739-9035-ca872a38358f] allocated devices [0.0.0.0:6532, 0.0.0.0:6522, 0.0.0.0:6530, 0.0.0.0:6531, 0.0.0.0:6525, 0.0.0.0:6534]. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:44 PDT I/LocalTestFlow: --------- Device: RunTest for xts-tradefed-test-cts (e9217dc1-6914-4739-9035-ca872a38358f) --------- {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:44 PDT I/AdhocTestbedDriver: Starting all sub drivers {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:44 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 17:54:46 I/TradefedInvocationAgent: Runtime info file path: /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/tf_runtime_info
+10-03 17:54:46 I/TradefedInvocationAgent: Test module results file path: /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/tf_test_module_results
+10-03 17:54:47 D/ConfigurationFactory: Searching the 'config/' config path
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+10-03 17:54:48 D/TradefedFeatureServer: Starting feature server.
+10-03 17:54:49 D/GlobalConfiguration: Resolve and remote files from @Option
+Android Compatibility Test Suite 17_r2 (16044444)
+Use "help" or "help all" to get more information on running commands.
+Non-interactive mode: Running initial command then exiting.
+10-03 17:54:49 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+Using commandline arguments as starting command: [run, commandAndExit, cts, --shard-count, 6, --enable-default-logs, false, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10, -s, 0.0.0.0:6532, -s, 0.0.0.0:6522, -s, 0.0.0.0:6530, -s, 0.0.0.0:6531, -s, 0.0.0.0:6525, -s, 0.0.0.0:6534]
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6532
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6522
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6530
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6527
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6531
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6525
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6534
+10-03 17:54:49 I/DeviceManager: Detected new device 0.0.0.0:6524
+Failed to run command: com.android.tradefed.config.ConfigurationException[OPTION_CONFIGURATION_ERROR|500008|CUSTOMER_ISSUE]: Could not find option with name 'user'
+10-03 17:54:49 I/CommandScheduler: Received shutdown request.
+10-03 17:54:49 I/CommandScheduler: Waiting for invocation threads to complete
+10-03 17:54:49 V/LogRegistry: Saved log to /tmp/tradefed_global_log_12481728854793653290.txt
+10-03 17:54:49 I/CommandScheduler: All done
+10-03 01:54:50 PDT I/TestCommandHistorySaver: Saving test command history... {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/AtsSessionPlugin: Command [1]'s invocations completed. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/TestRetryHandler: Using DefaultRetryStrategy. Will respect retry_level/test_attempts args. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Start uploading test generated files {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/0.0.0.0:6522/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/0.0.0.0:6525/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/0.0.0.0:6534/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/0.0.0.0:6532/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/0.0.0.0:6531/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_e9217dc1-6914-4739-9035-ca872a38358f/0.0.0.0:6530/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:50 PDT I/GenFileHandler: Finish uploading test generated files {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:52 PDT I/AtsSessionPlugin: Command [1]'s invocations [b431c830-865a-42d0-9e7b-68b42941155d] are waiting for devices. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:54:53 PDT I/MctsDynamicDownloadPlugin: Start to download MCTS (this will only happen at the first run, might take 10+ minutes) and prepare the test modules (this will take <1 minute), please wait... (You can also go to https://android.googlesource.com/platform/cts/+/main/tools/mcts/download_mcts.sh to use the script to manually download the files in advance to skip the downloading step) {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:00 PDT I/MctsDynamicDownloadPlugin: Finished MCTS test modules preparation. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:00 PDT I/AtsSessionPlugin: Command [1]'s invocation [b431c830-865a-42d0-9e7b-68b42941155d] allocated devices [0.0.0.0:6532, 0.0.0.0:6522, 0.0.0.0:6530, 0.0.0.0:6531, 0.0.0.0:6525, 0.0.0.0:6534]. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:01 PDT I/LocalTestFlow: --------- Device: RunTest for xts-tradefed-test-cts (b431c830-865a-42d0-9e7b-68b42941155d) --------- {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:01 PDT I/AdhocTestbedDriver: Starting all sub drivers {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:01 PDT I/TestSuiteHelper: abi 'arm64-v8a' is supported by device but not by this suite build ([x86_64, x86]), tests will not run against it. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 17:55:02 D/ConfigurationFactory: Searching the 'config/' config path
+10-03 17:55:01 I/TradefedInvocationAgent: Runtime info file path: /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/tf_runtime_info
+10-03 17:55:01 I/TradefedInvocationAgent: Test module results file path: /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/tf_test_module_results
+==================
+Notice:
+We collect anonymous usage statistics in accordance with our Content Licenses (https://source.android.com/setup/start/licenses), Contributor License Agreement (https://opensource.google.com/docs/cla/), Privacy Policy (https://policies.google.com/privacy) and Terms of Service (https://policies.google.com/terms).
+==================
+10-03 17:55:03 D/TradefedFeatureServer: Starting feature server.
+10-03 17:55:03 D/GlobalConfiguration: Resolve and remote files from @Option
+Android Compatibility Test Suite 17_r2 (16044444)
+Use "help" or "help all" to get more information on running commands.
+Non-interactive mode: Running initial command then exiting.
+10-03 17:55:03 D/NativeDevice: Device 0.0.0.0:6520 state is now NOT_AVAILABLE
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6532
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6522
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6527
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6531
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6530
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6524
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6534
+10-03 17:55:03 I/DeviceManager: Detected new device 0.0.0.0:6525
+Using commandline arguments as starting command: [run, commandAndExit, cts, --shard-count, 6, --enable-default-logs, false, --retry-strategy, RETRY_ANY_FAILURE, --logcat-on-failure, --screenshot-on-failure, --user, 10, -s, 0.0.0.0:6532, -s, 0.0.0.0:6522, -s, 0.0.0.0:6530, -s, 0.0.0.0:6531, -s, 0.0.0.0:6525, -s, 0.0.0.0:6534]
+Failed to run command: com.android.tradefed.config.ConfigurationException[OPTION_CONFIGURATION_ERROR|500008|CUSTOMER_ISSUE]: Could not find option with name 'user'
+10-03 17:55:04 I/CommandScheduler: Received shutdown request.
+10-03 17:55:04 I/CommandScheduler: Waiting for invocation threads to complete
+10-03 17:55:04 V/LogRegistry: Saved log to /tmp/tradefed_global_log_1099758475204830742.txt
+10-03 17:55:04 I/CommandScheduler: All done
+10-03 01:55:05 PDT I/TestCommandHistorySaver: Saving test command history... {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/AtsSessionPlugin: Command [1]'s invocations completed. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/TestRetryHandler: Using DefaultRetryStrategy. Will respect retry_level/test_attempts args. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Start uploading test generated files {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/0.0.0.0:6532/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/0.0.0.0:6534/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/0.0.0.0:6522/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/0.0.0.0:6525/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/0.0.0.0:6531/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-tradefed-test-job_23a4df27-5f06-434e-8427-2640d0508743/test_b431c830-865a-42d0-9e7b-68b42941155d/0.0.0.0:6530/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:05 PDT I/GenFileHandler: Finish uploading test generated files {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:06 PDT I/AtsSessionPlugin: Command [1]'s invocations [e42f6b00-ad94-4f11-921b-3620dac8097b] are waiting for devices. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:07 PDT I/AtsSessionPlugin: Command [1]'s invocation [e42f6b00-ad94-4f11-921b-3620dac8097b] allocated devices [0.0.0.0:6532]. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/XtsDeviceCompatibilityChecker: Validating device build fingerprint for non TF test xts-mobly-aosp-test-x86_64_CtsNpuManagerMoblyTestCases {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/LocalTestFlow: --------- Device: RunTest for xts-mobly-aosp-test-x86_64_CtsNpuManagerMoblyTestCases (e42f6b00-ad94-4f11-921b-3620dac8097b) --------- {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/LocalTestRunner: Starting driver [AndroidInstallAppsDecorator] of test xts-mobly-aosp-test-x86_64_CtsNpuManagerMoblyTestCases {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/LocalTestRunner: AndroidInstallAppsDecorator is starting {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/LocalTestRunner: AndroidInstallAppsDecorator has ended with error: MobileHarnessException {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/LocalTestRunner: Driver [AndroidInstallAppsDecorator] of test xts-mobly-aosp-test-x86_64_CtsNpuManagerMoblyTestCases ended {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/TestCommandHistorySaver: Saving test command history... {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/AtsSessionPlugin: Command [1]'s invocations completed. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT W/AtsSessionPlugin: Warning of test [e42f6b00-ad94-4f11-921b-3620dac8097b/xts-mobly-aosp-test-x86_64_CtsNpuManagerMoblyTestCases]:
+ERROR[cause=MobileHarnessException: Fail to find the package name of /opt/xts/android-cts/testcases/CtsNpuManagerMoblyTestCases/x86_64/BackgroundNpuTestApp.apk: W/ziparchive(3045532): Unable to open 'badging': No such file or directory
+badging: error: No such file or directory.
+ [MH|CUSTOMER_ISSUE|ANDROID_AAPT_GET_APK_PACKAGE_NAME_ERROR|101606] [MobileHarnessException]
+	at com.google.wireless.qa.mobileharness.shared.android.Aapt.getApkPackageName(Aapt.java:342)
+	at com.google.devtools.mobileharness.platform.android.lightning.apkinstaller.ApkInstaller.getPackageName(ApkInstaller.java:286)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep$InstallCoordinator.addApk(InstallApkStep.java:589)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep$InstallCoordinator.addApks(InstallApkStep.java:576)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep.installBuildApks(InstallApkStep.java:158)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep.installBuildApks(InstallApkStep.java:131)
+	at com.google.wireless.qa.mobileharness.shared.api.decorator.AndroidInstallAppsDecorator.run(AndroidInstallAppsDecorator.java:69)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestRunner$DriverEventGenerator.run(LocalTestRunner.java:281)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestFlow.runTest(LocalTestFlow.java:257)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestRunner.runTest(LocalTestRunner.java:198)
+	at com.google.devtools.mobileharness.infra.controller.test.BaseTestRunner.execute(BaseTestRunner.java:329)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestRunner.execute(LocalTestRunner.java:103)
+	at com.google.devtools.mobileharness.infra.controller.test.AbstractTestRunner.doExecute(AbstractTestRunner.java:124)
+	at com.google.devtools.mobileharness.infra.controller.test.TestRunnerLauncher.executeTest(TestRunnerLauncher.java:113)
+	at com.google.devtools.mobileharness.infra.controller.test.launcher.LocalDeviceTestRunnerLauncher.access$000(LocalDeviceTestRunnerLauncher.java:46)
+	at com.google.devtools.mobileharness.infra.controller.test.launcher.LocalDeviceTestRunnerLauncher$PrimaryDeviceTestExecutor.doExecuteTest(LocalDeviceTestRunnerLauncher.java:83)
+	at com.google.devtools.mobileharness.infra.controller.test.launcher.LocalDeviceTestRunnerLauncher$AbstractDeviceTestExecutor.executeTest(LocalDeviceTestRunnerLauncher.java:143)
+	at com.google.devtools.mobileharness.infra.controller.device.LocalDeviceRunner.checkNRunTest(LocalDeviceRunner.java:772)
+	at com.google.devtools.mobileharness.infra.controller.device.LocalDeviceRunner.run(LocalDeviceRunner.java:303)
+	at com.google.devtools.mobileharness.shared.util.concurrent.Callables.lambda$threadRenaming$1(Callables.java:265)
+	at com.google.devtools.mobileharness.shared.context.InvocationContext$RunnableWithContext.run(InvocationContext.java:165)
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at com.google.common.util.concurrent.TrustedListenableFutureTask$TrustedFutureInterruptibleTask.runInterruptibly(TrustedListenableFutureTask.java:128)
+	at com.google.common.util.concurrent.InterruptibleTask.run(InterruptibleTask.java:74)
+	at com.google.common.util.concurrent.TrustedListenableFutureTask.run(TrustedListenableFutureTask.java:80)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.lang.Thread.run(Thread.java:1583)
+] {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/TestRetryHandler: Using DefaultRetryStrategy. Will respect retry_level/test_attempts args. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/GenFileHandler: Start uploading test generated files {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/GenFileHandler: Saved the test log to /tmp/olc_server_gen_files/session_1422578d-1fc4-402d-ba0b-579c57919465/job_gen_xts-mobly-aosp-job-x86_64_CtsNpuManagerMoblyTestCases_9beff904-1ec9-4692-af39-711c1a559b10/test_e42f6b00-ad94-4f11-921b-3620dac8097b/test_output.txt {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:08 PDT I/GenFileHandler: Finish uploading test generated files {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+10-03 01:55:10 PDT I/RunCommandHandler: Command [1] is done and start to handle result which may take several minutes based on the session scale. {olc_session_id=1422578d, olc_client_id=ats-console-4c41edf4}
+run_command session_id: [1422578d-1fc4-402d-ba0b-579c57919465], command_id: [1], result: COMPLETED.
+command_line_args: cts --shard-count 6 --retry-strategy RETRY_ANY_FAILURE --logcat-on-failure --screenshot-on-failure --user 10
+
+============================================
+================= Results ==================
+=============== Consumed Time ==============
+    x86_64 CtsNpuManagerMoblyTestCases: 0 ms
+Total aggregated tests run time: 0 ms
+=============== Summary ===============
+Total Run time: 0 ms
+0/1 modules completed
+Module(s) with run failure(s):
+    x86_64 CtsNpuManagerMoblyTestCases: ERROR[cause=MobileHarnessException: Fail to find the package name of /opt/xts/android-cts/testcases/CtsNpuManagerMoblyTestCases/x86_64/BackgroundNpuTestApp.apk: W/ziparchive(3045532): Unable to open 'badging': No such file or directory
+badging: error: No such file or directory.
+ [MH|CUSTOMER_ISSUE|ANDROID_AAPT_GET_APK_PACKAGE_NAME_ERROR|101606] [MobileHarnessException]
+	at com.google.wireless.qa.mobileharness.shared.android.Aapt.getApkPackageName(Aapt.java:342)
+	at com.google.devtools.mobileharness.platform.android.lightning.apkinstaller.ApkInstaller.getPackageName(ApkInstaller.java:286)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep$InstallCoordinator.addApk(InstallApkStep.java:589)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep$InstallCoordinator.addApks(InstallApkStep.java:576)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep.installBuildApks(InstallApkStep.java:158)
+	at com.google.wireless.qa.mobileharness.shared.api.step.android.InstallApkStep.installBuildApks(InstallApkStep.java:131)
+	at com.google.wireless.qa.mobileharness.shared.api.decorator.AndroidInstallAppsDecorator.run(AndroidInstallAppsDecorator.java:69)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestRunner$DriverEventGenerator.run(LocalTestRunner.java:281)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestFlow.runTest(LocalTestFlow.java:257)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestRunner.runTest(LocalTestRunner.java:198)
+	at com.google.devtools.mobileharness.infra.controller.test.BaseTestRunner.execute(BaseTestRunner.java:329)
+	at com.google.devtools.mobileharness.infra.controller.test.local.LocalTestRunner.execute(LocalTestRunner.java:103)
+	at com.google.devtools.mobileharness.infra.controller.test.AbstractTestRunner.doExecute(AbstractTestRunner.java:124)
+	at com.google.devtools.mobileharness.infra.controller.test.TestRunnerLauncher.executeTest(TestRunnerLauncher.java:113)
+	at com.google.devtools.mobileharness.infra.controller.test.launcher.LocalDeviceTestRunnerLauncher.access$000(LocalDeviceTestRunnerLauncher.java:46)
+	at com.google.devtools.mobileharness.infra.controller.test.launcher.LocalDeviceTestRunnerLauncher$PrimaryDeviceTestExecutor.doExecuteTest(LocalDeviceTestRunnerLauncher.java:83)
+	at com.google.devtools.mobileharness.infra.controller.test.launcher.LocalDeviceTestRunnerLauncher$AbstractDeviceTestExecutor.executeTest(LocalDeviceTestRunnerLauncher.java:143)
+	at com.google.devtools.mobileharness.infra.controller.device.LocalDeviceRunner.checkNRunTest(LocalDeviceRunner.java:772)
+	at com.google.devtools.mobileharness.infra.controller.device.LocalDeviceRunner.run(LocalDeviceRunner.java:303)
+	at com.google.devtools.mobileharness.shared.util.concurrent.Callables.lambda$threadRenaming$1(Callables.java:265)
+	at com.google.devtools.mobileharness.shared.context.InvocationContext$RunnableWithContext.run(InvocationContext.java:165)
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at com.google.common.util.concurrent.TrustedListenableFutureTask$TrustedFutureInterruptibleTask.runInterruptibly(TrustedListenableFutureTask.java:128)
+	at com.google.common.util.concurrent.InterruptibleTask.run(InterruptibleTask.java:74)
+	at com.google.common.util.concurrent.TrustedListenableFutureTask.run(TrustedListenableFutureTask.java:80)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.lang.Thread.run(Thread.java:1583)
+]
+Total Tests       : 0
+PASSED            : 0
+FAILED            : 0
+IMPORTANT: Some modules failed to run to completion, tests counts may be inaccurate.
+============== End of Results ==============
+============================================
+=========== Result/Log Location ============
+LOG DIRECTORY               : /opt/xts/android-cts/logs/2026.10.03_17.54.34.029_9867
+RESULT DIRECTORY            : /opt/xts/android-cts/results/2026.10.03_17.54.34.029_9867
+=================== End ====================
+No running sessions. Exit the console now.
+Exiting...
+Stop line reader
+Input interrupted; quitting...
+Saved log to /tmp/ats_console_log/

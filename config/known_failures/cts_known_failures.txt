@@ -1,0 +1,13 @@
+# CTS Known Failure Exclusion Filters
+# ====================================
+# Add test filters here to exclude known failures from CTS execution.
+# Format: <ModuleName> <TestClass>#<TestMethod>
+#
+# These are applied via --exclude-filter to cts-tradefed.
+# Only add entries that have been reviewed and approved.
+# Always document the reason for exclusion.
+#
+# Example:
+# CtsMediaTestCases android.media.cts.MediaCodecTest#testSomeFlaky  # b/12345 - flaky on AAOS
+#
+# ─── Add your exclusions below this line ─────────────────────

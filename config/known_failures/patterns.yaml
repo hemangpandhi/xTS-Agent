@@ -1,0 +1,133 @@
+# Known Failure Patterns for RCA Engine
+# =====================================
+# Each pattern defines a regex to match against error messages and stack traces,
+# along with its classification and description.
+#
+# Classification types:
+#   INFRASTRUCTURE_FAILURE - Device/environment issues
+#   FLAKY_TEST            - Intermittent/non-deterministic failures
+#   ENVIRONMENT_ISSUE     - Missing prerequisites, wrong config
+#   PRODUCT_BUG           - Genuine code regression
+#   TEST_BUG              - Bug in the test itself
+
+patterns:
+  # ── Infrastructure Failures ────────────────────────────────
+  - pattern: "DeviceNotAvailableException"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "Device became unavailable during test execution"
+    known_bug_id: ""
+    suggested_action: "Check USB connection, reboot device, verify adb authorization"
+
+  - pattern: "com\\.android\\.tradefed\\.device\\.DeviceUnresponsiveException"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "Device stopped responding to ADB commands"
+    suggested_action: "Reboot device, check for thermal throttling or hardware issues"
+
+  - pattern: "Connection reset by peer"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "ADB connection was reset unexpectedly"
+    suggested_action: "Check USB cable, try different USB port, verify adb server"
+
+  - pattern: "java\\.lang\\.OutOfMemoryError"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "Host or device ran out of memory"
+    suggested_action: "Increase TradeFed heap size (-Xmx), check device RAM"
+
+  - pattern: "device '.*' not found"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "Device serial not found by ADB"
+    suggested_action: "Verify device connection, run 'adb devices'"
+
+  - pattern: "error: no devices/emulators found"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "No devices connected to ADB"
+    suggested_action: "Connect device and verify with 'adb devices'"
+
+  - pattern: "RUNNER_ERROR"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "TradeFed test runner encountered an internal error"
+    suggested_action: "Check TradeFed logs, verify Java version compatibility"
+
+  - pattern: "Tradefed subprocess.*timed out"
+    classification: "INFRASTRUCTURE_FAILURE"
+    description: "TradeFed subprocess exceeded timeout"
+    suggested_action: "Increase timeout, check device responsiveness"
+
+  # ── Environment Issues ─────────────────────────────────────
+  - pattern: "ConnectException.*Connection refused"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Network connection refused - service not running"
+    suggested_action: "Verify network services, check WiFi connectivity"
+
+  - pattern: "UnknownHostException"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "DNS resolution failure"
+    suggested_action: "Check network configuration and DNS settings"
+
+  - pattern: "No such file or directory"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Required file not found on device or host"
+    suggested_action: "Verify test prerequisites and file paths"
+
+  - pattern: "INSTALL_FAILED_"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "APK installation failure"
+    suggested_action: "Check device storage, permissions, and APK compatibility"
+
+  - pattern: "Error: Activity class .* does not exist"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Test activity not found on device"
+    suggested_action: "Verify APK is installed, check package name"
+
+  - pattern: "SecurityException.*Permission Denial"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Permission not granted for test operation"
+    suggested_action: "Check test permissions, run on userdebug build"
+
+  # ── Flaky Test Indicators ──────────────────────────────────
+  - pattern: "SocketTimeoutException"
+    classification: "FLAKY_TEST"
+    description: "Network socket timeout - often intermittent"
+    suggested_action: "Retry test, check network stability"
+
+  - pattern: "android\\.view\\.animation"
+    classification: "FLAKY_TEST"
+    description: "Animation timing issue - common source of flakiness"
+    suggested_action: "Disable animations on device, retry test"
+
+  - pattern: "AssertionError.*expected:.*but was:"
+    classification: "FLAKY_TEST"
+    description: "Value assertion mismatch - may be timing-dependent"
+    suggested_action: "Retry, check if values are time-sensitive"
+
+  - pattern: "UiObjectNotFoundException"
+    classification: "FLAKY_TEST"
+    description: "UI element not found - timing-dependent"
+    suggested_action: "Retry with longer wait, check UI state"
+
+  # ── Product Bug Indicators ─────────────────────────────────
+  - pattern: "FATAL EXCEPTION.*in.*android\\."
+    classification: "PRODUCT_BUG"
+    description: "Fatal crash in Android framework code"
+    suggested_action: "Investigate stack trace, file bug report"
+
+  - pattern: "Native crash.*SIGSEGV"
+    classification: "PRODUCT_BUG"
+    description: "Native segfault in product code"
+    suggested_action: "Check tombstone, investigate native code"
+
+  - pattern: "SystemServiceRegistry.*not found"
+    classification: "PRODUCT_BUG"
+    description: "System service not registered"
+    suggested_action: "Check service manifest, verify system build"
+
+  # ── Test Bug Indicators ────────────────────────────────────
+  - pattern: "java\\.lang\\.NullPointerException.*at.*cts\\."
+    classification: "TEST_BUG"
+    description: "Null pointer in CTS test code"
+    suggested_action: "Check test for null safety issues, report upstream"
+
+  - pattern: "NoSuchMethodError.*at.*test"
+    classification: "TEST_BUG"
+    description: "Missing method in test code - API mismatch"
+    suggested_action: "Verify test version matches target API level"

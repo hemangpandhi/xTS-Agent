@@ -1,0 +1,274 @@
+# .gitlab-ci.yml — xTS Agent Automated Test Execution Pipeline
+# ============================================================
+# This pipeline automates the full xTS test execution lifecycle:
+# 1. Environment setup and device verification
+# 2. Device health check
+# 3. Execute all xTS suites with multi-device sharding
+# 4. Suite-level retry for remaining failures
+# 5. Root cause analysis
+# 6. Report generation and artifact upload
+#
+# Prerequisites:
+#   - GitLab Runner installed on test host with Shell executor
+#   - Runner tagged with 'android-test-host'
+#   - Python 3.10+ installed
+#   - ADB and Android SDK Platform Tools in PATH
+#   - xTS packages downloaded to /opt/xts/
+#   - Devices connected via USB or TCP/IP ADB
+
+stages:
+  - setup
+  - health-check
+  - execute-xts
+  - retry
+  - analyze
+  - report
+
+# ─── Global Variables ───────────────────────────────────────
+variables:
+  XTS_AGENT_HOME: "${CI_PROJECT_DIR}"
+  XTS_PACKAGES_DIR: "/opt/xts"
+  TEST_PLAN: "config/test_plans/full_certification.yaml"
+  DEVICE_MIN_COUNT: "6"
+  PYTHON: "python3"
+  PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.pip-cache"
+
+# ─── Caching ────────────────────────────────────────────────
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .pip-cache/
+    - .venv/
+
+# ─── Default job configuration ──────────────────────────────
+default:
+  tags:
+    - android-test-host                # Only run on tagged runners with devices
+  before_script:
+    - |
+      # Activate virtual environment if it exists
+      if [ -d ".venv" ]; then
+        source .venv/bin/activate
+      fi
+    - export PATH="${XTS_PACKAGES_DIR}/platform-tools:${PATH}"
+    - export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
+
+# ═════════════════════════════════════════════════════════════
+# Stage 1: Environment Setup
+# ═════════════════════════════════════════════════════════════
+setup_environment:
+  stage: setup
+  script:
+    - echo "=== xTS Agent Environment Setup ==="
+    - |
+      # Create and activate virtual environment
+      ${PYTHON} -m venv .venv || true
+      source .venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -e ".[dev]" || pip install -r requirements.txt
+    - |
+      # Verify critical tools
+      echo "--- Tool Versions ---"
+      ${PYTHON} --version
+      java -version 2>&1 || echo "WARNING: Java not found"
+      adb version || echo "WARNING: ADB not found"
+    - |
+      # Verify xTS packages are available
+      echo "--- xTS Packages ---"
+      ls -la ${XTS_PACKAGES_DIR}/ 2>/dev/null || echo "WARNING: xTS packages not found at ${XTS_PACKAGES_DIR}"
+    - |
+      # Initial device listing
+      echo "--- Connected Devices ---"
+      adb devices -l
+    - |
+      # Run xTS Agent setup
+      ${PYTHON} -m xts_agent.cli setup --config config/default_config.yaml || true
+  artifacts:
+    paths:
+      - .venv/
+      - logs/setup/
+    expire_in: 7 days
+
+# ═════════════════════════════════════════════════════════════
+# Stage 2: Device Health Check
+# ═════════════════════════════════════════════════════════════
+device_health_check:
+  stage: health-check
+  script:
+    - source .venv/bin/activate
+    - echo "=== Device Health Check ==="
+    - adb devices -l
+    - |
+      # Check minimum device count
+      DEVICE_COUNT=$(adb devices | grep -c 'device$' || true)
+      echo "Detected ${DEVICE_COUNT} device(s)"
+      if [ "${DEVICE_COUNT}" -lt "${DEVICE_MIN_COUNT}" ]; then
+        echo "WARNING: Only ${DEVICE_COUNT} devices found, need ${DEVICE_MIN_COUNT}"
+        echo "Proceeding with available devices..."
+      fi
+    - ${PYTHON} -m xts_agent.cli health-check --reboot-unhealthy || true
+    - ${PYTHON} -m xts_agent.cli device-check --min-devices 1
+  artifacts:
+    paths:
+      - logs/health/
+    expire_in: 7 days
+
+# ═════════════════════════════════════════════════════════════
+# Stage 3: Execute xTS Suites (Main Execution)
+# ═════════════════════════════════════════════════════════════
+execute_xts_suites:
+  stage: execute-xts
+  timeout: 50h                          # 48h execution + 2h buffer
+  script:
+    - source .venv/bin/activate
+    - echo "=== Starting xTS Suite Execution ==="
+    - echo "Plan: ${TEST_PLAN}"
+    - echo "Start time: $(date -Iseconds)"
+    - |
+      # Execute the full test plan with auto-retry
+      ${PYTHON} -m xts_agent.cli run \
+        --plan "${TEST_PLAN}" \
+        --auto-retry \
+        --config config/default_config.yaml
+    - echo "End time: $(date -Iseconds)"
+  artifacts:
+    paths:
+      - results/
+      - logs/
+    reports:
+      junit: results/junit/*.xml
+    expire_in: 30 days
+    when: always                        # Upload artifacts even on failure
+  after_script:
+    - |
+      # Cleanup: Kill any lingering TradeFed processes
+      source .venv/bin/activate 2>/dev/null || true
+      ${PYTHON} -m xts_agent.cli cleanup --kill-tradefed 2>/dev/null || true
+      # Kill orphaned Java processes from TradeFed
+      pkill -f "tradefed" 2>/dev/null || true
+
+# ═════════════════════════════════════════════════════════════
+# Stage 4: Suite-Level Retry (Only on Failure)
+# ═════════════════════════════════════════════════════════════
+suite_retry:
+  stage: retry
+  timeout: 12h
+  when: on_failure                      # Only run if execute stage failed
+  script:
+    - source .venv/bin/activate
+    - echo "=== Suite-Level Retry for Failed Tests ==="
+    - |
+      ${PYTHON} -m xts_agent.cli retry \
+        --plan "${TEST_PLAN}" \
+        --max-retries 2 \
+        --config config/default_config.yaml
+  artifacts:
+    paths:
+      - results/retry/
+    reports:
+      junit: results/retry/junit/*.xml
+    expire_in: 30 days
+    when: always
+  after_script:
+    - |
+      source .venv/bin/activate 2>/dev/null || true
+      ${PYTHON} -m xts_agent.cli cleanup --kill-tradefed 2>/dev/null || true
+
+# ═════════════════════════════════════════════════════════════
+# Stage 5: Root Cause Analysis
+# ═════════════════════════════════════════════════════════════
+analyze_failures:
+  stage: analyze
+  when: always                          # Always analyze, even if tests passed
+  script:
+    - source .venv/bin/activate
+    - echo "=== Root Cause Analysis ==="
+    - |
+      ${PYTHON} -m xts_agent.cli analyze \
+        --rca \
+        --classify-failures \
+        --config config/default_config.yaml
+  artifacts:
+    paths:
+      - results/rca/
+    expire_in: 30 days
+
+# ═════════════════════════════════════════════════════════════
+# Stage 6: Report Generation
+# ═════════════════════════════════════════════════════════════
+generate_report:
+  stage: report
+  when: always
+  script:
+    - source .venv/bin/activate
+    - echo "=== Generating Reports ==="
+    - |
+      ${PYTHON} -m xts_agent.cli report \
+        --format html,json,junit \
+        --config config/default_config.yaml
+    - echo "=== Report files ==="
+    - ls -la results/reports/ 2>/dev/null || echo "No reports generated"
+  artifacts:
+    paths:
+      - results/reports/
+    reports:
+      junit: results/reports/junit_final.xml
+    expire_in: 90 days
+
+# ═════════════════════════════════════════════════════════════
+# Optional: Scheduled Nightly Smoke Test
+# ═════════════════════════════════════════════════════════════
+nightly_smoke_test:
+  stage: execute-xts
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: always
+    - when: never
+  timeout: 2h
+  script:
+    - source .venv/bin/activate
+    - |
+      ${PYTHON} -m xts_agent.cli run \
+        --plan config/test_plans/smoke_test.yaml \
+        --auto-retry \
+        --config config/default_config.yaml
+  artifacts:
+    paths:
+      - results/
+    reports:
+      junit: results/junit/*.xml
+    expire_in: 7 days
+    when: always
+
+# ═════════════════════════════════════════════════════════════
+# Optional: Manual Single-Suite Execution
+# ═════════════════════════════════════════════════════════════
+.manual_suite_template: &manual_suite
+  stage: execute-xts
+  when: manual
+  timeout: 24h
+  artifacts:
+    paths:
+      - results/
+    reports:
+      junit: results/junit/*.xml
+    expire_in: 30 days
+    when: always
+
+run_cts_only:
+  <<: *manual_suite
+  script:
+    - source .venv/bin/activate
+    - ${PYTHON} -m xts_agent.cli run --plan config/test_plans/cts_only.yaml --auto-retry
+
+run_vts_only:
+  <<: *manual_suite
+  script:
+    - source .venv/bin/activate
+    - ${PYTHON} -m xts_agent.cli run --plan config/test_plans/vts_only.yaml --auto-retry
+
+run_catbox_only:
+  <<: *manual_suite
+  script:
+    - source .venv/bin/activate
+    - ${PYTHON} -m xts_agent.cli run --plan config/test_plans/catbox_functional.yaml --auto-retry
