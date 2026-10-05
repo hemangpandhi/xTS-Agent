@@ -101,10 +101,13 @@ fi
 # Dangerous legacy patches must not sit at repo root
 shopt -s nullglob
 root_patches=(patch_*.py)
+legacy_dir="scripts/legacy"
 if [[ ${#root_patches[@]} -gt 0 ]]; then
-  bad "legacy patch_*.py still in repo root (move to scripts/legacy/)"
+  bad "legacy patch_*.py still in repo root (delete them)"
+elif [[ -d "${legacy_dir}" ]]; then
+  bad "scripts/legacy/ still present (delete unused mutators)"
 else
-  ok "no root patch_*.py mutators"
+  ok "no legacy patch mutators in tree"
 fi
 shopt -u nullglob
 

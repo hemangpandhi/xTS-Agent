@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # ============================================================
-# xTS Agent — Office / CI host pre-flight checks
-# Safe production replacement for the old "assassin" deployer.
+# xTS Agent — Host pre-flight checks (aapt2, packages, devices)
 #
 # Usage:
-#   ./office_deploy.sh
-#   ANDROID_HOME=/opt/android-sdk XTS_PACKAGES_DIR=/opt/xts ./office_deploy.sh
+#   ./scripts/preflight.sh
+#   ANDROID_HOME=/opt/android-sdk XTS_PACKAGES_DIR=/opt/xts ./scripts/preflight.sh
 # ============================================================
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT_DIR}"
 XTS_DIR="${XTS_PACKAGES_DIR:-/opt/xts}"
 ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 MIN_DEVICES="${MIN_DEVICES:-1}"
