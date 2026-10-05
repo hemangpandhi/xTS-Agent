@@ -105,7 +105,7 @@ class DeviceManager:
     def check_device_health(self, serial: str) -> HealthReport:
         try:
             dumpsys_battery = AdbWrapper.shell(
-                serial, "dumpsys battery", timeout=self.adb_timeout
+                serial, "dumpsys battery", timeout=self.adb_timeout, silent=True
             )
             level = 50
             ac_powered = False
@@ -122,7 +122,7 @@ class DeviceManager:
                 if "USB powered:" in stripped and "true" in stripped.lower():
                     usb_powered = True
 
-            storage_out = AdbWrapper.shell(serial, "df /data", timeout=self.adb_timeout)
+            storage_out = AdbWrapper.shell(serial, "df /data", timeout=self.adb_timeout, silent=True)
             free_mb = 1000
             try:
                 lines = storage_out.splitlines()
@@ -136,11 +136,7 @@ class DeviceManager:
 
             has_internet = False
             try:
-                ping = AdbWrapper.shell(
-                    serial,
-                    "ping -c 1 -W 2 8.8.8.8",
-                    timeout=10,
-                )
+                ping = AdbWrapper.shell(serial, "ping -c 1 -W 2 8.8.8.8", timeout=10, silent=True)
                 has_internet = (
                     "1 received" in ping
                     or "1 packets received" in ping
@@ -155,6 +151,7 @@ class DeviceManager:
                     serial,
                     "dumpsys power | grep mWakefulness",
                     timeout=self.adb_timeout,
+                    silent=True
                 )
                 is_screen_on = "Awake" in dumpsys_power or "mWakefulness=Awake" in dumpsys_power
             except AdbError:
@@ -198,7 +195,7 @@ class DeviceManager:
     def is_aaos_device(self, serial: str) -> bool:
         try:
             pm_features = AdbWrapper.shell(
-                serial, "pm list features", timeout=self.adb_timeout
+                serial, "pm list features", timeout=self.adb_timeout, silent=True
             )
             return "android.hardware.type.automotive" in pm_features
         except AdbError:

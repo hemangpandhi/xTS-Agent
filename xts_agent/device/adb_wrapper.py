@@ -18,7 +18,7 @@ class AdbError(Exception):
 
 class AdbWrapper:
     @staticmethod
-    def _run_cmd(cmd: list[str], timeout: Optional[int] = DEFAULT_ADB_TIMEOUT) -> str:
+    def _run_cmd(cmd: list[str], timeout: Optional[int] = DEFAULT_ADB_TIMEOUT, silent: bool = False) -> str:
         try:
             result = subprocess.run(
                 cmd,
@@ -30,10 +30,12 @@ class AdbWrapper:
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
             err = (e.stderr or e.stdout or "").strip()
-            logger.error("ADB command failed: %s\nError: %s", " ".join(cmd), err)
+            if not silent:
+                logger.error("ADB command failed: %s\nError: %s", " ".join(cmd), err)
             raise AdbError(f"Command failed: {err}") from e
         except subprocess.TimeoutExpired as e:
-            logger.error("ADB command timed out: %s", " ".join(cmd))
+            if not silent:
+                logger.error("ADB command timed out: %s", " ".join(cmd))
             raise AdbError("Command timed out") from e
 
     @classmethod
@@ -47,11 +49,12 @@ class AdbWrapper:
         return serials
 
     @classmethod
-    def shell(cls, serial: str, command: str, timeout: Optional[int] = DEFAULT_ADB_TIMEOUT) -> str:
+    def shell(cls, serial: str, command: str, timeout: Optional[int] = DEFAULT_ADB_TIMEOUT, silent: bool = False) -> str:
         # Use sh -c so pipes/redirects work consistently
         return cls._run_cmd(
             ["adb", "-s", serial, "shell", "sh", "-c", command],
             timeout=timeout,
+            silent=silent,
         )
 
     @classmethod
