@@ -1,0 +1,21 @@
+name: "Full CTS Hardware Sharded Run"
+description: "Full CTS on physical/network ADB devices (not cts-virtual-device)"
+devices:
+  min_devices: 1
+suites:
+  - name: cts
+    priority: 1
+    plan: cts
+    enabled: true
+    exclude_filters:
+      - "CtsNpuManagerMoblyTestCases"
+      - "CtsWifiMoblyTestCases"
+    sharding:
+      enabled: true
+      shard_count: auto
+    retry:
+      max_retries: 2
+      strategy: "RETRY_ANY_FAILURE"
+    timeout_hours: 24
+    extra_args:
+      - "--skip-system-status-check"
