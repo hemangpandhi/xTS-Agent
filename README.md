@@ -1,45 +1,198 @@
 # xTS Agent
 
-The xTS Agent framework for Android Automotive OS (AAOS) test automation.
+xTS Agent orchestrates Android Automotive OS (AAOS) compatibility suites
+(CTS, VTS, STS, GTS, ATS, CATBox) via TradeFed, with device allocation,
+sharding, retries, RCA, and HTML/JUnit/JSON reports.
 
-## Overview
-This framework provides tools for orchestrating Android compatibility test suites (CTS, VTS, STS, GTS, ATS, CATBox) via TradeFed, analyzing results, and reporting.
+## Prerequisites (test host)
 
-## Features
-- TradeFed orchestration with smart retries and sharding
-- Device management and health checking
-- Modular YAML configuration
-- Automated result analysis (RCA)
-- Detailed reporting (HTML, JSON, JUnit)
+| Requirement | Notes |
+|-------------|--------|
+| OS | Ubuntu 20.04+ / Debian 11+ |
+| Python | 3.10+ |
+| Java | JDK 17+ |
+| ADB | In `PATH` (Platform Tools) |
+| Android SDK | `ANDROID_HOME` with `build-tools` (for `aapt2`) |
+| xTS packages | Under `/opt/xts/android-<suite>/` |
+| Devices | Physical AAOS / emulators / Cuttlefish online in `adb devices` |
 
-## Production Deploy
+Expected package layout:
 
-Approved host path:
+```text
+/opt/xts/
+├── android-cts/tools/cts-tradefed
+├── android-vts/tools/vts-tradefed
+├── android-sts/tools/sts-tradefed
+├── android-gts/tools/gts-tradefed
+├── android-ats/tools/ats-tradefed
+└── android-catbox/tools/catbox-tradefed
+```
+
+## 1) Clone and install (one-time)
 
 ```bash
-# 1) One-time host setup (Ubuntu)
+git clone <your-repo-url> xTS-Agent
+cd xTS-Agent
+
+# System deps + ADB helpers (needs sudo)
 sudo ./scripts/setup_environment.sh
 
-# 2) Place TradeFed packages under /opt/xts and validate
-REQUIRED_SUITES=cts,vts ./scripts/download_xts_packages.sh
+# Python package
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e .
+```
 
-# 3) Pre-flight
+Export SDK paths (adjust to your machine):
+
+```bash
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0"
+```
+
+## 2) Install / validate xTS packages
+
+Packages are usually downloaded manually (partner portal / source.android.com)
+and extracted under `/opt/xts`. Then validate:
+
+```bash
+REQUIRED_SUITES=cts,vts ./scripts/download_xts_packages.sh
+```
+
+Exit code `0` means required suites (and their `*-tradefed` scripts) are present.
+
+## 3) Connect devices
+
+Physical / network ADB:
+
+```bash
+adb devices -l
+```
+
+Or spawn a Cuttlefish cluster:
+
+```bash
+export AOSP_ROOT=/path/to/aosp
+export LUNCH_TARGET=aosp_cf_x86_64_phone-userdebug   # or your AAOS lunch
+./scripts/start_cluster.sh 10
+adb devices
+```
+
+## 4) Pre-flight + readiness gate
+
+```bash
+source .venv/bin/activate
 ./office_deploy.sh
 
-# 4) Optional Cuttlefish cluster
-AOSP_ROOT=/path/to/aosp ./scripts/start_cluster.sh 10
+STRICT_DEVICES=1 MIN_DEVICES=1 REQUIRED_SUITES=cts \
+  ./scripts/check_production_ready.sh
+```
 
-# 5) Readiness gate
-STRICT_DEVICES=1 MIN_DEVICES=1 REQUIRED_SUITES=cts ./scripts/check_production_ready.sh
+You want `RESULT: READY` before a real run.
 
-# 6) Execute
+## 5) Execute tests
+
+Always run from the repo root with the venv active.
+
+### Dry-run (no TradeFed / no devices required for command build)
+
+```bash
+python3 -m xts_agent.cli run \
+  --plan config/test_plans/smoke_test.yaml \
+  --config config/default_config.yaml \
+  --dry-run
+```
+
+### Smoke (small CTS include-filter)
+
+```bash
+python3 -m xts_agent.cli run \
+  --plan config/test_plans/smoke_test.yaml \
+  --config config/default_config.yaml
+```
+
+### Full CTS (sharded across connected devices)
+
+```bash
+python3 -m xts_agent.cli run \
+  --plan config/test_plans/full_cts.yaml \
+  --config config/default_config.yaml \
+  --auto-retry
+```
+
+### Full AAOS certification (all suites)
+
+```bash
 python3 -m xts_agent.cli run \
   --plan config/test_plans/full_certification.yaml \
   --config config/default_config.yaml \
   --auto-retry
 ```
 
-GitLab CI (shell runner tagged `android-test-host`) mirrors the same CLI. Lab-only mutators live under `scripts/legacy/dev_patches/` and must not be run in production.
+### Convenience wrappers
+
+```bash
+# Wait for N devices, then smoke
+MIN_DEVICES=4 ./run_when_ready.sh
+
+# Nightly: optional cluster spawn + full CTS
+NUM_DEVICES=10 SPAWN_CLUSTER=1 \
+  TEST_PLAN=config/test_plans/full_cts.yaml \
+  ./start_massive_nightly.sh
+```
+
+## 6) After the run
+
+| Output | Location |
+|--------|----------|
+| HTML / JSON / JUnit | `results/reports/` |
+| JUnit (CI path) | `results/junit/` |
+| TradeFed logs | `results/logs/` |
+| RCA JSON | `results/rca/` |
+| SQLite history | `results/xts_agent.db` |
+
+Useful follow-up commands:
+
+```bash
+# Re-generate reports from latest JSON artifact
+python3 -m xts_agent.cli report \
+  --plan config/test_plans/full_certification.yaml \
+  --config config/default_config.yaml \
+  --format html,json,junit
+
+# RCA on latest results
+python3 -m xts_agent.cli analyze \
+  --plan config/test_plans/full_certification.yaml \
+  --config config/default_config.yaml \
+  --rca --classify-failures
+
+# Suite retry (uses session IDs from results/reports/*.json)
+python3 -m xts_agent.cli retry \
+  --plan config/test_plans/full_certification.yaml \
+  --config config/default_config.yaml \
+  --max-retries 2
+
+# Device helpers
+python3 -m xts_agent.cli device-check --min-devices 1
+python3 -m xts_agent.cli health-check
+python3 -m xts_agent.cli cleanup --kill-tradefed
+```
+
+## Test plans
+
+| Plan | Purpose |
+|------|---------|
+| `config/test_plans/smoke_test.yaml` | Tiny CTS include-filter sanity |
+| `config/test_plans/full_cts.yaml` | Full CTS, high shard count |
+| `config/test_plans/full_certification.yaml` | CTS+VTS+STS+GTS+ATS+CATBox |
+| `config/test_plans/cts_only.yaml` | Manual CTS-only |
+| `config/test_plans/vts_only.yaml` | Manual VTS-only |
+| `config/test_plans/catbox_functional.yaml` | Manual CATBox |
+
+Global defaults: `config/default_config.yaml`  
+(paths, retry, RCA, reporting, ATS2). Override per plan YAML.
 
 ## Architecture
 
@@ -57,50 +210,54 @@ graph TD
     B --> K[ATS 2.0 Upload]
 ```
 
-Production path: load plan (merged with `config/default_config.yaml`) → allocate devices → pin serials into TradeFed (`-s`) → parse `test_result.xml` → optional suite retry + RCA → multi-format reports.
-## Quick Start
+Flow: load plan → allocate devices → pin serials into TradeFed (`-s`) →
+parse `test_result.xml` → optional suite retry + RCA → reports.
+
+## Docker (optional)
+
+From repo root:
+
 ```bash
-pip install -e .
-xts-agent run --plan basic_plan.yaml
+docker compose -f docker/docker-compose.yml build
+XTS_PACKAGES_DIR=/opt/xts XTS_RESULTS_DIR=$PWD/results \
+  docker compose -f docker/docker-compose.yml up
 ```
+
+Host networking is used so the container can reach host ADB devices.
+
+## GitLab CI
+
+Shell runner tagged `android-test-host`. Pipeline stages:
+`setup → health-check → execute-xts → retry → analyze → report`.
+
+Set `TEST_PLAN` / `DEVICE_MIN_COUNT` in CI variables as needed.
 
 ## Troubleshooting
 
-### AAPT2 / Build Tools Path Error
-If TradeFed fails during the APK preparation phase with `Unable to open 'badging': No such file or directory` or `AaptParser failed`, it means TradeFed cannot find the Android SDK build tools in your environment path.
-
-To resolve this, explicitly export the Android SDK path before executing the agent:
-```bash
-export ANDROID_HOME=/home/hemang/Android/Sdk
-export PATH=$PATH:$ANDROID_HOME/build-tools/34.0.0
-export PATH=$PATH:$ANDROID_HOME/platform-tools
-```
-You can add these lines to your `~/.bashrc` or GitLab CI environment variables to make it persistent.
-
-## 🚀 Native Multi-Device Deployment (For Office/CI Server)
-
-If you are deploying this framework on a fresh office server and need to run **10-device sharded executions**, do **not** rely on complex web-backend NodeJS orchestrators. Instead, use the native AOSP multi-instance spawner included in this repository.
-
-### 1. Start the Cuttlefish Cluster
-Use the provided `start_cluster.sh` script to natively spin up 10 Cuttlefish instances. This completely bypasses Docker/Node and interacts directly with the AOSP build system.
+### AAPT2 / `AaptParser failed`
 
 ```bash
-cd /mnt/xTS_Agent/scripts
-./start_cluster.sh 10
+export ANDROID_HOME=/path/to/Android/Sdk
+export PATH="$PATH:$ANDROID_HOME/build-tools/34.0.0:$ANDROID_HOME/platform-tools"
+./office_deploy.sh   # validates/repairs TradeFed aapt mapping safely
 ```
-*Note: You can override defaults by exporting `AOSP_ROOT` or `LUNCH_TARGET` before running the script.*
 
-### 2. Verify Devices
-Verify that AOSP successfully allocated the virtual ADB ports (typically `0.0.0.0:6520`, `0.0.0.0:6524`, etc.):
+### No devices / shard count 0
+
 ```bash
 adb devices
+python3 -m xts_agent.cli device-check --min-devices 1
 ```
 
-### 3. Trigger Sharded Validation
-Once the devices show up as `device`, run the xTS Agent. The framework will automatically detect all 10 connected instances, allocate them, and pass `--shard-count 10` to TradeFed.
+### Progress / resources during a long run
 
 ```bash
-python3 -m xts_agent.cli run --plan config/test_plans/smoke_test.yaml
+./check_progress.sh
+./monitor_resources.sh          # CSV under results/logs/
+./monitor_web/start_web_monitor.sh   # localhost:8585
 ```
 
-The 2.5 million tests will instantly load-balance across the cluster, dropping execution time from 5 days to an overnight run!
+## Do not run in production
+
+`scripts/legacy/dev_patches/` contains old one-shot source mutators.
+They are not part of the deploy path.
