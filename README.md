@@ -19,6 +19,38 @@ There is **no pre-built image on Docker Hub**. The repo ships a `Dockerfile` + `
 
 ---
 
+## Repository layout
+
+```text
+xTS-Agent/
+├── xts_agent/                 # Python package (CLI, orchestrator, TradeFed runner)
+├── config/
+│   ├── default_config.yaml    # Global defaults
+│   └── test_plans/            # Runnable plans (smoke, hardware CTS, cert, …)
+├── scripts/                   # All supported host scripts (setup, run, monitor)
+├── docker/                    # Dockerfile + compose (build locally)
+├── monitor_web/               # Optional localhost resource UI
+├── results/                   # Generated at runtime (gitignored)
+└── tests/                     # Unit tests
+```
+
+### Supported scripts (`scripts/`)
+
+| Script | Purpose |
+|--------|---------|
+| `setup_environment.sh` | One-time host install (JDK, ADB, udev, dirs) |
+| `download_xts_packages.sh` | Validate `/opt/xts` suite layout |
+| `preflight.sh` | Host pre-flight (aapt2, packages, devices, agent import) |
+| `check_ready.sh` | Go/no-go gate before a production run |
+| `start_cluster.sh` | Spawn N Cuttlefish instances |
+| `run_when_devices_ready.sh` | Wait for N ADB devices, then run a plan |
+| `run_nightly.sh` | Optional cluster spawn + multi-device plan run |
+| `check_progress.sh` | Live TradeFed progress summary |
+| `monitor_resources.sh` | CPU/RAM CSV sampler |
+| `setup_gitlab_runner.sh` | Optional GitLab shell-runner install |
+
+---
+
 ## Dependencies
 
 ### Always required (host)
@@ -33,9 +65,9 @@ There is **no pre-built image on Docker Hub**. The repo ships a `Dockerfile` + `
 | xTS packages under `/opt/xts` | `cts-tradefed`, etc. |
 | 1+ online devices in `adb devices` | Execution targets |
 
-### Python packages (from `pyproject.toml` / `requirements.txt`)
+### Python packages
 
-`click`, `pyyaml`, `jinja2`, `rich`, `requests`, `xmltodict`
+From `pyproject.toml` / `requirements.txt`: `click`, `pyyaml`, `jinja2`, `rich`, `requests`, `xmltodict`
 
 ### Optional
 
@@ -63,7 +95,7 @@ There is **no pre-built image on Docker Hub**. The repo ships a `Dockerfile` + `
 
 ## Path A — New machine **without Docker** (hardware)
 
-### A1. Install OS packages + ADB helpers
+### A1. Clone + system setup
 
 ```bash
 git clone https://github.com/hemangpandhi/xTS-Agent.git
@@ -73,17 +105,12 @@ git checkout main
 sudo ./scripts/setup_environment.sh
 ```
 
-This installs JDK 17, Python venv tools, platform-tools under `/opt/xts`, and USB udev rules.
-
 ### A2. Android SDK (aapt2)
 
 ```bash
-# Example — adjust to your SDK install
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0"
-
-# Persist in ~/.bashrc if desired
 ```
 
 ### A3. Python agent
@@ -101,58 +128,44 @@ Download CTS (and others) from source.android.com / partner portal, extract to `
 
 ```bash
 REQUIRED_SUITES=cts ./scripts/download_xts_packages.sh
-# add ,vts,sts,... as you install more suites
 ```
 
 ### A5. Connect **multiple devices**
 
-#### Option 1 — Physical USB
+**USB:** enable USB debugging on each device → plug in → accept RSA once → `adb devices -l`
 
-1. Enable **Developer options → USB debugging** on each device.
-2. Plug into the host (powered hub OK).
-3. Accept the RSA prompt on each device once.
-4. Verify:
-
-```bash
-adb devices -l
-# expect N lines with status "device"
-```
-
-#### Option 2 — Network / TCP ADB
-
+**TCP:**
 ```bash
 adb connect 192.168.1.10:5555
 adb connect 192.168.1.11:5555
 adb devices -l
 ```
 
-#### Option 3 — Cuttlefish virtual cluster
-
+**Cuttlefish:**
 ```bash
 export AOSP_ROOT=/path/to/aosp
-export LUNCH_TARGET=aosp_cf_x86_64_phone-userdebug   # or AAOS lunch
+export LUNCH_TARGET=aosp_cf_x86_64_phone-userdebug
 ./scripts/start_cluster.sh 10
 adb devices -l
-# typical ports: 0.0.0.0:6520, 6524, 6528, ...
 ```
 
 ### A6. How multi-device execution works
 
 1. Agent lists online ADB devices (`device` state).
-2. Allocates up to `sharding.shard_count` (or **`auto`** = all available, capped by config).
-3. Passes each serial to TradeFed as `-s <serial>` and sets `--shard-count N`.
+2. Allocates up to `sharding.shard_count` (or **`auto`** = all available).
+3. Passes each serial to TradeFed as `-s <serial>` and `--shard-count N`.
 4. TradeFed load-balances modules across those devices.
 
-You do **not** need one process per device — one agent run shards across all allocated devices.
+One agent process shards across all allocated devices — no per-device wrapper needed.
 
-### A7. Pre-flight
+### A7. Pre-flight + readiness
 
 ```bash
 source .venv/bin/activate
-./office_deploy.sh
+./scripts/preflight.sh
 
 STRICT_DEVICES=1 MIN_DEVICES=4 REQUIRED_SUITES=cts \
-  ./scripts/check_production_ready.sh
+  ./scripts/check_ready.sh
 # must print: RESULT: READY
 ```
 
@@ -161,7 +174,7 @@ STRICT_DEVICES=1 MIN_DEVICES=4 REQUIRED_SUITES=cts \
 ```bash
 source .venv/bin/activate
 
-# Quick sanity (1 module filter)
+# Quick sanity
 python3 -m xts_agent.cli run \
   --plan config/test_plans/smoke_test.yaml \
   --config config/default_config.yaml
@@ -172,80 +185,40 @@ python3 -m xts_agent.cli run \
   --config config/default_config.yaml \
   --auto-retry
 
-# Full AAOS certification (all suites)
+# Full AAOS certification
 python3 -m xts_agent.cli run \
   --plan config/test_plans/full_certification.yaml \
   --config config/default_config.yaml \
   --auto-retry
 ```
 
-Wait-for-devices helper:
+Helpers:
 
 ```bash
-MIN_DEVICES=4 TEST_PLAN=config/test_plans/cts_only.yaml ./run_when_ready.sh
+MIN_DEVICES=4 TEST_PLAN=config/test_plans/cts_only.yaml \
+  ./scripts/run_when_devices_ready.sh
+
+NUM_DEVICES=10 SPAWN_CLUSTER=1 \
+  TEST_PLAN=config/test_plans/full_cts_hardware.yaml \
+  ./scripts/run_nightly.sh
 ```
 
 ---
 
 ## Path B — New machine **with Docker**
 
-### Important facts
+### Facts
 
 - **No published image** — build from this repo.
-- Container includes: Ubuntu 24.04, JDK 17, Python agent, Android cmdline-tools + build-tools 34 + platform-tools.
-- Container does **not** include `/opt/xts` suites (mount them) or physical USB by itself.
-- Compose uses **`network_mode: host`** so the container’s `adb` sees the **same** devices as the host.
-- Prefer connecting devices on the **host** (`adb devices` works on host), then run the agent in Docker.
+- Image includes Ubuntu 24.04, JDK 17, Python agent, Android cmdline-tools + build-tools 34.
+- Mount host `/opt/xts` and ADB keys; use **`network_mode: host`** so container ADB sees host devices.
 
-### B1. Host still needs
-
-- Docker Engine + Compose plugin  
-- Host ADB with devices online (`adb devices`)  
-- xTS packages on host at `/opt/xts`  
-- `~/.android` ADB keys (mounted read-only into the container)
+### Build + run
 
 ```bash
-# On host
-adb devices -l
-ls /opt/xts/android-cts/tools/cts-tradefed
-```
-
-### B2. Build image (from repo root)
-
-```bash
-git clone https://github.com/hemangpandhi/xTS-Agent.git
-cd xTS-Agent
-git checkout main
-
 docker build -f docker/Dockerfile -t xts-agent:local .
-# or:
-docker compose -f docker/docker-compose.yml build
-```
 
-### B3. Run with Compose
-
-```bash
 mkdir -p results
-export XTS_PACKAGES_DIR=/opt/xts
-export XTS_RESULTS_DIR="$PWD/results"
-export ANDROID_HOST_KEYS="$HOME/.android"
-
-docker compose -f docker/docker-compose.yml up --abort-on-container-exit
-```
-
-Default CMD runs `full_cts.yaml` (virtual-oriented). For **hardware**, override:
-
-```bash
-docker compose -f docker/docker-compose.yml run --rm xts-agent \
-  python3 -m xts_agent.cli run \
-    --plan config/test_plans/cts_only.yaml \
-    --config config/default_config.yaml \
-    --auto-retry
-```
-
-### B4. Equivalent `docker run`
-
-```bash
 docker run --rm --network host \
   -v /opt/xts:/opt/xts:ro \
   -v "$PWD/results":/app/results \
@@ -257,26 +230,37 @@ docker run --rm --network host \
     --auto-retry
 ```
 
-### Docker vs bare metal — quick pick
+Or Compose (from repo root):
+
+```bash
+export XTS_PACKAGES_DIR=/opt/xts
+export XTS_RESULTS_DIR="$PWD/results"
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml run --rm xts-agent \
+  python3 -m xts_agent.cli run \
+    --plan config/test_plans/cts_only.yaml \
+    --config config/default_config.yaml \
+    --auto-retry
+```
 
 | Need | Recommendation |
 |------|----------------|
-| Real hardware rack / USB / long cert runs | **Bare metal** (Path A) |
-| Reproducible agent+JDK+SDK toolchain | **Docker** for the agent; devices on host |
-| Cuttlefish on same host | Bare metal agent **or** Docker agent + host CVD; don’t put CVD inside this image |
+| Real hardware rack / USB / long cert | **Bare metal** (Path A) |
+| Reproducible agent+JDK+SDK toolchain | **Docker** agent; devices on host |
+| Cuttlefish | Host CVD + bare metal or Docker agent |
 
 ---
 
-## Test plans (which file to use)
+## Test plans
 
 | Plan file | TradeFed plan | Use when |
 |-----------|---------------|----------|
 | `smoke_test.yaml` | `cts` + include filter | First hardware check |
-| `cts_only.yaml` | `cts`, `shard_count: auto` | **Hardware / multi-device CTS** |
-| `full_cts_hardware.yaml` | `cts`, `shard_count: auto` | Full hardware CTS (excludes a few modules) |
+| `cts_only.yaml` | `cts`, `shard_count: auto` | **Hardware multi-device CTS** |
+| `full_cts_hardware.yaml` | `cts`, auto shards | Full hardware CTS |
 | `full_certification.yaml` | `cts` (+ VTS/STS/…) | Full AAOS cert |
-| `full_cts.yaml` | **`cts-virtual-device`**, fixed shards | **Cuttlefish / virtual only** — not for hardware |
-| `vts_only.yaml` / `catbox_functional.yaml` | suite-specific | Manual single-suite jobs |
+| `full_cts.yaml` | **`cts-virtual-device`** | **Cuttlefish / virtual only** |
+| `vts_only.yaml` / `catbox_functional.yaml` | suite-specific | Manual single-suite |
 
 Defaults: `config/default_config.yaml`.
 
@@ -295,13 +279,19 @@ Defaults: `config/default_config.yaml`.
 ```bash
 python3 -m xts_agent.cli report --plan config/test_plans/cts_only.yaml \
   --config config/default_config.yaml --format html,json,junit
-
 python3 -m xts_agent.cli analyze --plan config/test_plans/cts_only.yaml \
   --config config/default_config.yaml --rca --classify-failures
-
 python3 -m xts_agent.cli device-check --min-devices 4
 python3 -m xts_agent.cli health-check
 python3 -m xts_agent.cli cleanup --kill-tradefed
+```
+
+Live helpers:
+
+```bash
+./scripts/check_progress.sh
+./scripts/monitor_resources.sh
+./monitor_web/start_web_monitor.sh   # http://127.0.0.1:8585
 ```
 
 ---
@@ -310,16 +300,20 @@ python3 -m xts_agent.cli cleanup --kill-tradefed
 
 ```mermaid
 graph TD
-    A[CLI] --> B[Orchestrator]
-    B --> C[Config + defaults]
+    A[CLI xts_agent.cli] --> B[Orchestrator]
+    B --> C[ConfigLoader + default_config]
     B --> D[TestPlanExecutor]
     D --> E[DeviceManager / ADB]
     D --> F[TradefedRunner]
-    F --> G[TradeFed shards]
+    F --> G[TradeFed]
     E --> H[Device 1..N]
     G --> H
-    B --> I[Retry / RCA / Reports]
+    B --> I[RetryManager]
+    B --> J[RCA + Reports]
 ```
+
+Flow: load plan → allocate devices → pin serials (`-s`) → TradeFed shards →
+parse `test_result.xml` → optional retry/RCA → reports.
 
 ---
 
@@ -333,33 +327,16 @@ Stages: setup → health-check → execute → retry → analyze → report.
 ## Troubleshooting
 
 **AAPT2 / AaptParser failed**
-
 ```bash
 export ANDROID_HOME=/path/to/Android/Sdk
 export PATH="$PATH:$ANDROID_HOME/build-tools/34.0.0:$ANDROID_HOME/platform-tools"
-./office_deploy.sh
+./scripts/preflight.sh
 ```
 
 **Devices missing / unauthorized**
-
 ```bash
 adb kill-server && adb start-server
 adb devices -l
-# unplug/replug; accept RSA on device
 ```
 
-**Wrong plan on hardware** — do not use `full_cts.yaml` (`cts-virtual-device`). Use `cts_only.yaml` or `full_certification.yaml`.
-
-**Progress during long runs**
-
-```bash
-./check_progress.sh
-./monitor_resources.sh
-./monitor_web/start_web_monitor.sh   # http://127.0.0.1:8585
-```
-
----
-
-## Do not run in production
-
-`scripts/legacy/dev_patches/` — old one-shot mutators. Not part of deploy.
+**Wrong plan on hardware** — do not use `full_cts.yaml` (`cts-virtual-device`). Use `cts_only.yaml` or `full_cts_hardware.yaml`.

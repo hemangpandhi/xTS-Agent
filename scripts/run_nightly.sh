@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 # ============================================================
-# xTS Agent — Massive multi-device nightly launcher
-# Production-safe: uses repo cluster spawner + agent CLI.
+# xTS Agent — Multi-device nightly launcher
+# Optionally spawns a Cuttlefish cluster, waits for ADB devices,
+# then runs a hardware-oriented test plan.
 #
-# Required env (or defaults):
-#   AOSP_ROOT, LUNCH_TARGET, XTS_AGENT_HOME, NUM_DEVICES, TEST_PLAN
+# Usage:
+#   ./scripts/run_nightly.sh
+#   NUM_DEVICES=4 SPAWN_CLUSTER=0 TEST_PLAN=config/test_plans/cts_only.yaml \
+#     ./scripts/run_nightly.sh
+#
+# Env: AOSP_ROOT, LUNCH_TARGET, XTS_AGENT_HOME, NUM_DEVICES, TEST_PLAN
 # ============================================================
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 XTS_AGENT_HOME="${XTS_AGENT_HOME:-${ROOT_DIR}}"
 NUM_DEVICES="${NUM_DEVICES:-10}"
 WAIT_TIMEOUT_SECS="${WAIT_TIMEOUT_SECS:-1800}"
-TEST_PLAN="${TEST_PLAN:-config/test_plans/full_cts.yaml}"
+# Default to hardware CTS; override with full_cts.yaml for Cuttlefish/virtual.
+TEST_PLAN="${TEST_PLAN:-config/test_plans/full_cts_hardware.yaml}"
 CONFIG_PATH="${CONFIG_PATH:-config/default_config.yaml}"
 STOP_EXISTING="${STOP_EXISTING:-0}"
 SPAWN_CLUSTER="${SPAWN_CLUSTER:-1}"

@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Wait for a minimum number of ADB devices, then run a plan.
+#
+# Usage:
+#   ./scripts/run_when_devices_ready.sh
+#   MIN_DEVICES=4 TEST_PLAN=config/test_plans/cts_only.yaml \
+#     ./scripts/run_when_devices_ready.sh
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 MIN_DEVICES="${MIN_DEVICES:-4}"
@@ -39,4 +44,4 @@ if [[ "${DRY_RUN}" == "1" ]]; then
 fi
 
 mkdir -p results/logs
-python3 -m xts_agent.cli "${args[@]}" | tee "results/logs/run_when_ready_$(date +%Y%m%d_%H%M%S).log"
+python3 -m xts_agent.cli "${args[@]}" | tee "results/logs/run_when_devices_ready_$(date +%Y%m%d_%H%M%S).log"
