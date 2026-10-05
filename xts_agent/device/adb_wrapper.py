@@ -52,7 +52,7 @@ class AdbWrapper:
     def shell(cls, serial: str, command: str, timeout: Optional[int] = DEFAULT_ADB_TIMEOUT, silent: bool = False) -> str:
         # Use sh -c so pipes/redirects work consistently
         return cls._run_cmd(
-            ["adb", "-s", serial, "shell", "sh", "-c", command],
+            ["adb", "-s", serial, "shell", command],
             timeout=timeout,
             silent=silent,
         )
