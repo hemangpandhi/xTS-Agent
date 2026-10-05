@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
 # ============================================================
-# xTS Agent — Download xTS Packages
-# ============================================================
-# Downloads and extracts Android xTS test suite packages.
-#
-# Note: GTS and some packages require partner portal access.
-# Public packages (CTS, VTS, STS) are available from
-# source.android.com. CATBox must be built from AOSP source.
+# xTS Agent — Validate / guide xTS package acquisition
+# Public CTS/VTS/STS cannot always be auto-fetched (license /
+# partner portals). This script:
+#   1) Documents required layout under $XTS_PACKAGES_DIR
+#   2) Validates installed packages
+#   3) Exits non-zero if REQUIRED_SUITES are missing
 #
 # Usage:
-#   export ANDROID_VERSION="15"    # Android version
-#   export ARCH="arm64-v8a"        # arm64-v8a | x86_64
-#   chmod +x scripts/download_xts_packages.sh
-#   ./scripts/download_xts_packages.sh
+#   REQUIRED_SUITES="cts,vts" ./scripts/download_xts_packages.sh
 # ============================================================
-
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -31,134 +26,107 @@ log_step()  { echo -e "\n${BLUE}===== $1 =====${NC}"; }
 XTS_DIR="${XTS_PACKAGES_DIR:-/opt/xts}"
 ANDROID_VERSION="${ANDROID_VERSION:-15}"
 ARCH="${ARCH:-arm64-v8a}"
+REQUIRED_SUITES="${REQUIRED_SUITES:-cts}"
+ALLOW_MISSING="${ALLOW_MISSING:-0}"
 
 mkdir -p "${XTS_DIR}"
-cd "${XTS_DIR}"
 
-# ─────────────────────────────────────────────────────────────
-# CTS Download
-# ─────────────────────────────────────────────────────────────
-log_step "CTS (Compatibility Test Suite)"
+print_manual_hints() {
+  local name="$1"
+  case "${name}" in
+    cts)
+      log_info "Download CTS from https://source.android.com/docs/compatibility/cts/downloads"
+      log_warn "Extract to ${XTS_DIR}/android-cts (expect tools/cts-tradefed)"
+      ;;
+    vts)
+      log_warn "Build/partner-fetch VTS then extract to ${XTS_DIR}/android-vts"
+      ;;
+    sts)
+      log_warn "Build/partner-fetch STS then extract to ${XTS_DIR}/android-sts"
+      ;;
+    gts)
+      log_warn "GTS is partner-portal only → ${XTS_DIR}/android-gts"
+      ;;
+    ats)
+      log_warn "ATS is partner-portal only → ${XTS_DIR}/android-ats"
+      ;;
+    catbox)
+      log_warn "Build CATBox from AOSP automotive target → ${XTS_DIR}/android-catbox"
+      ;;
+  esac
+}
 
-CTS_DIR="${XTS_DIR}/android-cts"
-if [ -d "${CTS_DIR}" ]; then
-    log_info "CTS already downloaded at ${CTS_DIR}"
-else
-    log_info "Download CTS from: https://source.android.com/docs/compatibility/cts/downloads"
-    log_info "Select Android ${ANDROID_VERSION} for ${ARCH}"
-    log_warn "CTS must be downloaded manually from the official page."
-    log_warn "After downloading, extract to: ${CTS_DIR}"
-    log_warn ""
-    log_warn "Example:"
-    log_warn "  wget <CTS_DOWNLOAD_URL> -O android-cts.zip"
-    log_warn "  unzip android-cts.zip -d ${XTS_DIR}/"
-    echo ""
+validate_suite() {
+  local short="$1"
+  local dir="${XTS_DIR}/android-${short}"
+  local tf="${dir}/tools/${short}-tradefed"
+  # CATBox / STS command names can vary slightly
+  if [[ "${short}" == "sts" && ! -f "${tf}" ]]; then
+    tf="${dir}/tools/sts-tradefed"
+  fi
+  if [[ "${short}" == "catbox" && ! -f "${tf}" ]]; then
+    tf="${dir}/tools/catbox-tradefed"
+  fi
+  if [[ -d "${dir}" && -f "${tf}" ]]; then
+    echo "ok"
+  elif [[ -d "${dir}" ]]; then
+    echo "partial"
+  else
+    echo "missing"
+  fi
+}
 
-    # Also download CTS media files
-    log_info "CTS Media files are also required:"
-    log_warn "  Download android-cts-media-*.zip from the same page"
-    log_warn "  Then run: ./android-cts/tools/cts-tradefed run cts-media-copy"
-fi
+log_step "xTS package validation (${XTS_DIR})"
+log_info "Android=${ANDROID_VERSION} arch=${ARCH} required=${REQUIRED_SUITES}"
 
-# ─────────────────────────────────────────────────────────────
-# VTS Download
-# ─────────────────────────────────────────────────────────────
-log_step "VTS (Vendor Test Suite)"
+ALL_SUITES=(cts vts sts gts ats catbox)
+MISSING_REQUIRED=0
 
-VTS_DIR="${XTS_DIR}/android-vts"
-if [ -d "${VTS_DIR}" ]; then
-    log_info "VTS already downloaded at ${VTS_DIR}"
-else
-    log_info "Download VTS from Android partner portal or build from AOSP:"
-    log_warn "  source build/envsetup.sh"
-    log_warn "  lunch <target>-userdebug"
-    log_warn "  make vts -j\$(nproc)"
-    log_warn "  # Output: out/host/linux-x86/vts/android-vts.zip"
-    log_warn "  unzip android-vts.zip -d ${XTS_DIR}/"
-fi
-
-# ─────────────────────────────────────────────────────────────
-# STS Download
-# ─────────────────────────────────────────────────────────────
-log_step "STS (Security Test Suite)"
-
-STS_DIR="${XTS_DIR}/android-sts"
-if [ -d "${STS_DIR}" ]; then
-    log_info "STS already downloaded at ${STS_DIR}"
-else
-    log_info "Download STS from partner portal or build from AOSP:"
-    log_warn "  make sts -j\$(nproc)"
-    log_warn "  unzip android-sts.zip -d ${XTS_DIR}/"
-fi
-
-# ─────────────────────────────────────────────────────────────
-# GTS Download
-# ─────────────────────────────────────────────────────────────
-log_step "GTS (Google Test Suite)"
-
-GTS_DIR="${XTS_DIR}/android-gts"
-if [ -d "${GTS_DIR}" ]; then
-    log_info "GTS already downloaded at ${GTS_DIR}"
-else
-    log_warn "GTS is PROPRIETARY and available only through Google Partner Portal."
-    log_warn "Contact your Google TAM (Technical Account Manager) for access."
-    log_warn "Once downloaded, extract to: ${GTS_DIR}"
-fi
-
-# ─────────────────────────────────────────────────────────────
-# ATS Download
-# ─────────────────────────────────────────────────────────────
-log_step "ATS (Automotive Test Suite)"
-
-ATS_DIR="${XTS_DIR}/android-ats"
-if [ -d "${ATS_DIR}" ]; then
-    log_info "ATS already downloaded at ${ATS_DIR}"
-else
-    log_warn "ATS is distributed through Google Partner Portal for automotive OEMs."
-    log_warn "Contact your Google TAM for access."
-    log_warn "Once downloaded, extract to: ${ATS_DIR}"
-fi
-
-# ─────────────────────────────────────────────────────────────
-# CATBox Build
-# ─────────────────────────────────────────────────────────────
-log_step "CATBox (Complete Automotive Tests in a Box)"
-
-CATBOX_DIR="${XTS_DIR}/android-catbox"
-if [ -d "${CATBOX_DIR}" ]; then
-    log_info "CATBox already available at ${CATBOX_DIR}"
-else
-    log_info "CATBox must be built from AOSP source tree:"
-    log_warn "  source build/envsetup.sh"
-    log_warn "  lunch <automotive_target>-userdebug"
-    log_warn "  m catbox -j\$(nproc)"
-    log_warn "  # Copy from: out/host/linux-x86/catbox/android-catbox/"
-    log_warn "  cp -r out/host/linux-x86/catbox/android-catbox/ ${CATBOX_DIR}"
-fi
-
-# ─────────────────────────────────────────────────────────────
-# Summary
-# ─────────────────────────────────────────────────────────────
-log_step "Summary"
-
-echo ""
-echo "Expected directory structure:"
-echo "  ${XTS_DIR}/"
-echo "  ├── platform-tools/     (adb, fastboot)"
-echo "  ├── android-cts/        (CTS package)"
-echo "  ├── android-vts/        (VTS package)"
-echo "  ├── android-sts/        (STS package)"
-echo "  ├── android-gts/        (GTS package - partner access)"
-echo "  ├── android-ats/        (ATS package - partner access)"
-echo "  └── android-catbox/     (CATBox - built from AOSP)"
-echo ""
-
-log_info "Available packages:"
-for dir in android-cts android-vts android-sts android-gts android-ats android-catbox; do
-    if [ -d "${XTS_DIR}/${dir}" ]; then
-        echo -e "  ${GREEN}✓${NC} ${dir}"
-    else
-        echo -e "  ${RED}✗${NC} ${dir} (not found)"
-    fi
+for short in "${ALL_SUITES[@]}"; do
+  status="$(validate_suite "${short}")"
+  case "${status}" in
+    ok) log_info "OK      android-${short}" ;;
+    partial)
+      log_warn "PARTIAL android-${short} (dir exists, tradefed script missing)"
+      print_manual_hints "${short}"
+      ;;
+    missing)
+      log_warn "MISSING android-${short}"
+      print_manual_hints "${short}"
+      ;;
+  esac
 done
-echo ""
+
+IFS=',' read -r -a REQ <<< "${REQUIRED_SUITES}"
+for short in "${REQ[@]}"; do
+  short="$(echo "${short}" | tr '[:upper:]' '[:lower:]' | xargs)"
+  [[ -z "${short}" ]] && continue
+  status="$(validate_suite "${short}")"
+  if [[ "${status}" != "ok" ]]; then
+    log_error "Required suite not ready: ${short} (${status})"
+    MISSING_REQUIRED=1
+  fi
+done
+
+log_step "Expected layout"
+cat <<EOF
+  ${XTS_DIR}/
+  ├── android-cts/tools/cts-tradefed
+  ├── android-vts/tools/vts-tradefed
+  ├── android-sts/tools/sts-tradefed
+  ├── android-gts/tools/gts-tradefed
+  ├── android-ats/tools/ats-tradefed
+  └── android-catbox/tools/catbox-tradefed
+EOF
+
+if [[ "${MISSING_REQUIRED}" -ne 0 ]]; then
+  if [[ "${ALLOW_MISSING}" == "1" ]]; then
+    log_warn "ALLOW_MISSING=1 — continuing despite missing required suites"
+    exit 0
+  fi
+  log_error "Package validation failed"
+  exit 1
+fi
+
+log_info "Required suites present"
+exit 0

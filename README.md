@@ -12,6 +12,35 @@ This framework provides tools for orchestrating Android compatibility test suite
 - Automated result analysis (RCA)
 - Detailed reporting (HTML, JSON, JUnit)
 
+## Production Deploy
+
+Approved host path:
+
+```bash
+# 1) One-time host setup (Ubuntu)
+sudo ./scripts/setup_environment.sh
+
+# 2) Place TradeFed packages under /opt/xts and validate
+REQUIRED_SUITES=cts,vts ./scripts/download_xts_packages.sh
+
+# 3) Pre-flight
+./office_deploy.sh
+
+# 4) Optional Cuttlefish cluster
+AOSP_ROOT=/path/to/aosp ./scripts/start_cluster.sh 10
+
+# 5) Readiness gate
+STRICT_DEVICES=1 MIN_DEVICES=1 REQUIRED_SUITES=cts ./scripts/check_production_ready.sh
+
+# 6) Execute
+python3 -m xts_agent.cli run \
+  --plan config/test_plans/full_certification.yaml \
+  --config config/default_config.yaml \
+  --auto-retry
+```
+
+GitLab CI (shell runner tagged `android-test-host`) mirrors the same CLI. Lab-only mutators live under `scripts/legacy/dev_patches/` and must not be run in production.
+
 ## Architecture
 
 ```mermaid

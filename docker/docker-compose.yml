@@ -1,17 +1,20 @@
-version: "3.8"
 services:
   xts-agent:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: xts-agent-runner
-    network_mode: "host"  # Required to connect to local ADB instances and Cuttlefish
-    privileged: true      # Required if we ever need to manage /dev/kvm inside
+    # Host networking is typically required to reach host-side ADB/Cuttlefish.
+    network_mode: "host"
+    # Prefer not using privileged; enable only if KVM device management is required.
+    # privileged: true
     volumes:
-      # Map the TradeFed suites from the host (so we don't redownload 20GB of tests)
-      - /opt/xts:/opt/xts:ro
-      # Map the results directory so we can read the HTML reports on the host
-      - /mnt/xTS_Agent/results:/app/results
-      # Map ADB keys so TradeFed can authenticate with the devices seamlessly
-      - ~/.android:/root/.android:ro
+      - ${XTS_PACKAGES_DIR:-/opt/xts}:/opt/xts:ro
+      - ${XTS_RESULTS_DIR:-../results}:/app/results
+      - ${ANDROID_HOST_KEYS:-${HOME}/.android}:/root/.android:ro
     environment:
-      - XTS_ROOT=/opt/xts
+      - XTS_PACKAGES_DIR=/opt/xts
       - ANDROID_HOME=/opt/android-sdk
+      - ANDROID_SDK_ROOT=/opt/android-sdk
+    working_dir: /app
+    restart: "no"
