@@ -1,73 +1,182 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>xTS Triage & RCA Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xTS Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; color: #333; margin: 0; padding: 20px; }
-        .header { background-color: #dc3545; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .header h1 { margin: 0; font-size: 24px; }
-        .summary-box { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .metrics { display: flex; gap: 20px; }
-        .metric { flex: 1; text-align: center; padding: 15px; border-radius: 6px; font-weight: bold; font-size: 18px; }
-        .metric.fail { background-color: #ffe6e6; color: #dc3545; border: 1px solid #ffcccc; }
-        .metric.pass { background-color: #e6ffe6; color: #28a745; border: 1px solid #ccffcc; }
-        .metric.skip { background-color: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; }
-        
-        .failure-card { background: white; border-left: 5px solid #dc3545; border-radius: 8px; margin-bottom: 20px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .test-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #dc3545; }
-        .rca-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffeeba; }
-        .rca-title { font-weight: bold; margin-bottom: 5px; }
-        .logcat-box { background-color: #272822; color: #f8f8f2; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 13px; line-height: 1.4; }
-        
-        .no-failures { text-align: center; padding: 50px; background: white; border-radius: 8px; color: #28a745; font-size: 20px; font-weight: bold; border: 1px solid #ccffcc; }
+        body { background-color: #f3f4f6; }
+        .dashboard-card { transition: transform 0.2s ease-in-out; }
+        .dashboard-card:hover { transform: translateY(-2px); }
     </style>
 </head>
-<body>
-    <div class="header">
-        <h1>xTS Triage & Root Cause Analysis Dashboard</h1>
-        <p>Execution Time: {{ plan.duration | round(1) }}s | Overall Status: {{ plan.overall_status }}</p>
-    </div>
+<body class="text-gray-800">
 
-    <div class="summary-box">
-        <h2>Global Execution Summary</h2>
-        <div class="metrics">
-            <div class="metric pass">Pass: {{ plan.total_pass }}</div>
-            <div class="metric fail">Fail: {{ plan.total_fail }}</div>
-            <div class="metric skip">Ignored: {{ plan.total_skip }}</div>
+<div class="min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-blue-700 to-indigo-900 text-white shadow-lg py-6 px-8">
+        <div class="flex justify-between items-center max-w-7xl mx-auto">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight"><i class="fa-solid fa-flask-vial mr-3"></i>xTS Agent Analytics</h1>
+                <p class="text-blue-200 mt-1 text-sm font-medium tracking-wide">Automated CI/CD Triage Dashboard</p>
+            </div>
+            <div class="text-right">
+                <span class="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold bg-white text-indigo-900 shadow">
+                    Status: {{ plan.overall_status }}
+                </span>
+                <p class="text-xs text-blue-200 mt-2 font-mono">Execution Time: {{ (plan.duration / 3600)|round(2) }} hrs</p>
+            </div>
         </div>
-    </div>
+    </header>
 
-    <h2>Failure Triage Queue</h2>
-    {% set has_failures = false %}
-    
-    {% for suite_name, suite in plan.suites_results.items() %}
-        {% for mod in suite.details.modules %}
-            {% for tc in mod.test_cases %}
-                {% if tc.result == 'FAIL' or tc.result == 'ERROR' %}
-                    {% set has_failures = true %}
-                    <div class="failure-card">
-                        <div class="test-title">
-                            FAILED: {{ mod.name }} &rarr; {{ tc.class_name }} &rarr; {{ tc.test_name }}
-                        </div>
-                        
-                        <div class="rca-box">
-                            <div class="rca-title">AI Root Cause Analysis: {{ tc.rca_category | default('Unknown') }}</div>
-                            <div>Recommendation: {{ tc.rca_recommendation | default('Manual review required.') }}</div>
-                        </div>
-                        
-                        <strong>Stack Trace / Logcat Snapshot:</strong>
-                        <div class="logcat-box">{{ tc.stack_trace | default(tc.message) | default('No stack trace provided by TradeFed.') }}</div>
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Top Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 dashboard-card">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100 text-green-600 mr-4">
+                        <i class="fa-solid fa-check-circle fa-lg"></i>
                     </div>
-                {% endif %}
-            {% endfor %}
-        {% endfor %}
-    {% endfor %}
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 uppercase">Total Passed</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ plan.total_pass }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500 dashboard-card">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-red-100 text-red-600 mr-4">
+                        <i class="fa-solid fa-times-circle fa-lg"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 uppercase">Total Failed</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ plan.total_fail }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-gray-400 dashboard-card">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-gray-100 text-gray-600 mr-4">
+                        <i class="fa-solid fa-forward fa-lg"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 uppercase">Total Skipped</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ plan.total_skip }}</p>
+                    </div>
+                </div>
+            </div>
 
-    {% if not has_failures %}
-        <div class="no-failures">
-            🎉 Zero Failures Detected! The test run was completely clean. 
-            <br><span style="font-size: 14px; font-weight: normal; color: #666; margin-top:10px; display:inline-block;">(No triage required. Refer to the native Google HTML report for the full list of passing modules.)</span>
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 dashboard-card">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
+                        <i class="fa-solid fa-microchip fa-lg"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 uppercase">Cluster Size</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ plan.device_serials|length }} Devices</p>
+                    </div>
+                </div>
+            </div>
         </div>
-    {% endif %}
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Execution Success Rate</h3>
+                <div class="relative h-64 w-full flex justify-center">
+                    <canvas id="passFailChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-md p-6 overflow-hidden">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Suite Breakdown</h3>
+                <div class="overflow-y-auto max-h-64 pr-2">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Suite</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pass</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Fail</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for suite_name, s in plan.suites_results.items() %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ s.name }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    {% if s.status == 'PASSED' %}
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Passed</span>
+                                    {% else %}
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Failed</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 font-bold">{{ s.pass_count }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-red-600 font-bold">{{ s.fail_count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% if rca %}
+        <!-- AI Root Cause Analysis -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8 border-t-4 border-yellow-400">
+            <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center"><i class="fa-solid fa-robot text-blue-600 mr-2"></i> AI Root Cause Analysis</h3>
+            <div class="bg-gray-50 rounded-lg p-5 border border-gray-200">
+                <p class="text-gray-700 whitespace-pre-wrap font-mono text-sm">{{ rca.ai_summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-6 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-sm text-gray-400">Generated automatically by xTS Agent</p>
+        </div>
+    </footer>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const pass = {{ plan.total_pass }};
+        const fail = {{ plan.total_fail }};
+        const skip = {{ plan.total_skip }};
+        
+        const ctx = document.getElementById('passFailChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Passed', 'Failed', 'Skipped'],
+                datasets: [{
+                    data: [pass, fail, skip],
+                    backgroundColor: ['#10B981', '#EF4444', '#9CA3AF'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { family: "'Segoe UI', sans-serif", size: 13 } } }
+                },
+                cutout: '70%'
+            }
+        });
+    });
+</script>
+
 </body>
 </html>
