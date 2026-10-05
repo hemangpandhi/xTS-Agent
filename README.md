@@ -257,7 +257,19 @@ python3 -m xts_agent.cli device-check --min-devices 1
 ./monitor_web/start_web_monitor.sh   # localhost:8585
 ```
 
-## Do not run in production
+## Kept scripts (supported)
 
-`scripts/legacy/dev_patches/` contains old one-shot source mutators.
-They are not part of the deploy path.
+| Script | Role |
+|--------|------|
+| `scripts/setup_environment.sh` | New-host OS/ADB setup |
+| `scripts/download_xts_packages.sh` | Validate `/opt/xts` packages |
+| `scripts/start_cluster.sh` | Cuttlefish multi-instance spawn |
+| `scripts/check_production_ready.sh` | Go/no-go gate |
+| `scripts/setup_gitlab_runner.sh` | Optional CI runner install |
+| `office_deploy.sh` | Pre-flight (aapt2 / packages / devices) |
+| `run_when_ready.sh` | Wait for N devices, then run |
+| `start_massive_nightly.sh` | Optional cluster + plan launcher |
+| `check_progress.sh` / `monitor_resources.sh` | Live run helpers |
+| `monitor_web/start_web_monitor.sh` | Localhost resource page |
+
+Removed: lab stubs (`clean_start_9.sh`, `start_9_more.sh`), committed runtime logs, one-shot `patch_*.py` mutators, and generated `monitor_web/index.html`.
