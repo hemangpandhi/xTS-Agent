@@ -36,6 +36,8 @@ def setup_logger(name: str, log_file: str = "xts_agent.log", level: int = loggin
         logger.addHandler(console_handler)
         
         # JSON file handler
+        from pathlib import Path
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(level)
         file_handler.setFormatter(JSONFormatter())

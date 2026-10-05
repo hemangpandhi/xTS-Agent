@@ -1,0 +1,14 @@
+name: "CATBox Functional"
+description: "Manual CI job — CATBox functional plan"
+devices:
+  min_devices: 1
+suites:
+  - name: catbox
+    priority: 1
+    plan: catbox-functional
+    enabled: true
+    sharding:
+      shard_count: auto
+    retry:
+      max_retries: 1
+      strategy: RETRY_ANY_FAILURE

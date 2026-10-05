@@ -1,0 +1,15 @@
+# Runtime / generated
+results/
+logs/
+*.log
+*.db
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Local TradeFed backups from env validator
+*.bak

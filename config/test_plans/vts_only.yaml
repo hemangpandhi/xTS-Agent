@@ -1,0 +1,14 @@
+name: "VTS Only"
+description: "Manual CI job — VTS suite only"
+devices:
+  min_devices: 1
+suites:
+  - name: vts
+    priority: 1
+    plan: vts
+    enabled: true
+    sharding:
+      shard_count: auto
+    retry:
+      max_retries: 2
+      strategy: RETRY_ANY_FAILURE

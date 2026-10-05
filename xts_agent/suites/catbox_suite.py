@@ -1,6 +1,9 @@
 from __future__ import annotations
-from typing import List, Dict, Any
+
+from typing import Any, Dict, List
+
 from .base_suite import BaseSuite, SuiteResult
+
 
 class CatboxSuite(BaseSuite):
     @property
@@ -13,23 +16,14 @@ class CatboxSuite(BaseSuite):
 
     @property
     def plan(self) -> str:
-        return "catbox"
+        return "catbox-functional"
 
     def execute(self, devices: List[str], config: Dict[str, Any]) -> SuiteResult:
-        shard_count = config.get("shard_count", len(devices))
-        
-        cmd = ["run", "commandAndExit", self.plan]
-        
+        extra = list(config.get("extra_args") or [])
         spectatio_config = config.get("spectatio_config")
         if spectatio_config:
-            # Specific flags for CATBox / Spectatio
-            cmd.extend(["--template:map", f"spectatio={spectatio_config}"])
-            
-        if shard_count > 1:
-            cmd.extend(["--shard-count", str(shard_count)])
-            
-        return self.run_tradefed(cmd, devices)
-
-    def retry(self, session_id: str, devices: List[str], config: Dict[str, Any]) -> SuiteResult:
-        cmd = ["retry", "--retry", session_id]
-        return self.run_tradefed(cmd, devices)
+            extra.extend(["--template:map", f"spectatio={spectatio_config}"])
+        cfg = dict(config)
+        cfg["extra_args"] = extra
+        cfg.setdefault("plan", self.plan)
+        return super().execute(devices, cfg)

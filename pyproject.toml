@@ -19,3 +19,9 @@ dependencies = [
 
 [project.scripts]
 xts-agent = "xts_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["xts_agent*"]
+
+[tool.setuptools.package-data]
+xts_agent = ["reporting/templates/*.html"]

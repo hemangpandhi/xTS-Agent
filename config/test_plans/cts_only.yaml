@@ -1,0 +1,14 @@
+name: "CTS Only"
+description: "Manual CI job — CTS suite only"
+devices:
+  min_devices: 1
+suites:
+  - name: cts
+    priority: 1
+    plan: cts
+    enabled: true
+    sharding:
+      shard_count: auto
+    retry:
+      max_retries: 2
+      strategy: RETRY_ANY_FAILURE

@@ -61,28 +61,21 @@ setup_environment:
   script:
     - echo "=== xTS Agent Environment Setup ==="
     - |
-      # Create and activate virtual environment
-      ${PYTHON} -m venv .venv || true
+      ${PYTHON} -m venv .venv
       source .venv/bin/activate
     - pip install --upgrade pip
-    - pip install -e ".[dev]" || pip install -r requirements.txt
+    - pip install -e .
     - |
-      # Verify critical tools
       echo "--- Tool Versions ---"
       ${PYTHON} --version
-      java -version 2>&1 || echo "WARNING: Java not found"
-      adb version || echo "WARNING: ADB not found"
+      java -version
+      adb version
     - |
-      # Verify xTS packages are available
       echo "--- xTS Packages ---"
-      ls -la ${XTS_PACKAGES_DIR}/ 2>/dev/null || echo "WARNING: xTS packages not found at ${XTS_PACKAGES_DIR}"
-    - |
-      # Initial device listing
-      echo "--- Connected Devices ---"
-      adb devices -l
-    - |
-      # Run xTS Agent setup
-      ${PYTHON} -m xts_agent.cli setup --config config/default_config.yaml || true
+      REQUIRED_SUITES="${REQUIRED_SUITES:-cts}" XTS_PACKAGES_DIR="${XTS_PACKAGES_DIR}" \
+        bash scripts/download_xts_packages.sh
+    - adb devices -l
+    - ${PYTHON} -m xts_agent.cli setup --config config/default_config.yaml
   artifacts:
     paths:
       - .venv/
@@ -99,15 +92,14 @@ device_health_check:
     - echo "=== Device Health Check ==="
     - adb devices -l
     - |
-      # Check minimum device count
-      DEVICE_COUNT=$(adb devices | grep -c 'device$' || true)
-      echo "Detected ${DEVICE_COUNT} device(s)"
+      DEVICE_COUNT=$(adb devices | awk 'NR>1 && $2=="device" {c++} END{print c+0}')
+      echo "Detected ${DEVICE_COUNT} device(s); minimum=${DEVICE_MIN_COUNT}"
       if [ "${DEVICE_COUNT}" -lt "${DEVICE_MIN_COUNT}" ]; then
-        echo "WARNING: Only ${DEVICE_COUNT} devices found, need ${DEVICE_MIN_COUNT}"
-        echo "Proceeding with available devices..."
+        echo "ERROR: insufficient devices"
+        exit 1
       fi
-    - ${PYTHON} -m xts_agent.cli health-check --reboot-unhealthy || true
-    - ${PYTHON} -m xts_agent.cli device-check --min-devices 1
+    - ${PYTHON} -m xts_agent.cli health-check --plan "${TEST_PLAN}" --config config/default_config.yaml
+    - ${PYTHON} -m xts_agent.cli device-check --plan "${TEST_PLAN}" --config config/default_config.yaml --min-devices "${DEVICE_MIN_COUNT}"
   artifacts:
     paths:
       - logs/health/
@@ -153,7 +145,11 @@ execute_xts_suites:
 suite_retry:
   stage: retry
   timeout: 12h
-  when: on_failure                      # Only run if execute stage failed
+  when: on_failure
+  # Hydrates prior session IDs from results/reports/*.json artifacts
+  needs:
+    - job: execute_xts_suites
+      artifacts: true
   script:
     - source .venv/bin/activate
     - echo "=== Suite-Level Retry for Failed Tests ==="
@@ -164,9 +160,9 @@ suite_retry:
         --config config/default_config.yaml
   artifacts:
     paths:
-      - results/retry/
+      - results/
     reports:
-      junit: results/retry/junit/*.xml
+      junit: results/junit/*.xml
     expire_in: 30 days
     when: always
   after_script:
@@ -185,6 +181,7 @@ analyze_failures:
     - echo "=== Root Cause Analysis ==="
     - |
       ${PYTHON} -m xts_agent.cli analyze \
+        --plan "${TEST_PLAN}" \
         --rca \
         --classify-failures \
         --config config/default_config.yaml
@@ -204,6 +201,7 @@ generate_report:
     - echo "=== Generating Reports ==="
     - |
       ${PYTHON} -m xts_agent.cli report \
+        --plan "${TEST_PLAN}" \
         --format html,json,junit \
         --config config/default_config.yaml
     - echo "=== Report files ==="
