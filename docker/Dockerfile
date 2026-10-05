@@ -44,6 +44,7 @@ RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -e .
 ENV XTS_PACKAGES_DIR=/opt/xts
 VOLUME ["/opt/xts", "/app/results"]
 
+# Default to hardware-oriented CTS plan; override for virtual (full_cts.yaml).
 CMD ["python3", "-m", "xts_agent.cli", "run", \
-     "--plan", "config/test_plans/full_cts.yaml", \
+     "--plan", "config/test_plans/cts_only.yaml", \
      "--config", "config/default_config.yaml"]
