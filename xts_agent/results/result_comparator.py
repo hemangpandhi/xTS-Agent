@@ -1,13 +1,14 @@
+"""Baseline comparison & regression detection."""
+
 from __future__ import annotations
-"""
-from __future__ import annotations
-Baseline comparison & regression detection.
-"""
-from dataclasses import dataclass, field
-from typing import List, Dict
+
 import pickle
+from dataclasses import dataclass, field
 from pathlib import Path
-from .result_parser import TestResults, TestCaseResult
+from typing import Dict, List
+
+from .result_parser import TestCaseResult, TestResults
+
 
 @dataclass
 class ComparisonResult:
@@ -18,53 +19,57 @@ class ComparisonResult:
     removed_tests: List[TestCaseResult] = field(default_factory=list)
     summary: Dict[str, int] = field(default_factory=dict)
 
+
 class ResultComparator:
     """Compares current results against a baseline."""
-    
+
     def load_baseline(self, path: str | Path) -> TestResults:
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             return pickle.load(f)
-            
+
     def save_baseline(self, results: TestResults, path: str | Path):
-        with open(path, 'wb') as f:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
             pickle.dump(results, f)
-            
+
     def compare(self, current: TestResults, baseline: TestResults) -> ComparisonResult:
-        comp = ComparisonResult()
-        
-        cur_map = {}
+        def key(tc: TestCaseResult):
+            return (tc.class_name, tc.test_name)
+
+        current_map = {}
         for mod in current.modules:
             for tc in mod.test_cases:
-                cur_map[f"{mod.name}::{tc.class_name}#{tc.test_name}"] = tc
-                
-        base_map = {}
+                current_map[key(tc)] = tc
+        baseline_map = {}
         for mod in baseline.modules:
             for tc in mod.test_cases:
-                base_map[f"{mod.name}::{tc.class_name}#{tc.test_name}"] = tc
-                
-        for k, cur_tc in cur_map.items():
-            if k not in base_map:
-                comp.new_tests.append(cur_tc)
-                if cur_tc.result == 'FAIL':
-                    comp.new_failures.append(cur_tc)
+                baseline_map[key(tc)] = tc
+
+        result = ComparisonResult()
+        for k, tc in current_map.items():
+            if k not in baseline_map:
+                result.new_tests.append(tc)
+                if tc.result == "FAIL":
+                    result.new_failures.append(tc)
             else:
-                base_tc = base_map[k]
-                if base_tc.result == 'PASS' and cur_tc.result == 'FAIL':
-                    comp.new_failures.append(cur_tc)
-                elif base_tc.result == 'FAIL' and cur_tc.result == 'PASS':
-                    comp.fixed.append(cur_tc)
-                elif base_tc.result == 'FAIL' and cur_tc.result == 'FAIL':
-                    comp.persistent_failures.append(cur_tc)
-                    
-        for k, base_tc in base_map.items():
-            if k not in cur_map:
-                comp.removed_tests.append(base_tc)
-                
-        comp.summary = {
-            "new_failures": len(comp.new_failures),
-            "fixed": len(comp.fixed),
-            "persistent_failures": len(comp.persistent_failures),
-            "new_tests": len(comp.new_tests),
-            "removed_tests": len(comp.removed_tests)
+                prev = baseline_map[k]
+                if tc.result == "FAIL" and prev.result != "FAIL":
+                    result.new_failures.append(tc)
+                elif tc.result != "FAIL" and prev.result == "FAIL":
+                    result.fixed.append(tc)
+                elif tc.result == "FAIL" and prev.result == "FAIL":
+                    result.persistent_failures.append(tc)
+
+        for k, tc in baseline_map.items():
+            if k not in current_map:
+                result.removed_tests.append(tc)
+
+        result.summary = {
+            "new_failures": len(result.new_failures),
+            "fixed": len(result.fixed),
+            "persistent_failures": len(result.persistent_failures),
+            "new_tests": len(result.new_tests),
+            "removed_tests": len(result.removed_tests),
         }
-        return comp
+        return result

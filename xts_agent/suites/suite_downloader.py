@@ -8,8 +8,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 class SuiteDownloader:
-    def __init__(self, cache_dir: Path):
-        self.cache_dir = cache_dir
+    def __init__(self, cache_dir: Path | None = None):
+        self.cache_dir = Path(cache_dir or "/opt/xts/cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def download(self, url: str, expected_sha256: str = "") -> Path:

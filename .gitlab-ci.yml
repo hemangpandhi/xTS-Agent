@@ -185,6 +185,7 @@ analyze_failures:
     - echo "=== Root Cause Analysis ==="
     - |
       ${PYTHON} -m xts_agent.cli analyze \
+        --plan "${TEST_PLAN}" \
         --rca \
         --classify-failures \
         --config config/default_config.yaml
@@ -204,6 +205,7 @@ generate_report:
     - echo "=== Generating Reports ==="
     - |
       ${PYTHON} -m xts_agent.cli report \
+        --plan "${TEST_PLAN}" \
         --format html,json,junit \
         --config config/default_config.yaml
     - echo "=== Report files ==="

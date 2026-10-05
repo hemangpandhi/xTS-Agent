@@ -1,22 +1,46 @@
+"""Master report generator."""
+
 from __future__ import annotations
-"""
-from __future__ import annotations
-Master report generator.
-"""
+
 from pathlib import Path
-from typing import List, Any
-from .html_report import HTMLReportGenerator
+from typing import Any, List
+
 from .gitlab_report import GitLabReportGenerator
+from .html_report import HTMLReportGenerator
 from .json_report import JSONReportGenerator
 
+
 class ReportGenerator:
-    def generate_all(self, plan_result: Any, rca_report: Any, comparison: Any, output_dir: str | Path, formats: List[str] = ['html','json','junit']):
+    def generate_all(
+        self,
+        plan_result: Any,
+        rca_report: Any,
+        comparison: Any,
+        output_dir: str | Path,
+        formats: List[str] | None = None,
+        basename: str = "report",
+    ) -> dict:
+        formats = formats or ["html", "json", "junit"]
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        if 'html' in formats:
-            HTMLReportGenerator().generate(plan_result, rca_report, comparison, output_dir / "report.html")
-        if 'junit' in formats:
-            GitLabReportGenerator().generate(plan_result, output_dir / "report.xml")
-        if 'json' in formats:
-            JSONReportGenerator().generate(plan_result, rca_report, comparison, output_dir / "report.json")
+        written = {}
+
+        if "html" in formats:
+            path = output_dir / f"{basename}.html"
+            HTMLReportGenerator().generate(plan_result, rca_report, comparison, path)
+            written["html"] = path
+        if "junit" in formats:
+            # Also write under results/junit for GitLab CI artifact path
+            path = output_dir / f"{basename}.xml"
+            GitLabReportGenerator().generate(plan_result, path)
+            written["junit"] = path
+            junit_dir = output_dir.parent / "junit"
+            junit_dir.mkdir(parents=True, exist_ok=True)
+            junit_copy = junit_dir / f"{basename}.xml"
+            junit_copy.write_bytes(path.read_bytes())
+            written["junit_ci"] = junit_copy
+        if "json" in formats:
+            path = output_dir / f"{basename}.json"
+            JSONReportGenerator().generate(plan_result, rca_report, comparison, path)
+            written["json"] = path
+        return written

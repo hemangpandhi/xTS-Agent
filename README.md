@@ -17,12 +17,18 @@ This framework provides tools for orchestrating Android compatibility test suite
 ```mermaid
 graph TD
     A[CLI] --> B[Orchestrator]
-    B --> C[Config Loader]
-    B --> D[Process Runner]
-    B --> E[Device Management]
-    D --> F[TradeFed]
+    B --> C[Config Loader + defaults]
+    B --> D[TestPlanExecutor]
+    D --> E[DeviceManager / ADB]
+    D --> F[TradefedRunner]
+    F --> G[TradeFed]
+    D --> H[RetryManager]
+    B --> I[RCA Engine]
+    B --> J[HTML / JUnit / JSON Reports]
+    B --> K[ATS 2.0 Upload]
 ```
 
+Production path: load plan (merged with `config/default_config.yaml`) → allocate devices → pin serials into TradeFed (`-s`) → parse `test_result.xml` → optional suite retry + RCA → multi-format reports.
 ## Quick Start
 ```bash
 pip install -e .
