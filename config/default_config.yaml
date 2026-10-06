@@ -141,6 +141,8 @@ ats2:
   base_url: ""                          # ATS 2.0 server URL
   api_key: ""                           # CI/CD API key
   timeout_secs: 30
+  # EXPERIMENTAL: endpoint not verified against a real OmniLab ATS deployment
+  upload_path: "/api/v1/results/upload"
 
 # AI Root Cause Analysis Configuration
 ai_rca:

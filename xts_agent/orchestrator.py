@@ -488,6 +488,7 @@ class Orchestrator:
             api_key=ats_cfg.api_key,
             timeout_secs=ats_cfg.timeout_secs,
             enabled=ats_cfg.enabled,
+            upload_path=ats_cfg.upload_path,
         )
         if not client.enabled:
             logger.info("ATS 2.0 upload disabled")

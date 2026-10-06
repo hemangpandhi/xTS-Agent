@@ -230,6 +230,8 @@ class ATS2Config:
     base_url: str = ""
     api_key: str = ""
     timeout_secs: int = 30
+    # Unverified against a real OmniLab ATS deployment: confirm with your ATS team
+    upload_path: str = "/api/v1/results/upload"
 
 
 @dataclass

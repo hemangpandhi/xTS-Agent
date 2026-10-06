@@ -22,11 +22,26 @@ class RunStatus:
 
 
 class ATS2Client:
-    def __init__(self, base_url: str, api_key: str, timeout_secs: int = 30, enabled: bool = True):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout_secs: int = 30,
+        enabled: bool = True,
+        upload_path: str = "/api/v1/results/upload",
+    ):
         self.base_url = (base_url or "").rstrip("/")
         self.api_key = api_key or ""
         self.timeout_secs = timeout_secs
         self.enabled = enabled and bool(self.base_url)
+        self.upload_path = "/" + upload_path.lstrip("/")
+        if self.enabled:
+            logger.warning(
+                "ATS 2.0 upload is EXPERIMENTAL: endpoint %s%s has not been verified against "
+                "an OmniLab ATS deployment; confirm the API with your ATS team",
+                self.base_url,
+                self.upload_path,
+            )
         self.session = requests.Session()
         if self.api_key:
             self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
@@ -98,7 +113,7 @@ class ATS2Client:
             logger.error("ATS2 upload path does not exist: %s", path)
             return False
 
-        url = f"{self.base_url}/api/v1/results/upload"
+        url = f"{self.base_url}{self.upload_path}"
         try:
             logger.info("Uploading %s results from %s to ATS 2.0 (%s)", suite, path, url)
             with open(path, "rb") as fh:
