@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import pickle
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List
 
-from .result_parser import TestCaseResult, TestResults
+from .result_parser import ModuleResult, ResultParser, TestCaseResult, TestResults
 
 
 @dataclass
@@ -24,14 +24,32 @@ class ResultComparator:
     """Compares current results against a baseline."""
 
     def load_baseline(self, path: str | Path) -> TestResults:
-        with open(path, "rb") as f:
-            return pickle.load(f)
+        """Load a baseline from a TradeFed test_result.xml or a JSON snapshot.
+
+        Pickle is deliberately unsupported: unpickling a shared or downloaded
+        baseline file can execute arbitrary code.
+        """
+        path = Path(path)
+        if path.suffix == ".xml":
+            return ResultParser().parse_xml(path)
+        if path.suffix == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            modules = [
+                ModuleResult(
+                    **{k: v for k, v in m.items() if k != "test_cases"},
+                    test_cases=[TestCaseResult(**tc) for tc in m.get("test_cases", [])],
+                )
+                for m in data.pop("modules", [])
+            ]
+            return TestResults(**data, modules=modules)
+        raise ValueError(f"Unsupported baseline format {path.suffix!r}: use .xml or .json")
 
     def save_baseline(self, results: TestResults, path: str | Path):
         path = Path(path)
+        if path.suffix != ".json":
+            raise ValueError("Baselines are saved as .json")
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
-            pickle.dump(results, f)
+        path.write_text(json.dumps(asdict(results)), encoding="utf-8")
 
     def compare(self, current: TestResults, baseline: TestResults) -> ComparisonResult:
         def key(tc: TestCaseResult):

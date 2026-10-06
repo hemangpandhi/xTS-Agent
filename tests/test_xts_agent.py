@@ -586,6 +586,25 @@ class RcaClassificationTests(unittest.TestCase):
         self.assertEqual(result.root_cause, "tracked")
 
 
+class BaselineTests(unittest.TestCase):
+    def test_json_round_trip_and_xml_and_no_pickle(self):
+        from xts_agent.results.result_comparator import ResultComparator
+
+        comp = ResultComparator()
+        with tempfile.TemporaryDirectory() as tmp:
+            xml = Path(tmp) / "test_result.xml"
+            xml.write_text(MULTI_ABI_XML, encoding="utf-8")
+            from_xml = comp.load_baseline(xml)
+            snap = Path(tmp) / "baseline.json"
+            comp.save_baseline(from_xml, snap)
+            loaded = comp.load_baseline(snap)
+            self.assertEqual(loaded, from_xml)
+            self.assertEqual(comp.compare(loaded, from_xml).summary["new_failures"], 0)
+            for bad in ("baseline.pkl", "baseline.pickle"):
+                with self.assertRaises(ValueError):
+                    comp.load_baseline(Path(tmp) / bad)
+
+
 class SuiteStatusTests(unittest.TestCase):
     def _parse(self, xml_text: str):
         with tempfile.TemporaryDirectory() as tmp:
