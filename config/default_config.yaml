@@ -111,6 +111,13 @@ reporting:
     slack_webhook: ""                   # Slack webhook URL
     email: []                           # Email recipients
 
+triage:
+  enabled: true                         # group failures + history + known issues + owners
+  known_issues_file: "config/known_issues.yaml"
+  ownership_file: "config/ownership.yaml"
+  history_window: 5                     # earlier runs compared for NEW/PERSISTENT/FLAKY
+  history_db: ""                        # default: agent.database_path
+
 ats2:
   enabled: false                        # Set true to use OmniLab ATS 2.0
   base_url: ""                          # ATS 2.0 server URL

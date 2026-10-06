@@ -145,6 +145,62 @@ def report(plan: Optional[str], config_path: Optional[str], fmt: str):
     click.echo(f"Generated formats: {', '.join(formats)}")
 
 
+@main.command()
+@click.option("--plan", default="config/test_plans/full_certification.yaml")
+@click.option("--config", "config_path", default=None)
+@click.option(
+    "--results-dir",
+    "results_dirs",
+    multiple=True,
+    help="Triage these TradeFed result dirs directly (repeatable)",
+)
+@click.option(
+    "--import-history",
+    "history_dirs",
+    multiple=True,
+    help="Only record these past TradeFed result dirs into failure history (repeatable)",
+)
+@click.option("--suite", default="CTS", show_default=True, help="Suite name for --results-dir/--import-history")
+@click.option("--top", default=15, show_default=True, help="Groups to print")
+def triage(plan, config_path, results_dirs, history_dirs, suite, top):
+    """Group failures by root cause with history, known issues and owners."""
+    orchestrator = _build_orchestrator(plan, config_path)
+    orchestrator._initialize()
+    if history_dirs:
+        from xts_agent.results.result_parser import ResultParser
+
+        history = orchestrator.triage_engine().history
+        # oldest first so NEW/PERSISTENT labels see runs in order
+        dirs = sorted(
+            history_dirs,
+            key=lambda d: ResultParser().parse_xml(f"{d}/test_result.xml").start_ms,
+        )
+        for d in dirs:
+            run_id = history.import_results_dir(suite, d, plan=orchestrator.plan.name)
+            click.echo(f"{'recorded' if run_id else 'already recorded'}: {d}")
+        return
+
+    if results_dirs:
+        result = orchestrator.plan_result_from_results_dirs(suite, list(results_dirs))
+    else:
+        result = orchestrator._load_latest_plan_result()
+        if result is None:
+            click.echo("No prior results; pass --results-dir", err=True)
+            sys.exit(2)
+    report = orchestrator._run_triage(result)
+    if report is None:
+        click.echo("Triage disabled or failed; see log", err=True)
+        sys.exit(1)
+    s = report.summary
+    click.echo(
+        f"{s['failures']} failures -> {s['groups']} groups ({s['actionable_groups']} actionable, "
+        f"{s['known_groups']} known, {s['waived_groups']} waived); history: {s['by_label']}"
+    )
+    for g in report.groups[:top]:
+        known = f" [{g.known.issue.id}{' waived' if g.waived else ''}]" if g.known else ""
+        click.echo(f"{g.group.count:5d}  {g.label:<10} {g.owner.team:<22} {g.group.title[:70]}{known}")
+
+
 @main.command("device-check")
 @click.option("--plan", default="config/test_plans/smoke_test.yaml")
 @click.option("--config", "config_path", default=None)

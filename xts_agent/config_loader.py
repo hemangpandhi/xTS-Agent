@@ -286,6 +286,15 @@ class AiRcaConfig:
     source_code_paths: List[str] = field(default_factory=list)
 
 @dataclass
+class TriageConfig:
+    enabled: bool = True
+    known_issues_file: str = "config/known_issues.yaml"
+    ownership_file: str = "config/ownership.yaml"
+    history_window: int = 5
+    history_db: str = ""  # default: agent.database_path
+
+
+@dataclass
 class TestPlanConfig:
 
     name: str
@@ -302,6 +311,7 @@ class TestPlanConfig:
     ats2: ATS2Config = field(default_factory=ATS2Config)
     ai_rca: AiRcaConfig = field(default_factory=AiRcaConfig)
     device_prep: DevicePrepConfig = field(default_factory=DevicePrepConfig)
+    triage: TriageConfig = field(default_factory=TriageConfig)
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -412,6 +422,12 @@ class ConfigLoader:
             ai_rca=ai_rca,
             device_prep=DevicePrepConfig(
                 **_filter_dataclass_kwargs(DevicePrepConfig, defaults.get("device") or {})
+            ),
+            triage=TriageConfig(
+                **_filter_dataclass_kwargs(
+                    TriageConfig,
+                    _deep_merge(defaults.get("triage") or {}, plan_data.get("triage") or {}),
+                )
             ),
             raw_defaults=defaults,
         )

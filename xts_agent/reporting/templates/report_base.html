@@ -137,12 +137,58 @@
             </div>
         </div>
 
-        {% if rca %}
-        <!-- AI Root Cause Analysis -->
-        <div class="bg-white rounded-xl shadow-md p-6 mb-8 border-t-4 border-yellow-400">
-            <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center"><i class="fa-solid fa-robot text-blue-600 mr-2"></i> AI Root Cause Analysis</h3>
-            <div class="bg-gray-50 rounded-lg p-5 border border-gray-200">
-                <p class="text-gray-700 whitespace-pre-wrap font-mono text-sm">{{ rca.ai_summary }}</p>
+        {% if triage %}
+        <!-- Failure triage: groups, history, known issues, owners -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8 border-t-4 border-indigo-500">
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Failure triage</h3>
+            <p class="text-sm text-gray-600 mb-4">
+                {{ triage.summary.failures }} failures in {{ triage.summary.groups }} root-cause groups &middot;
+                {{ triage.summary.actionable_groups }} actionable &middot;
+                {{ triage.summary.known_groups }} known ({{ triage.summary.waived_groups }} waived)
+                {% for label, n in triage.summary.by_label.items() %} &middot; {{ label }}: {{ n }}{% endfor %}
+            </p>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-2 text-right">Tests</th>
+                            <th class="px-3 py-2 text-left">History</th>
+                            <th class="px-3 py-2 text-left">Root cause</th>
+                            <th class="px-3 py-2 text-left">Owner</th>
+                            <th class="px-3 py-2 text-left">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for g in triage.groups[:100] %}
+                        <tr class="align-top">
+                            <td class="px-3 py-2 text-right font-bold">{{ g.count }}</td>
+                            <td class="px-3 py-2">
+                                <span class="px-2 rounded text-xs font-semibold
+                                    {% if g.label == 'NEW' %}bg-red-100 text-red-800{% elif g.label == 'FLAKY' %}bg-amber-100 text-amber-800{% else %}bg-gray-100 text-gray-700{% endif %}">{{ g.label }}</span>
+                                {% if g.last_pass_build %}<div class="text-xs text-gray-500 mt-1" title="{{ g.last_pass_build }}">last pass: {{ g.last_pass_build.split('/')[-2] if g.last_pass_build.count('/') > 1 else g.last_pass_build }}</div>{% endif %}
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="font-mono text-xs break-all">{{ g.title }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ g.classification }} &middot; {{ g.modules[:4]|join(', ') }}{% if g.modules|length > 4 %} +{{ g.modules|length - 4 }}{% endif %} &middot; sig {{ g.signature }}</div>
+                                <details class="mt-1"><summary class="text-xs text-indigo-700 cursor-pointer">tests &amp; stack</summary>
+                                    <pre class="text-xs whitespace-pre-wrap bg-gray-50 p-2 mt-1">{{ g.tests|join('\n') }}{% if g.tests_truncated %}
+... and {{ g.tests_truncated }} more{% endif %}
+
+{{ g.sample_stack }}</pre>
+                                    {% if g.ai %}<pre class="text-xs whitespace-pre-wrap bg-blue-50 p-2 mt-1">AI ({{ g.ai.get('confidence', '') }}): {{ g.ai.get('root_cause', '') }}
+{{ g.ai.get('suggested_fix', '') }}</pre>{% endif %}
+                                </details>
+                            </td>
+                            <td class="px-3 py-2">{{ g.owner.team }}{% if g.owner.jira_component %}<div class="text-xs text-gray-500">{{ g.owner.jira_component }}</div>{% endif %}</td>
+                            <td class="px-3 py-2 text-xs">
+                                {% if g.known_issue %}{{ g.known_issue.id }}{% if g.known_issue.waived %} (waived){% elif g.known_issue.waiver_expired %} (waiver expired){% endif %}<br>{% endif %}
+                                {% if g.jira_key %}<span class="font-semibold">{{ g.jira_key }}</span>{% if g.jira_action %} ({{ g.jira_action }}){% endif %}{% elif g.actionable %}<span class="text-red-700">needs triage</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if triage.groups|length > 100 %}<p class="text-xs text-gray-500 mt-2">Showing 100 of {{ triage.groups|length }} groups; see the triage JSON for all.</p>{% endif %}
             </div>
         </div>
         {% endif %}

@@ -48,6 +48,7 @@ class Orchestrator:
         self.retry_manager: Optional[RetryManager] = None
         self.last_plan_result: Optional[PlanResult] = None
         self.last_rca_report = None
+        self.last_triage = None
         self._results_dir = Path("results")
 
     def _initialize(self) -> TestPlanConfig:
@@ -144,6 +145,8 @@ class Orchestrator:
         if plan.post_execution.rca.enabled and not dry_run:
             rca_report = self._run_rca(results)
             self.last_rca_report = rca_report
+        if not dry_run:
+            self._run_triage(results, rca_report)
 
         self.generate_reports(results, rca_report=rca_report)
         if not dry_run:
@@ -202,6 +205,7 @@ class Orchestrator:
         )
         self.last_plan_result = result
         rca = self._run_rca(result) if plan.post_execution.rca.enabled else None
+        self._run_triage(result, rca)
         self.generate_reports(result, rca_report=rca)
         # Retry produced new (cumulative) sessions, so upload those results
         self._upload_ats2(result)
@@ -295,6 +299,58 @@ class Orchestrator:
             self.last_plan_result, report, None, out / "rca_report.json"
         )
         logger.info("RCA wrote %s failures to %s", len(report.failures), out)
+        self._run_triage(self.last_plan_result, report)
+        return report
+
+    def triage_engine(self):
+        from xts_agent.triage.engine import TriageEngine
+        from xts_agent.triage.history import FailureHistory
+        from xts_agent.triage.known_issues import KnownIssueDB
+        from xts_agent.triage.ownership import OwnershipMap
+
+        cfg = self.plan.triage
+        return TriageEngine(
+            history=FailureHistory(
+                cfg.history_db or self.plan.agent.database_path, window=cfg.history_window
+            ),
+            known_issues=KnownIssueDB.load(cfg.known_issues_file),
+            ownership=OwnershipMap.load(cfg.ownership_file),
+        )
+
+    def plan_result_from_results_dirs(self, suite: str, results_dirs: List[str]) -> PlanResult:
+        """Build a PlanResult from raw TradeFed result dirs (no agent report needed)."""
+        from xts_agent.execution.tradefed_runner import ExecutionResult
+
+        suites = {}
+        for i, rdir in enumerate(results_dirs):
+            exec_res = ExecutionResult(True, None, 0, 0.0, str(rdir), "")
+            name = suite if len(results_dirs) == 1 else f"{suite}#{i + 1}"
+            res = TestPlanExecutor._to_suite_result(name, exec_res, [], 0)
+            suites[name] = res
+        return PlanResult(
+            plan_name=self.plan.name,
+            suites_results=suites,
+            total_pass=sum(s.pass_count for s in suites.values()),
+            total_fail=sum(s.fail_count for s in suites.values()),
+            total_skip=sum(s.skip_count for s in suites.values()),
+            duration=0.0,
+            overall_status=overall_status(s.status for s in suites.values()),
+            profile=self.plan.profile,
+        )
+
+    def _run_triage(self, results: PlanResult, rca_report=None):
+        if not self.plan.triage.enabled:
+            return None
+        try:
+            report = self.triage_engine().triage(results, rca_report)
+        except Exception as exc:
+            # Triage must never take down the run that produced the results
+            logger.error("Triage failed: %s", exc, exc_info=True)
+            return None
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = report.save(self._results_dir / "triage" / f"triage_{stamp}.json")
+        logger.info("Triage report: %s", path)
+        self.last_triage = report
         return report
 
     def generate_reports(self, results: PlanResult, rca_report=None, formats: Optional[List[str]] = None):
@@ -324,6 +380,7 @@ class Orchestrator:
             output_dir=output_dir,
             formats=formats,
             basename=basename,
+            triage=self.last_triage,
         )
         for kind, path in written.items():
             logger.info("Generated %s report: %s", kind, Path(path).absolute())

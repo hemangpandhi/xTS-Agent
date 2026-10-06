@@ -32,6 +32,7 @@ class JSONReportGenerator:
         rca_report: Any,
         comparison: Any,
         output_path: str | Path,
+        triage: Any = None,
     ) -> Path:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,6 +48,7 @@ class JSONReportGenerator:
             "suites": _serialize(getattr(plan_result, "suites_results", {})),
             "rca": _serialize(rca_report),
             "comparison": _serialize(comparison),
+            "triage": triage.to_dict() if triage is not None else None,
         }
         output_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
         return output_path

@@ -1648,6 +1648,65 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(om.owner_for_module("x86_64 CtsCarTestCases").team, "aaos-car-framework")
 
 
+class TriageEngineTests(unittest.TestCase):
+    def _plan_result(self, tests, fp="aosp_cf/x:userdebug", start=10):
+        from xts_agent.results.result_parser import ModuleResult, TestResults
+
+        mods = {}
+        for tc in tests:
+            abi, name = tc.module.split(" ", 1)
+            mods.setdefault(tc.module, ModuleResult(name, True, 0, 0, 0, [], abi=abi)).test_cases.append(tc)
+        details = TestResults("CTS", {"build_fingerprint": fp}, "", "", modules=list(mods.values()))
+        details.start_ms = start
+        suite = SuiteResult("CTS", "FAILED", 0, len(tests), 0, 1.0, 1, "", 0, details=details)
+        return PlanResult("cert", {"CTS": suite}, 0, len(tests), 0, 1.0, "FAILED", profile="development")
+
+    def test_end_to_end_grouping_known_owner_history(self):
+        import datetime as dt
+
+        from xts_agent.triage.engine import TriageEngine
+        from xts_agent.triage.history import FailureHistory
+        from xts_agent.triage.known_issues import KnownIssue, KnownIssueDB, Waiver
+        from xts_agent.triage.ownership import OwnershipMap
+
+        focus = [
+            _tc("a.T", f"t{i}", "junit.framework.AssertionFailedError: kitchensink was focused 5003ms", "x86_64 CtsTextTestCases")
+            for i in range(3)
+        ]
+        npe = [_tc("b.T", "t", "java.lang.NullPointerException: x\n\tat b.T.t(T.java:1)", "x86_64 CtsCarTestCases")]
+        tracked = [_tc("c.T", "t", "java.lang.IllegalStateException: tracked\n\tat c.T.t(T.java:1)", "x86_64 CtsCarTestCases")]
+        db = KnownIssueDB([
+            KnownIssue("KI-1", "focus", classification="ENVIRONMENT_ISSUE", message_regex="kitchensink",
+                       waiver=Waiver("cf only", dt.date(2099, 1, 1))),
+            KnownIssue("KI-2", "tracked", jira="AAOS-9", message_regex="tracked"),
+        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            own = Path(tmp) / "own.yaml"
+            own.write_text("rules:\n  - {module_regex: '^CtsCar', team: car}\n")
+            history = FailureHistory(Path(tmp) / "h.db")
+            engine = TriageEngine(history, db, OwnershipMap.load(own))
+            # earlier run: the NPE test passed (module completed without it failing)
+            first = self._plan_result(focus + tracked + [_tc("b.T", "t", "", "x86_64 CtsCarTestCases")], start=1)
+            first.suites_results["CTS"].details.modules[1].test_cases[-1].result = "PASS"
+            engine.triage(first)
+            report = engine.triage(self._plan_result(focus + npe + tracked, start=2))
+
+        by_title = {g.group.title.split(":")[0]: g for g in report.groups}
+        focus_g = by_title["AssertionFailedError"]
+        self.assertEqual(focus_g.group.count, 3)
+        self.assertTrue(focus_g.waived)
+        self.assertEqual(focus_g.classification, "ENVIRONMENT_ISSUE")
+        self.assertEqual(focus_g.label, "PERSISTENT")
+        npe_g = by_title["NullPointerException"]
+        self.assertEqual((npe_g.label, npe_g.owner.team, npe_g.actionable), ("NEW", "car", True))
+        self.assertEqual(npe_g.last_pass_build, "aosp_cf/x:userdebug")
+        tracked_g = by_title["IllegalStateException"]
+        self.assertEqual((tracked_g.jira_key, tracked_g.actionable), ("AAOS-9", False))
+        s = report.summary
+        self.assertEqual((s["failures"], s["groups"], s["actionable_groups"], s["waived_groups"]), (5, 3, 1, 1))
+        self.assertEqual(s["by_team"], {"car": 1})
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json
@@ -1688,6 +1747,7 @@ class Ats2UploadTests(unittest.TestCase):
             orch._results_dir = Path(tmp)
             orch.plan = ConfigLoader("config/test_plans/smoke_test.yaml").load_plan()
             orch.last_rca_report = None
+            orch.last_triage = None
             result = PlanResult("demo", {}, 0, 0, 0, 0.0, "FAILED")
             with patch.object(Orchestrator, "_upload_ats2") as upload:
                 orch.generate_reports(result, formats=["json"])

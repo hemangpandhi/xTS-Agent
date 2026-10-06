@@ -520,8 +520,8 @@ class TestPlanExecutor:
         fallback = Path(self.config.paths.xts_packages_dir) / f"android-{suite_config.name.lower()}"
         return fallback
 
+    @staticmethod
     def _to_suite_result(
-        self,
         name: str,
         exec_res: ExecutionResult,
         serials: List[str],
