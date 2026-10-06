@@ -338,6 +338,7 @@ or set one of these, which always override YAML:
 | `XTS_SLACK_WEBHOOK` | Slack webhook for notifications |
 | `XTS_WIFI_PASSWORD` | Wi-Fi password for device preparation |
 | `XTS_JIRA_TOKEN` | Jira PAT (Server/DC) or API token (Cloud) |
+| `XTS_DATABASE_URL` | Optional PostgreSQL URL for the shared results database |
 
 In GitLab, store them as **masked + protected** CI/CD variables (or inject
 from Vault); on bare metal, export them from a root-owned env file.
@@ -369,6 +370,19 @@ agent comments on it instead of filing a duplicate. Only `NEW`/`NO_HISTORY`
 groups open new tickets, capped by `max_new_issues_per_run`. Start with
 `mode: dry_run` (writes `results/triage/jira_preview_*.json`) and import past
 results first, otherwise the first run sees every group as `NO_HISTORY`.
+
+## Results database
+
+Run summaries (`suite_runs`), failure history and the AI cache live in SQLite at
+`agent.database_path` by default. For several agent hosts sharing history,
+point them at one PostgreSQL database:
+
+```bash
+pip install -e ".[postgres]"
+export XTS_DATABASE_URL="postgresql://xts:<password>@db.lab.example:5432/xts"
+```
+
+Tables are created on first use. Credentials are masked in logs.
 
 ## AI RCA (on-prem by default)
 

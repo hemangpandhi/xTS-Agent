@@ -1113,18 +1113,17 @@ class ParallelSuiteTests(unittest.TestCase):
         self.assertEqual(mgr.suite_weight("CTS", lambda n: None), 40.0)
 
     def test_estimate_device_hours_from_store(self):
-        from xts_agent.results.result_parser import TestResults
         from xts_agent.results.result_store import ResultStore
 
         with tempfile.TemporaryDirectory() as tmp:
             store = ResultStore(Path(tmp) / "db.sqlite")
-            for hours, devs in ((10, 4), (12, 4), (100, 4)):
-                store.save_run("p", "CTS", TestResults("CTS", {}, "", ""),
-                               {"status": "FAILED", "devices": ["d"] * devs, "duration": hours * 3600})
-            store.save_run("p", "CTS", TestResults("CTS", {}, "", ""),
-                           {"status": "DRY_RUN", "devices": ["d"], "duration": 1})
+            for hours, status in ((10, "FAILED"), (12, "PASSED"), (100, "INCOMPLETE"), (1, "DRY_RUN")):
+                store.save_suite_run("p", "development", SuiteResult(
+                    "CTS", status, 1, 1, 0, hours * 3600, 1, "", 0, device_serials=["d"] * 4))
             self.assertEqual(store.estimate_device_hours("CTS"), 48.0)  # median of 40/48/400
             self.assertIsNone(store.estimate_device_hours("VTS"))
+            runs = store.recent_runs("cts")
+            self.assertEqual((len(runs), runs[0]["status"], runs[0]["devices"]), (4, "DRY_RUN", ["d"] * 4))
 
     def test_scheduler_runs_concurrently_without_sharing_devices(self):
         import threading
@@ -1902,6 +1901,67 @@ class CompactReportTests(unittest.TestCase):
         self.assertEqual(names, ["module summary (2 passed)", "testC"])
         self.assertEqual(len(list(full.iter("testcase"))), 5)
         self.assertEqual(len(list(small.iter("failure"))), len(list(full.iter("failure"))))
+
+
+class StorageBackendTests(unittest.TestCase):
+    """Same scenarios on SQLite and, when XTS_TEST_POSTGRES_URL is set, PostgreSQL."""
+
+    TABLES = ("triage_runs", "triage_modules", "triage_failures", "suite_runs", "ai_cache")
+
+    def _backends(self):
+        import os
+
+        from xts_agent.storage.db import Database
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        backends = [Database(Path(tmp.name) / "t.db")]
+        url = os.environ.get("XTS_TEST_POSTGRES_URL")
+        if url:
+            pg = Database(url)
+
+            def drop():
+                for table in self.TABLES:
+                    pg.execute(f"DROP TABLE IF EXISTS {table}")
+
+            drop()
+            self.addCleanup(drop)  # leave the shared database as we found it
+            backends.append(pg)
+        return backends
+
+    def test_history_store_and_cache_on_each_backend(self):
+        from xts_agent.results.result_store import ResultStore
+        from xts_agent.triage.ai_rca import _Cache
+        from xts_agent.triage.history import FailureHistory
+
+        run = FailureHistoryTests._run
+        for db in self._backends():
+            with self.subTest(backend=db.dialect):
+                h = FailureHistory(db)
+                # 13-digit epoch ms must fit (BIGINT on Postgres)
+                self.assertIsNotNone(h.record_run("CTS", run(None, 1791202307566, "b1", {"t": "PASS", "f": "FAIL"}), results_dir="r1"))
+                self.assertIsNotNone(h.record_run("CTS", run(None, 1791202307567, "b2", {"t": "FAIL", "f": "PASS"}), results_dir="r2"))
+                # retry of the second invocation replaces it
+                self.assertIsNotNone(h.record_run("CTS", run(None, 1791202307567, "b2", {"t": "FAIL", "f": "FAIL"}), results_dir="r3"))
+                self.assertEqual(h.flaky_tests("CTS"), ["x86_64 CtsM c.T#t"])
+                cur = run(None, 1791202307999, "b3", {"t": "FAIL", "f": "FAIL"})
+                labels = FailureHistoryTests._classify(None, h, cur)
+                self.assertEqual((labels["t"].label, labels["f"].label), ("FLAKY", "PERSISTENT"))
+
+                store = ResultStore(db)
+                store.save_suite_run("p", "certification", SuiteResult("cts", "FAILED", 9, 1, 0, 7200.0, 3, "", 1, device_serials=["a", "b"]))
+                self.assertEqual(store.estimate_device_hours("CTS"), 4.0)
+                self.assertEqual(store.get_trends("CTS"), {"pass_rate_trend": [90.0]})
+
+                cache = _Cache(db)
+                cache.put("sig", "m", {"root_cause": "a"})
+                cache.put("sig", "m", {"root_cause": "b"})  # upsert
+                self.assertEqual(cache.get("sig", "m"), {"root_cause": "b"})
+
+    def test_database_repr_hides_password(self):
+        from xts_agent.storage.db import Database
+
+        self.assertNotIn("s3cret", repr(Database("postgresql://xts:s3cret@db.lab:5432/xts")))
 
 
 class LoadLatestPlanResultTests(unittest.TestCase):

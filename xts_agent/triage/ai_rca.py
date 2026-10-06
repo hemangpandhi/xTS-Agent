@@ -13,11 +13,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-import sqlite3
 import time
-from contextlib import closing
-from pathlib import Path
 from typing import Any, Dict, Optional
+
+from xts_agent.storage.db import Database
 
 from .engine import TriagedGroup, TriageReport
 
@@ -89,28 +88,25 @@ def parse_ai_json(text: str) -> Optional[Dict[str, Any]]:
 
 
 class _Cache:
-    def __init__(self, db_path: str | Path):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with closing(sqlite3.connect(self.db_path, timeout=30)) as conn, conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS ai_cache (signature TEXT, model TEXT, result TEXT, "
-                "created REAL, PRIMARY KEY (signature, model))"
-            )
+    def __init__(self, db: Any):
+        self.db = db if isinstance(db, Database) else Database(db)
+        self.db.ddl(
+            "CREATE TABLE IF NOT EXISTS ai_cache (signature TEXT, model TEXT, result TEXT, "
+            "created {float}, PRIMARY KEY (signature, model))"
+        )
 
     def get(self, signature: str, model: str) -> Optional[Dict[str, Any]]:
-        with closing(sqlite3.connect(self.db_path, timeout=30)) as conn:
-            row = conn.execute(
-                "SELECT result FROM ai_cache WHERE signature = ? AND model = ?", (signature, model)
-            ).fetchone()
+        row = self.db.query_one(
+            "SELECT result FROM ai_cache WHERE signature = ? AND model = ?", (signature, model)
+        )
         return json.loads(row[0]) if row else None
 
     def put(self, signature: str, model: str, result: Dict[str, Any]) -> None:
-        with closing(sqlite3.connect(self.db_path, timeout=30)) as conn, conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO ai_cache VALUES (?, ?, ?, ?)",
-                (signature, model, json.dumps(result), time.time()),
-            )
+        self.db.execute(
+            "INSERT INTO ai_cache VALUES (?, ?, ?, ?) ON CONFLICT (signature, model) "
+            "DO UPDATE SET result = excluded.result, created = excluded.created",
+            (signature, model, json.dumps(result), time.time()),
+        )
 
 
 class GroupAIAnalyzer:

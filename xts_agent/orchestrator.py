@@ -25,6 +25,7 @@ from xts_agent.reporting.report_generator import ReportGenerator
 from xts_agent.reporting.slack_notifier import SlackNotifier
 from xts_agent.results.result_parser import overall_status
 from xts_agent.results.result_store import ResultStore
+from xts_agent.storage.db import Database
 from xts_agent.retry.isolation import IsolationHandler
 from xts_agent.retry.retry_manager import RetryManager
 from xts_agent.suites.suite_registry import SuiteRegistry
@@ -311,7 +312,8 @@ class Orchestrator:
         cfg = self.plan.triage
         return TriageEngine(
             history=FailureHistory(
-                cfg.history_db or self.plan.agent.database_path, window=cfg.history_window
+                Database(cfg.history_db) if cfg.history_db else self.database(),
+                window=cfg.history_window,
             ),
             known_issues=KnownIssueDB.load(cfg.known_issues_file),
             ownership=OwnershipMap.load(cfg.ownership_file),
@@ -336,7 +338,7 @@ class Orchestrator:
             GroupAIAnalyzer(
                 provider,
                 indexer=indexer,
-                cache_db=self.plan.triage.history_db or self.plan.agent.database_path,
+                cache_db=self.database(),
                 max_groups=cfg.max_groups,
             ).analyze(report)
         except Exception as exc:
@@ -476,29 +478,25 @@ class Orchestrator:
 
     def _persist_results(self, results: PlanResult) -> None:
         try:
-            store = ResultStore(self.plan.agent.database_path)
-            for suite_name, suite_res in results.suites_results.items():
-                if suite_res.details is None:
-                    continue
-                store.save_run(
-                    plan_name=results.plan_name,
-                    suite_name=suite_name,
-                    results=suite_res.details,
-                    metadata={
-                        "status": suite_res.status,
-                        "session_id": suite_res.session_id,
-                        "devices": suite_res.device_serials,
-                        "retry_count": suite_res.retry_count,
-                        "duration": suite_res.duration,
-                    },
-                )
+            store = ResultStore(self.database())
+            for suite_res in results.suites_results.values():
+                # Recorded even without details: infra failures belong in trends too
+                store.save_suite_run(results.plan_name, results.profile, suite_res)
         except Exception as exc:
             logger.warning("ResultStore persistence skipped: %s", exc)
+
+    def database(self) -> Database:
+        """Shared store: agent.database_url (e.g. PostgreSQL) or SQLite at database_path."""
+        if getattr(self, "_database", None) is None:
+            agent = self.plan.agent
+            self._database = Database(agent.database_url or agent.database_path)
+            logger.info("Using %r", self._database)
+        return self._database
 
     def _history_estimate(self, suite_name: str) -> Optional[float]:
         """Measured device-hours for a suite from past runs, if any."""
         try:
-            return ResultStore(self.plan.agent.database_path).estimate_device_hours(suite_name)
+            return ResultStore(self.database()).estimate_device_hours(suite_name)
         except Exception as exc:
             logger.debug("No duration history for %s: %s", suite_name, exc)
             return None

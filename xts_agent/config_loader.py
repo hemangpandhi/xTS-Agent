@@ -28,7 +28,7 @@ _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 # Keys whose values are credentials and must not be committed in plaintext
 SECRET_KEYS = frozenset(
-    {"api_key", "ai_api_key", "gemini_api_key", "slack_webhook", "wifi_password"}
+    {"api_key", "ai_api_key", "gemini_api_key", "slack_webhook", "wifi_password", "database_url"}
 )
 
 
@@ -248,6 +248,9 @@ class AgentSettings:
     log_dir: str = "logs"
     results_dir: str = "results"
     database_path: str = "results/xts_agent.db"
+    # Optional shared database, e.g. postgresql://user:pass@host/xts (needs the
+    # [postgres] extra). Prefer XTS_DATABASE_URL so the password stays out of YAML.
+    database_url: str = ""
 
 
 @dataclass
@@ -445,6 +448,8 @@ class ConfigLoader:
     def _apply_secret_env_overrides(plan: "TestPlanConfig") -> None:
         if os.environ.get("XTS_GEMINI_API_KEY"):
             plan.ai_rca.gemini_api_key = os.environ["XTS_GEMINI_API_KEY"]
+        if os.environ.get("XTS_DATABASE_URL"):
+            plan.agent.database_url = os.environ["XTS_DATABASE_URL"]
         if os.environ.get("XTS_WIFI_PASSWORD"):
             plan.device_prep.wifi_password = os.environ["XTS_WIFI_PASSWORD"]
         if os.environ.get("XTS_ATS2_API_KEY"):

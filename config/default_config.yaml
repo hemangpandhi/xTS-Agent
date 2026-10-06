@@ -7,7 +7,8 @@ agent:
   log_level: "INFO"                    # DEBUG | INFO | WARNING | ERROR
   log_dir: "logs"
   results_dir: "results"
-  database_path: "results/xts_agent.db"
+  database_path: "results/xts_agent.db"   # SQLite (default)
+  database_url: ""                      # optional PostgreSQL; set XTS_DATABASE_URL instead of plaintext
 
 paths:
   xts_packages_dir: "/opt/xts"         # Base directory for downloaded xTS packages

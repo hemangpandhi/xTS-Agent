@@ -18,6 +18,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Shared PostgreSQL store for multi-host farms: pip install ".[postgres]"
+postgres = ["psycopg[binary]>=3.1"]
 # AI RCA (on-prem llama.cpp + code RAG). Heavy: pulls torch and builds
 # llama.cpp natively, so it is opt-in: pip install ".[ai]"
 ai = [
