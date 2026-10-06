@@ -950,7 +950,7 @@ class DiscoveryTests(unittest.TestCase):
         with patch("xts_agent.device.device_manager.AdbWrapper._run_cmd", return_value=listing), \
                 patch.object(DeviceManager, "get_device_properties", side_effect=slow_props), \
                 patch.object(DeviceManager, "is_aaos_device", return_value=True) as aaos, \
-                patch.object(DeviceManager, "_read_battery", return_value=(80, True)):
+                patch.object(DeviceManager, "_read_battery", return_value=(80, True, True)):
             first = dm.discover_devices()
             second = dm.discover_devices()
         self.assertEqual([d.serial for d in first], serials + ["x"])
@@ -1163,6 +1163,33 @@ class ParallelSuiteTests(unittest.TestCase):
             p.write_text("name: t\nmax_concurrent_suites: 3\nsuites: []\n", encoding="utf-8")
             self.assertEqual(ConfigLoader(p).load_plan().max_concurrent_suites, 3)
         self.assertEqual(ConfigLoader("config/test_plans/cts_only.yaml").load_plan().max_concurrent_suites, 1)
+
+
+class BatteryTests(unittest.TestCase):
+    def _info(self, serial, level, present):
+        from xts_agent.device.device_manager import DeviceInfo
+
+        return DeviceInfo(serial, "", "", "fp", 34, level, "device", "aaos", battery_present=present)
+
+    def test_reads_present_flag(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        dump = "  AC powered: true\n  present: false\n  level: 0\n"
+        with patch("xts_agent.device.device_manager.AdbWrapper.shell", return_value=dump):
+            self.assertEqual(DeviceManager()._read_battery("hu"), (0, True, False))
+
+    def test_head_unit_without_battery_is_available_regardless_of_serial(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        devices = [
+            self._info("192.168.1.10:5555", 0, present=False),  # head unit on TCP
+            self._info("PHONE123", 5, present=True),  # drained phone
+            self._info("PHONE456", 90, present=True),
+        ]
+        dm = DeviceManager()
+        with patch.object(DeviceManager, "discover_devices", return_value=devices):
+            serials = [d.serial for d in dm.get_available_devices(min_battery=20)]
+        self.assertEqual(serials, ["192.168.1.10:5555", "PHONE456"])
 
 
 class LoadLatestPlanResultTests(unittest.TestCase):

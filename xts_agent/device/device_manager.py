@@ -33,6 +33,8 @@ class DeviceInfo:
     battery_level: int
     state: str
     device_type: str
+    # False for devices without a battery (most AAOS head units, Cuttlefish)
+    battery_present: bool = True
 
 
 class DeviceManager:
@@ -89,7 +91,7 @@ class DeviceManager:
             if fingerprint:
                 self._type_cache[cache_key] = device_type
 
-        level, _ = self._read_battery(serial)
+        level, _, present = self._read_battery(serial)
         return DeviceInfo(
             serial=serial,
             model=props.get("ro.product.model", ""),
@@ -99,6 +101,7 @@ class DeviceManager:
             battery_level=level,
             state=state,
             device_type=device_type,
+            battery_present=present,
         )
 
     def get_device_properties(self, serial: str) -> Dict[str, str]:
@@ -114,16 +117,23 @@ class DeviceManager:
             pass
         return props
 
-    def _read_battery(self, serial: str) -> Tuple[int, bool]:
-        """Return (level, charging); level defaults to 50 when unreadable."""
+    def _read_battery(self, serial: str) -> Tuple[int, bool, bool]:
+        """Return (level, charging, present); level defaults to 50 when unreadable.
+
+        ``present: false`` (head units on vehicle power, Cuttlefish) means the
+        battery gate does not apply, whatever level is reported.
+        """
         level = 50
         charging = False
+        present = True
         try:
             out = AdbWrapper.shell(serial, "dumpsys battery", timeout=self.adb_timeout, silent=True)
         except AdbError:
-            return level, charging
+            return level, charging, present
         for line in out.splitlines():
             stripped = line.strip()
+            if stripped.startswith("present:"):
+                present = stripped.split(":", 1)[1].strip().lower() != "false"
             if stripped.startswith("level:"):
                 try:
                     level = int(stripped.split(":", 1)[1].strip())
@@ -131,7 +141,7 @@ class DeviceManager:
                     pass
             if ("AC powered:" in stripped or "USB powered:" in stripped) and "true" in stripped.lower():
                 charging = True
-        return level, charging
+        return level, charging, present
 
     def has_validated_network(self, serial: str) -> bool:
         """True when Android has validated internet on the default network.
@@ -153,7 +163,7 @@ class DeviceManager:
 
     def check_device_health(self, serial: str) -> HealthReport:
         try:
-            level, charging = self._read_battery(serial)
+            level, charging, present = self._read_battery(serial)
 
             storage_out = AdbWrapper.shell(serial, "df /data", timeout=self.adb_timeout, silent=True)
             free_mb = 1000
@@ -181,8 +191,7 @@ class DeviceManager:
             except AdbError:
                 pass
 
-            # Cuttlefish / network ADB and emulators are exempt from battery gate
-            battery_ok = level >= 20 or "0.0.0.0" in serial or "emulator" in serial
+            battery_ok = not present or level >= 20
             healthy = battery_ok and free_mb > 500
             return HealthReport(level, charging, free_mb, has_internet, is_screen_on, healthy)
         except AdbError:
@@ -239,13 +248,10 @@ class DeviceManager:
         for d in all_devices:
             if d.state != "device" or d.serial in self._allocated:
                 continue
-            battery_ok = (
-                d.battery_level >= min_battery
-                or d.device_type == "emulator"
-                or "0.0.0.0" in d.serial
-            )
-            if battery_ok:
+            if not d.battery_present or d.battery_level >= min_battery:
                 available.append(d)
+            else:
+                logger.info("Skipping %s: battery %s%% < %s%%", d.serial, d.battery_level, min_battery)
         return available
 
     def select_shard_pool(
