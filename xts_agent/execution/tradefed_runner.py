@@ -14,6 +14,46 @@ from typing import List, Optional, Sequence, Set
 
 logger = logging.getLogger(__name__)
 
+PIDFILE_GLOB = "tradefed_*.pid"
+
+
+def _is_tradefed_process(pid: int) -> bool:
+    """Guard against PID reuse: only treat live TradeFed processes as ours."""
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+    return b"tradefed" in cmdline
+
+
+def kill_recorded_tradefed(pid_dir: str | Path, grace_secs: float = 15) -> List[int]:
+    """Kill only the TradeFed process groups this agent recorded under ``pid_dir``.
+
+    Unlike ``pkill -f tradefed`` this never touches TradeFed runs started by
+    other jobs or users on the same host.
+    """
+    killed: List[int] = []
+    for pidfile in Path(pid_dir).glob(PIDFILE_GLOB):
+        try:
+            pgid = int(pidfile.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            pidfile.unlink(missing_ok=True)
+            continue
+        if _is_tradefed_process(pgid):
+            logger.info("Killing recorded TradeFed process group %s", pgid)
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+                deadline = time.time() + grace_secs
+                while time.time() < deadline and _is_tradefed_process(pgid):
+                    time.sleep(0.5)
+                if _is_tradefed_process(pgid):
+                    os.killpg(pgid, signal.SIGKILL)
+                killed.append(pgid)
+            except (ProcessLookupError, PermissionError) as exc:
+                logger.warning("Could not kill process group %s: %s", pgid, exc)
+        pidfile.unlink(missing_ok=True)
+    return killed
+
 
 @dataclass
 class ExecutionResult:
@@ -173,7 +213,14 @@ class TradefedRunner:
                     env=run_env,
                     start_new_session=True,
                 )
-                self._process.wait(timeout=timeout_seconds)
+                # start_new_session => pgid == pid; recorded for scoped cleanup
+                pidfile = log_path.parent / f"tradefed_{self._process.pid}.pid"
+                pidfile.write_text(str(self._process.pid), encoding="utf-8")
+                try:
+                    self._process.wait(timeout=timeout_seconds)
+                finally:
+                    if self._process.poll() is not None:
+                        pidfile.unlink(missing_ok=True)
 
             return_code = self._process.returncode if self._process else -1
             if return_code in self.TF_EXIT_CODES:

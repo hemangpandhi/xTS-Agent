@@ -411,15 +411,11 @@ class Orchestrator:
         return self.device_manager.health_check_all(reboot_unhealthy=reboot_unhealthy)
 
     def cleanup(self, kill_tradefed: bool = False) -> None:
-        import subprocess
-
         if kill_tradefed:
-            logger.info("Killing lingering TradeFed/Java test processes")
-            subprocess.run(
-                ["pkill", "-f", "tradefed"],
-                check=False,
-                capture_output=True,
-            )
+            from xts_agent.execution.tradefed_runner import kill_recorded_tradefed
+
+            killed = kill_recorded_tradefed(self._results_dir / "logs")
+            logger.info("Killed %s TradeFed process group(s) started by this agent", len(killed))
         # Release any allocated serials in this process
         if self.device_manager._allocated:
             serials = list(self.device_manager._allocated)

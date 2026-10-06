@@ -678,6 +678,50 @@ class Aapt2Tests(unittest.TestCase):
                 self.assertTrue(os.environ["PATH"].startswith(str(tools)))
 
 
+class ScopedCleanupTests(unittest.TestCase):
+    def test_kills_only_recorded_tradefed_groups(self):
+        import subprocess
+
+        from xts_agent.execution.tradefed_runner import kill_recorded_tradefed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "fake-tradefed"
+            script.write_text("#!/bin/sh\nsleep 60\n", encoding="utf-8")
+            script.chmod(0o755)
+            ours = subprocess.Popen([str(script)], start_new_session=True)
+            other_job = subprocess.Popen([str(script)], start_new_session=True)
+            try:
+                logs = Path(tmp) / "logs"
+                logs.mkdir()
+                (logs / f"tradefed_{ours.pid}.pid").write_text(str(ours.pid))
+                (logs / "tradefed_999999.pid").write_text("999999")  # stale
+
+                killed = kill_recorded_tradefed(logs, grace_secs=5)
+
+                self.assertEqual(killed, [ours.pid])
+                self.assertIsNotNone(ours.wait(timeout=10))
+                self.assertIsNone(other_job.poll())
+                self.assertEqual(list(logs.glob("*.pid")), [])
+            finally:
+                for proc in (ours, other_job):
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait()
+
+    def test_execute_removes_pidfile_after_exit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tools = Path(tmp) / "android-cts" / "tools"
+            tools.mkdir(parents=True)
+            script = tools / "cts-tradefed"
+            script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            script.chmod(0o755)
+            runner = TradefedRunner(tools.parent, "cts-tradefed")
+            logs = Path(tmp) / "logs"
+            res = runner.execute([str(script)], timeout_hours=0.01, log_dir=logs)
+            self.assertEqual(res.return_code, 0)
+            self.assertEqual(list(logs.glob("*.pid")), [])
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

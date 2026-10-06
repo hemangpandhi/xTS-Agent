@@ -177,7 +177,11 @@ def health_check(plan: str, config_path: Optional[str], reboot_unhealthy: bool):
 @main.command()
 @click.option("--plan", default="config/test_plans/smoke_test.yaml")
 @click.option("--config", "config_path", default=None)
-@click.option("--kill-tradefed", is_flag=True, help="Kill running TradeFed processes")
+@click.option(
+    "--kill-tradefed",
+    is_flag=True,
+    help="Kill TradeFed processes started by this agent (recorded pid files only)",
+)
 def cleanup(plan: str, config_path: Optional[str], kill_tradefed: bool):
     """Cleanup agent allocations and optional TradeFed processes."""
     orchestrator = _build_orchestrator(plan, config_path)

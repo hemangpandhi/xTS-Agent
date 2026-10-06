@@ -133,11 +133,10 @@ execute_xts_suites:
     when: always                        # Upload artifacts even on failure
   after_script:
     - |
-      # Cleanup: Kill any lingering TradeFed processes
+      # Cleanup: kill only the TradeFed process groups this job recorded;
+      # never pkill globally (other jobs may share this runner host)
       source .venv/bin/activate 2>/dev/null || true
       ${PYTHON} -m xts_agent.cli cleanup --kill-tradefed 2>/dev/null || true
-      # Kill orphaned Java processes from TradeFed
-      pkill -f "tradefed" 2>/dev/null || true
 
 # ═════════════════════════════════════════════════════════════
 # Stage 4: Suite-Level Retry (Only on Failure)
