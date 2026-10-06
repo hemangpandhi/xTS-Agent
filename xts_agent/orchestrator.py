@@ -156,7 +156,9 @@ class Orchestrator:
             # Upload once per execution; regenerating reports must not re-upload
             self._upload_ats2(results)
             self._upload_artifacts(results)
-        self._persist_results(results)
+        if not dry_run:
+            self._persist_results(results)
+            self.write_dashboard()
         notifier.notify_plan_complete(results)
         return results
 
@@ -214,6 +216,8 @@ class Orchestrator:
         # Retry produced new (cumulative) sessions, so upload those results
         self._upload_ats2(result)
         self._upload_artifacts(result)
+        self._persist_results(result)
+        self.write_dashboard()
         return result
 
     def _load_latest_plan_result(self) -> Optional[PlanResult]:
@@ -518,6 +522,25 @@ class Orchestrator:
             self._database = Database(agent.database_url or agent.database_path)
             logger.info("Using %r", self._database)
         return self._database
+
+    def write_dashboard(self) -> Optional[Path]:
+        """Regenerate results/reports/dashboard.html from the database."""
+        from xts_agent.reporting.dashboard import collect, write_dashboard
+        from xts_agent.triage.known_issues import KnownIssueDB
+
+        try:
+            data = collect(
+                ResultStore(self.database()),
+                history=self.triage_engine().history,
+                known_issues=KnownIssueDB.load(self.plan.triage.known_issues_file),
+                ledger=self.device_manager.ledger,
+            )
+            path = write_dashboard(self._results_dir / "reports" / "dashboard.html", data)
+            logger.info("Dashboard: %s", path.absolute())
+            return path
+        except Exception as exc:
+            logger.error("Dashboard generation failed: %s", exc)
+            return None
 
     def _history_estimate(self, suite_name: str) -> Optional[float]:
         """Measured device-hours for a suite from past runs, if any."""

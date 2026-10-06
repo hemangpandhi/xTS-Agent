@@ -1998,6 +1998,34 @@ class ArtifactStoreTests(unittest.TestCase):
         self.assertEqual(ArtifactStore(ArtifactConfig()).upload_run("p", suites, []), {})  # disabled
 
 
+class DashboardTests(unittest.TestCase):
+    def test_collect_and_render_offline(self):
+        import datetime as dt
+        import re
+
+        from xts_agent.reporting.dashboard import collect, render
+        from xts_agent.results.result_store import ResultStore
+        from xts_agent.triage.known_issues import KnownIssue, KnownIssueDB, Waiver
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ResultStore(Path(tmp) / "db.sqlite")
+            for fails, status in ((10, "FAILED"), (0, "PASSED")):
+                store.save_suite_run("p", "certification", SuiteResult(
+                    "cts", status, 90, fails, 0, 3600.0, 1, "", 0, device_serials=["a"]))
+            soon = dt.date.today() + dt.timedelta(days=3)
+            ki = KnownIssueDB([KnownIssue("KI-9", "x <script>", waiver=Waiver("r", soon))])
+            ledger = MagicMock(quarantined=MagicMock(return_value={"hu-1": "3 consecutive failures"}))
+            data = collect(store, known_issues=ki, ledger=ledger)
+            html_text = render(data)
+        self.assertEqual([r["fails"] for r in data["suites"]["CTS"]], [10, 0])  # oldest first
+        self.assertEqual(data["waivers"][0]["days_left"], 3)
+        self.assertEqual(re.findall(r"https?://", html_text), [])  # no CDN: works offline
+        self.assertIn("<svg", html_text)
+        self.assertIn("class='warn'", html_text)  # waiver expiring soon
+        self.assertIn("hu-1", html_text)
+        self.assertNotIn("<script>", html_text)  # escaped
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

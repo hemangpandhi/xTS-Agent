@@ -201,6 +201,19 @@ def triage(plan, config_path, results_dirs, history_dirs, suite, top):
         click.echo(f"{g.group.count:5d}  {g.label:<10} {g.owner.team:<22} {g.group.title[:70]}{known}")
 
 
+@main.command()
+@click.option("--plan", default="config/test_plans/full_certification.yaml")
+@click.option("--config", "config_path", default=None)
+def dashboard(plan: str, config_path: Optional[str]):
+    """Regenerate the trends dashboard (results/reports/dashboard.html)."""
+    orchestrator = _build_orchestrator(plan, config_path)
+    orchestrator._initialize()
+    path = orchestrator.write_dashboard()
+    if path is None:
+        sys.exit(1)
+    click.echo(f"Dashboard: {path}")
+
+
 @main.command("index-code")
 @click.option("--plan", default="config/test_plans/full_certification.yaml")
 @click.option("--config", "config_path", default=None)

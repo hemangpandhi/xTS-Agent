@@ -154,6 +154,17 @@ class FailureHistory:
             if any((r, module_of[test]) in executed and r not in fruns for r in runs)
         )
 
+    def run_stats(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Per recorded run: failures and distinct root causes, oldest first."""
+        rows = self.db.query(
+            "SELECT r.suite, r.started_ms, r.fingerprint, COUNT(f.test_id), COUNT(DISTINCT f.signature) "
+            "FROM triage_runs r LEFT JOIN triage_failures f ON f.run_id = r.id "
+            "GROUP BY r.id, r.suite, r.started_ms, r.fingerprint ORDER BY r.started_ms DESC LIMIT ?",
+            (limit,),
+        )
+        keys = ("suite", "started_ms", "fingerprint", "failures", "signatures")
+        return [dict(zip(keys, row)) for row in reversed(rows)]
+
     def _previous_runs(self, tx: Any, suite: str, before_ms: int) -> List[Tuple[int, str]]:
         return tx.query(
             "SELECT id, fingerprint FROM triage_runs WHERE suite = ? AND started_ms < ? "
