@@ -1192,6 +1192,39 @@ class BatteryTests(unittest.TestCase):
         self.assertEqual(serials, ["192.168.1.10:5555", "PHONE456"])
 
 
+class HealthGateTests(unittest.TestCase):
+    def test_unhealthy_devices_excluded_and_no_internet_only_warns(self):
+        from xts_agent.device.device_manager import DeviceInfo, DeviceManager, HealthReport
+
+        devs = [DeviceInfo(s, "", "", "fp", 34, 100, "device", "aaos") for s in ("ok", "full", "offnet")]
+        reports = {
+            "ok": HealthReport(100, True, 9000, True, True, True),
+            "full": HealthReport(100, True, 100, True, True, False, ["only 100 MB free on /data"]),
+            "offnet": HealthReport(100, True, 9000, False, True, True),
+        }
+        with patch.object(DeviceManager, "check_device_health", side_effect=lambda s: reports[s]), \
+                self.assertLogs("xts_agent.device.device_manager", "WARNING") as logs:
+            kept = DeviceManager().filter_healthy(devs)
+        self.assertEqual([d.serial for d in kept], ["ok", "offnet"])
+        self.assertTrue(any("only 100 MB free" in m for m in logs.output))
+        self.assertTrue(any("offnet has no validated internet" in m for m in logs.output))
+
+    def test_health_report_lists_problems(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        def shell(serial, cmd, **kw):
+            if cmd == "dumpsys battery":
+                return "present: true\nlevel: 5\n"
+            if cmd == "df /data":
+                return "Filesystem 1K-blocks Used Available Use% Mounted\n/dev/x 100 90 102400 90% /data"
+            return ""
+
+        with patch("xts_agent.device.device_manager.AdbWrapper.shell", side_effect=shell):
+            report = DeviceManager().check_device_health("s")
+        self.assertFalse(report.healthy)
+        self.assertEqual(report.problems, ["battery 5%", "only 100 MB free on /data"])
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

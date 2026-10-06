@@ -170,6 +170,8 @@ class TestPlanExecutor:
             fps.discard("")
             if len(fps) == 1:
                 required["ro.build.fingerprint"] = fps.pop()
+        if plan.devices.health_check:
+            available = self.device_manager.filter_healthy(available)
         return self.device_manager.select_shard_pool(
             available, plan.devices.device_type or "any", required
         )
@@ -323,6 +325,8 @@ class TestPlanExecutor:
                 available = self.device_manager.get_available_devices(
                     min_battery=self.config.devices.min_battery_level
                 )
+                if self.config.devices.health_check:
+                    available = self.device_manager.filter_healthy(available)
                 required_props = dict(self.config.devices.properties or {})
                 if entry and entry.get("fingerprint"):
                     # A resumed session may only continue on the build it started on

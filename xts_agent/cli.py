@@ -174,6 +174,7 @@ def health_check(plan: str, config_path: Optional[str], reboot_unhealthy: bool):
         click.echo(
             f"{serial}: healthy={report.healthy} battery={report.battery_level} "
             f"free_mb={report.storage_free_mb} internet={report.has_internet}"
+            + (f" problems={'; '.join(report.problems)}" if report.problems else "")
         )
     if unhealthy:
         click.echo(f"Unhealthy devices: {unhealthy}", err=True)

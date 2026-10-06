@@ -5,7 +5,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from .adb_wrapper import AdbError, AdbWrapper
@@ -21,6 +21,7 @@ class HealthReport:
     has_internet: bool
     is_screen_on: bool
     healthy: bool
+    problems: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -39,6 +40,7 @@ class DeviceInfo:
 
 class DeviceManager:
     MAX_PROBE_WORKERS = 16
+    MIN_FREE_MB = 500
 
     def __init__(self, adb_timeout: int = 30):
         self._allocated: set[str] = set()
@@ -191,11 +193,38 @@ class DeviceManager:
             except AdbError:
                 pass
 
-            battery_ok = not present or level >= 20
-            healthy = battery_ok and free_mb > 500
-            return HealthReport(level, charging, free_mb, has_internet, is_screen_on, healthy)
-        except AdbError:
-            return HealthReport(0, False, 0, False, False, False)
+            problems = []
+            if present and level < 20:
+                problems.append(f"battery {level}%")
+            if free_mb <= self.MIN_FREE_MB:
+                problems.append(f"only {free_mb} MB free on /data")
+            return HealthReport(
+                level, charging, free_mb, has_internet, is_screen_on, not problems, problems
+            )
+        except AdbError as exc:
+            return HealthReport(0, False, 0, False, False, False, [f"adb error: {exc}"])
+
+    def filter_healthy(self, devices: List[DeviceInfo]) -> List[DeviceInfo]:
+        """Drop devices that fail the health gate (checked in parallel).
+
+        No validated internet is only a warning: CTS network tests will fail,
+        but excluding such devices would empty network-less Cuttlefish farms.
+        """
+        if not devices:
+            return []
+        with ThreadPoolExecutor(max_workers=min(self.MAX_PROBE_WORKERS, len(devices))) as pool:
+            reports = list(pool.map(lambda d: self.check_device_health(d.serial), devices))
+        healthy = []
+        for device, report in zip(devices, reports):
+            if not report.healthy:
+                logger.warning("Excluding unhealthy device %s: %s", device.serial, "; ".join(report.problems))
+                continue
+            if not report.has_internet:
+                logger.warning(
+                    "Device %s has no validated internet; CTS network tests will fail", device.serial
+                )
+            healthy.append(device)
+        return healthy
 
     def reboot_device(self, serial: str) -> bool:
         try:
@@ -346,7 +375,7 @@ class DeviceManager:
         devices = self.discover_devices()
         online = [d.serial for d in devices if d.state == "device"]
         reports: Dict[str, HealthReport] = {
-            d.serial: HealthReport(0, False, 0, False, False, False)
+            d.serial: HealthReport(0, False, 0, False, False, False, [f"adb state {d.state}"])
             for d in devices
             if d.state != "device"
         }
