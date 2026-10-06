@@ -103,6 +103,7 @@ reporting:
     - json
   html_report: true
   junit_xml: true                       # GitLab-compatible
+  junit_detail: "failures"              # failures = failing tests + 1 summary case/module; all = every test
   json_summary: true
   include_stack_traces: true
   include_logcat_excerpts: true

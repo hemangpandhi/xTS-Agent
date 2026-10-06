@@ -8,6 +8,10 @@ from typing import Any
 
 
 class GitLabReportGenerator:
+    def __init__(self, detail: str = "failures"):
+        # "failures": failing tests + one summary case per module; "all": every test
+        self.detail = detail
+
     def generate(self, plan_result: Any, output_path: str | Path) -> Path:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +46,18 @@ class GitLabReportGenerator:
                 fail_el.text = suite_res.error_message or "INCOMPLETE"
             if details is not None and getattr(details, "modules", None):
                 for mod in details.modules:
+                    passed = [tc for tc in mod.test_cases if tc.result == "PASS"]
+                    if self.detail != "all":
+                        # One case per module stands in for its passing tests, keeping
+                        # a full CTS JUnit file small enough for CI to ingest
+                        case_el = ET.SubElement(suite_el, "testcase")
+                        case_el.set("classname", mod.module_id)
+                        case_el.set("name", f"module summary ({len(passed)} passed)")
+                        if not mod.done:
+                            ET.SubElement(case_el, "skipped").set("message", "module incomplete")
                     for tc in mod.test_cases:
+                        if self.detail != "all" and tc.result not in ("FAIL", "ERROR"):
+                            continue
                         case_el = ET.SubElement(suite_el, "testcase")
                         # Prefix the module id so per-ABI runs of a test stay distinct
                         case_el.set("classname", f"{mod.module_id}.{tc.class_name or mod.name}")

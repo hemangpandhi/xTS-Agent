@@ -1868,6 +1868,42 @@ class GroupAiTests(unittest.TestCase):
         self.assertEqual(first[1][2], CHUNK_LINES - 10 + 1)  # overlapping windows
 
 
+class CompactReportTests(unittest.TestCase):
+    def _plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            xml = Path(tmp) / "test_result.xml"
+            xml.write_text(SAMPLE_XML, encoding="utf-8")
+            details = ResultParser().parse_xml(xml)
+        suite = SuiteResult("cts", "FAILED", 2, 1, 2, 1.0, 1, "", 0, details=details)
+        return PlanResult("p", {"cts": suite}, 2, 1, 2, 1.0, "FAILED")
+
+    def test_json_keeps_failures_only(self):
+        import json
+
+        from xts_agent.reporting.json_report import JSONReportGenerator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = JSONReportGenerator().generate(self._plan(), None, None, Path(tmp) / "r.json")
+            data = json.loads(out.read_text())
+        mod = data["suites"]["cts"]["details"]["modules"][0]
+        self.assertEqual((mod["pass"], mod["fail"]), (2, 1))
+        self.assertEqual([f["test_name"] for f in mod["failures"]], ["testC"])
+        self.assertNotIn("test_cases", mod)
+
+    def test_junit_failures_mode_vs_all(self):
+        import xml.etree.ElementTree as ET
+
+        from xts_agent.reporting.gitlab_report import GitLabReportGenerator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            small = ET.parse(GitLabReportGenerator().generate(self._plan(), Path(tmp) / "s.xml")).getroot()
+            full = ET.parse(GitLabReportGenerator("all").generate(self._plan(), Path(tmp) / "a.xml")).getroot()
+        names = [c.get("name") for c in small.iter("testcase")]
+        self.assertEqual(names, ["module summary (2 passed)", "testC"])
+        self.assertEqual(len(list(full.iter("testcase"))), 5)
+        self.assertEqual(len(list(small.iter("failure"))), len(list(full.iter("failure"))))
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

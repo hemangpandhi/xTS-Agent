@@ -212,6 +212,7 @@ class ReportingPostConfig:
     json_summary: bool = True
     regression_report: bool = False
     notifications: Dict[str, Any] = field(default_factory=dict)
+    junit_detail: str = "failures"  # "failures" (small) or "all" (every test)
 
 
 @dataclass
@@ -551,6 +552,9 @@ class ConfigLoader:
             junit_xml="junit" in formats,
             json_summary="json" in formats,
             regression_report=bool(reporting_src.get("regression_report", False)),
+            junit_detail=str(
+                reporting_src.get("junit_detail") or default_reporting.get("junit_detail") or "failures"
+            ),
             notifications=reporting_src.get("notifications")
             or default_reporting.get("notifications")
             or {},

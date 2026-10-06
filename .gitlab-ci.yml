@@ -209,7 +209,7 @@ generate_report:
     paths:
       - results/reports/
     reports:
-      junit: results/reports/junit_final.xml
+      junit: results/junit/*.xml
     expire_in: 90 days
 
 # ═════════════════════════════════════════════════════════════

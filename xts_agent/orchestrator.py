@@ -421,6 +421,7 @@ class Orchestrator:
             formats=formats,
             basename=basename,
             triage=self.last_triage,
+            junit_detail=self.plan.post_execution.reporting.junit_detail,
         )
         for kind, path in written.items():
             logger.info("Generated %s report: %s", kind, Path(path).absolute())
