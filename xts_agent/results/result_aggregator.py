@@ -39,16 +39,18 @@ class ResultAggregator:
         mapping: Dict[tuple, TestCaseResult] = {}
         for mod in res.modules:
             for tc in mod.test_cases:
-                mapping[(mod.name, tc.class_name, tc.test_name)] = tc
+                mapping[(mod.module_id, tc.class_name, tc.test_name)] = tc
         return mapping
 
-    def _add_to_base(self, base: TestResults, mod_name: str, tc: TestCaseResult):
+    def _add_to_base(self, base: TestResults, module_id: str, tc: TestCaseResult):
         for mod in base.modules:
-            if mod.name == mod_name:
+            if mod.module_id == module_id:
                 mod.test_cases.append(tc)
                 return
+        abi, _, name = module_id.rpartition(" ")
         new_mod = ModuleResult(
-            name=mod_name,
+            name=name,
+            abi=abi,
             done=True,
             pass_count=0,
             fail_count=0,

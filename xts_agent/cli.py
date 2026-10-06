@@ -67,7 +67,7 @@ def run(plan: str, config_path: Optional[str], auto_retry: bool, dry_run: bool):
     """Run test plan."""
     orchestrator = _build_orchestrator(plan, config_path)
     result = orchestrator.run_plan(auto_retry=auto_retry, dry_run=dry_run)
-    if result.overall_status != "PASSED":
+    if result.overall_status not in ("PASSED", "DRY_RUN"):
         sys.exit(1)
 
 
@@ -93,16 +93,22 @@ def retry(plan: str, config_path: Optional[str], max_retries: int):
 @main.command()
 @click.option("--plan", default=None, help="Path to test plan YAML (for config/RCA settings)")
 @click.option("--config", "config_path", default=None, help="Path to default_config.yaml")
-@click.option("--rca", is_flag=True, help="Enable RCA")
-@click.option("--classify-failures", is_flag=True, help="Classify failures")
+@click.option("--rca/--no-rca", default=True, show_default=True, help="Run RCA")
+@click.option(
+    "--classify-failures/--no-classify-failures",
+    default=True,
+    show_default=True,
+    help="Apply rule-based failure classification",
+)
 def analyze(plan: Optional[str], config_path: Optional[str], rca: bool, classify_failures: bool):
     """Run RCA analysis on the last plan result (in-memory or results/reports)."""
     if not plan:
         plan = "config/test_plans/full_certification.yaml"
     orchestrator = _build_orchestrator(plan, config_path)
-    report = orchestrator.analyze(
-        enable_rca=rca or True, classify_failures=classify_failures or True
-    )
+    if not rca:
+        click.echo("RCA disabled (--no-rca); nothing to analyze.")
+        return
+    report = orchestrator.analyze(enable_rca=True, classify_failures=classify_failures)
     if report is None:
         sys.exit(2)
     click.echo(f"RCA classified {len(report.failures)} failure(s): {dict(report.summary)}")

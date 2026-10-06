@@ -20,6 +20,7 @@ from xts_agent.rca.pattern_matcher import PatternMatcher
 from xts_agent.rca.rca_engine import RCAEngine
 from xts_agent.reporting.report_generator import ReportGenerator
 from xts_agent.reporting.slack_notifier import SlackNotifier
+from xts_agent.results.result_parser import overall_status
 from xts_agent.results.result_store import ResultStore
 from xts_agent.retry.isolation import IsolationHandler
 from xts_agent.retry.retry_manager import RetryManager
@@ -124,6 +125,9 @@ class Orchestrator:
             self.last_rca_report = rca_report
 
         self.generate_reports(results, rca_report=rca_report)
+        if not dry_run:
+            # Upload once per execution; regenerating reports must not re-upload
+            self._upload_ats2(results)
         self._persist_results(results)
         notifier.notify_plan_complete(results)
         return results
@@ -145,7 +149,7 @@ class Orchestrator:
         from xts_agent.execution.tradefed_runner import TradefedRunner
 
         for name, suite_res in list(updated.items()):
-            if suite_res.status == "PASSED" or not suite_res.session_id:
+            if suite_res.status in ("PASSED", "DRY_RUN") or not suite_res.session_id:
                 continue
             suite_cfg = next((s for s in plan.suites if s.name == name), None)
             if not suite_cfg:
@@ -163,7 +167,7 @@ class Orchestrator:
         total_pass = sum(s.pass_count for s in updated.values())
         total_fail = sum(s.fail_count for s in updated.values())
         total_skip = sum(s.skip_count for s in updated.values())
-        overall = "FAILED" if any(s.status != "PASSED" for s in updated.values()) else "PASSED"
+        overall = overall_status(s.status for s in updated.values())
         result = PlanResult(
             plan_name=plan.name,
             suites_results=updated,
@@ -177,6 +181,8 @@ class Orchestrator:
         self.last_plan_result = result
         rca = self._run_rca(result) if plan.post_execution.rca.enabled else None
         self.generate_reports(result, rca_report=rca)
+        # Retry produced new (cumulative) sessions, so upload those results
+        self._upload_ats2(result)
         return result
 
     def _load_latest_plan_result(self) -> Optional[PlanResult]:
@@ -185,13 +191,32 @@ class Orchestrator:
 
         from xts_agent.results.result_parser import ResultParser
 
-        reports_dir = Path("results/reports")
+        reports_dir = self._results_dir / "reports"
         if not reports_dir.exists():
             return None
-        reports = sorted(reports_dir.glob("xts_report_*.json"), reverse=True)
-        if not reports:
+        # Newest first by mtime: filenames start with the plan name, so sorting
+        # them would pick another plan's report.
+        reports = sorted(
+            reports_dir.glob("xts_report_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        data = None
+        for report in reports:
+            try:
+                candidate = json.loads(report.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                logger.warning("Skipping unreadable report %s: %s", report, exc)
+                continue
+            if self.plan and candidate.get("plan_name") != self.plan.name:
+                continue
+            if candidate.get("status") == "DRY_RUN":
+                continue
+            logger.info("Loaded prior results from %s", report)
+            data = candidate
+            break
+        if data is None:
             return None
-        data = json.loads(reports[0].read_text(encoding="utf-8"))
         suites = {}
         for name, raw in (data.get("suites") or {}).items():
             sr = SuiteResult(
@@ -280,8 +305,6 @@ class Orchestrator:
         for kind, path in written.items():
             logger.info("Generated %s report: %s", kind, Path(path).absolute())
 
-        self._upload_ats2(results)
-
     def _upload_ats2(self, results: PlanResult) -> None:
         ats_cfg = self.plan.ats2
         client = ATS2Client(
@@ -316,7 +339,7 @@ class Orchestrator:
             AdbWrapper, self._results_dir / "diagnostics"
         )
         ai_analyzer = None
-        if hasattr(self.plan, 'ai_rca') and self.plan.ai_rca.enabled:
+        if self.plan.ai_rca.enabled:
             from xts_agent.rca.ai_analyzer import AIAnalyzer
 
             ai_analyzer = AIAnalyzer(self.plan.ai_rca)

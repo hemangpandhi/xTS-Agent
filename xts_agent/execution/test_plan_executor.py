@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from xts_agent.config_loader import SuiteConfig, TestPlanConfig
-from xts_agent.results.result_parser import ResultParser, TestResults
+from xts_agent.results.result_parser import (
+    ResultParser,
+    TestResults,
+    derive_suite_status,
+    overall_status,
+)
 
 from .tradefed_runner import ExecutionResult, TradefedRunner
 
@@ -80,7 +85,6 @@ class TestPlanExecutor:
 
         suites_results: Dict[str, SuiteResult] = {}
         total_pass = total_fail = total_skip = 0
-        overall_status = "PASSED"
         all_devices: List[str] = []
         start_time = time.time()
 
@@ -95,9 +99,6 @@ class TestPlanExecutor:
             total_fail += suite_res.fail_count
             total_skip += suite_res.skip_count
             all_devices.extend(suite_res.device_serials)
-
-            if suite_res.status != "PASSED":
-                overall_status = "FAILED"
 
             if plan.devices.reboot_between_suites and not dry_run:
                 for serial in suite_res.device_serials:
@@ -121,7 +122,7 @@ class TestPlanExecutor:
             total_fail=total_fail,
             total_skip=total_skip,
             duration=duration,
-            overall_status=overall_status,
+            overall_status=overall_status(s.status for s in suites_results.values()),
             device_serials=unique_devices,
         )
 
@@ -168,7 +169,7 @@ class TestPlanExecutor:
                 logger.info("DRY RUN command: %s", " ".join(cmd))
                 return SuiteResult(
                     name=name,
-                    status="PASSED",
+                    status="DRY_RUN",
                     pass_count=0,
                     fail_count=0,
                     skip_count=0,
@@ -288,7 +289,6 @@ class TestPlanExecutor:
         serials: List[str],
         retry_count: int,
     ) -> SuiteResult:
-        status = "PASSED" if exec_res.success else "FAILED"
         pass_c = fail_c = skip_c = 0
         parsed: Optional[TestResults] = None
 
@@ -307,12 +307,12 @@ class TestPlanExecutor:
                     pass_c = parsed.summary.get("pass", 0)
                     fail_c = parsed.summary.get("fail", 0)
                     skip_c = parsed.summary.get("skip", 0)
-                    if fail_c > 0 or parsed.summary.get("error", 0) > 0:
-                        status = "FAILED"
-                    elif exec_res.success:
-                        status = "PASSED"
                 except Exception as exc:
                     logger.error("Failed to parse results: %s", exc)
+
+        status, reason = derive_suite_status(parsed, exec_res.success)
+        if status != "PASSED":
+            logger.warning("Suite %s %s: %s", name, status, reason)
 
         return SuiteResult(
             name=name,
@@ -327,5 +327,10 @@ class TestPlanExecutor:
             details=parsed,
             log_path=exec_res.log_path,
             device_serials=list(serials),
-            error_message="" if status == "PASSED" else (exec_res.output_excerpt[-500:] if exec_res.output_excerpt else ""),
+            error_message="" if status == "PASSED" else _error_message(reason, exec_res),
         )
+
+
+def _error_message(reason: str, exec_res: ExecutionResult) -> str:
+    tail = exec_res.output_excerpt[-500:] if exec_res.output_excerpt else ""
+    return f"{reason}\n{tail}".strip()

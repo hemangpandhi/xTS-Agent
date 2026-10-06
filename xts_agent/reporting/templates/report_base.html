@@ -114,8 +114,12 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                                     {% if s.status == 'PASSED' %}
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Passed</span>
+                                    {% elif s.status == 'INCOMPLETE' %}
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800" title="{{ s.error_message }}">Incomplete</span>
+                                    {% elif s.status == 'DRY_RUN' %}
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Dry run</span>
                                     {% else %}
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Failed</span>
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800" title="{{ s.error_message }}">Failed</span>
                                     {% endif %}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 font-bold">{{ s.pass_count }}</td>

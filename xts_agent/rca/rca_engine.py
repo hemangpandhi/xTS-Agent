@@ -65,14 +65,24 @@ class RCAEngine:
         failed = parser.get_failed_tests(test_results)
         device_serials = device_serials or []
 
+        # Probe device state once per analysis, not once per failing test
+        device_state: dict = {}
+        if self.diagnostic_collector and device_serials and failed:
+            try:
+                device_state = self.diagnostic_collector.collect_device_state(device_serials[0])
+            except Exception as exc:
+                logger.debug("Diagnostic collection skipped: %s", exc)
+
         for tc in failed:
-            test_id = f"{tc.class_name}#{tc.test_name}"
+            test_id = tc.test_id
             classification = FailureType.PRODUCT_BUG
             confidence = 0.4
             root_cause = tc.rca_category or "Unknown failure"
             evidence = (tc.stack_trace or tc.message or "")[:2000]
             suggested = tc.rca_recommendation or "Inspect TradeFed and device logs"
 
+            logcat = ""
+            matched = None
             if self.pattern_matcher:
                 matched = self.pattern_matcher.match(tc.message or "", tc.stack_trace or "")
                 if matched:
@@ -81,26 +91,18 @@ class RCAEngine:
                     root_cause = matched.description
                     suggested = getattr(matched, "suggested_action", None) or suggested
 
-            logcat = ""
-            device_state: dict = {}
-            if self.diagnostic_collector and device_serials:
+            # Curated patterns win; rules only fill in when nothing matched
+            if self.failure_classifier and matched is None:
                 try:
-                    device_state = self.diagnostic_collector.collect_device_state(
-                        device_serials[0]
-                    )
-                except Exception as exc:
-                    logger.debug("Diagnostic collection skipped: %s", exc)
-
-            if self.failure_classifier:
-                try:
-                    classification = self.failure_classifier.classify(
-                        tc, logcat, device_state
-                    )
-                    confidence = max(confidence, 0.6)
+                    ruled = self.failure_classifier.classify(tc, logcat, device_state)
+                    if ruled is not None:
+                        classification = ruled
+                        confidence = 0.6
                 except Exception as exc:
                     logger.debug("Classifier failed: %s", exc)
 
-            if self.ai_analyzer and getattr(self.config, "ai_powered", False):
+            # The orchestrator only builds an analyzer when ai_rca is enabled
+            if self.ai_analyzer:
                 try:
                     ai = self.ai_analyzer.analyze_failure(
                         test_id, tc.stack_trace or "", logcat

@@ -35,7 +35,7 @@ class ResultComparator:
 
     def compare(self, current: TestResults, baseline: TestResults) -> ComparisonResult:
         def key(tc: TestCaseResult):
-            return (tc.class_name, tc.test_name)
+            return (tc.module, tc.class_name, tc.test_name)
 
         current_map = {}
         for mod in current.modules:

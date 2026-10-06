@@ -84,7 +84,7 @@ class ResultStore:
                 payload = json.loads(run.get("results_json") or "{}")
                 for mod in payload.get("modules") or []:
                     for tc in mod.get("test_cases") or []:
-                        key = f"{tc.get('class_name')}#{tc.get('test_name')}"
+                        key = f"{tc.get('module', '')} {tc.get('class_name')}#{tc.get('test_name')}".strip()
                         outcomes.setdefault(key, set()).add(tc.get("result"))
             except Exception:
                 continue

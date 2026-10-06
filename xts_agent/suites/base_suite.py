@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from xts_agent.execution.test_plan_executor import SuiteResult
 from xts_agent.execution.tradefed_runner import TradefedRunner
-from xts_agent.results.result_parser import ResultParser, TestResults
+from xts_agent.results.result_parser import ResultParser, TestResults, derive_suite_status
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,6 @@ class BaseSuite(ABC):
             return None
 
     def _execution_to_suite_result(self, exec_res, devices: List[str]) -> SuiteResult:
-        status = "PASSED" if exec_res.success else "FAILED"
         pass_c = fail_c = skip_c = 0
         details = None
         results_dir = exec_res.results_dir or ""
@@ -115,8 +114,7 @@ class BaseSuite(ABC):
                 pass_c = parsed.summary.get("pass", 0)
                 fail_c = parsed.summary.get("fail", 0)
                 skip_c = parsed.summary.get("skip", 0)
-                if fail_c > 0:
-                    status = "FAILED"
+        status, reason = derive_suite_status(details, exec_res.success)
         return SuiteResult(
             name=self.name,
             status=status,
@@ -130,4 +128,5 @@ class BaseSuite(ABC):
             details=details,
             log_path=exec_res.log_path,
             device_serials=list(devices),
+            error_message=reason,
         )

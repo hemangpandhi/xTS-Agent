@@ -285,6 +285,7 @@ class ConfigLoader:
         ats2 = ATS2Config(**_filter_dataclass_kwargs(ATS2Config, defaults.get("ats2", {})))
 
         post_execution = self._parse_post_execution(defaults, plan_data.get("post_execution") or {})
+        ai_rca = self._parse_ai_rca(defaults, plan_data.get("ai_rca") or {}, post_execution.rca)
 
         default_retry = defaults.get("retry", {})
         default_sharding = defaults.get("sharding", {})
@@ -312,8 +313,20 @@ class ConfigLoader:
             paths=paths,
             agent=agent,
             ats2=ats2,
+            ai_rca=ai_rca,
             raw_defaults=defaults,
         )
+
+    @staticmethod
+    def _parse_ai_rca(defaults: dict, plan_ai_rca: dict, rca: RCAPostConfig) -> AiRcaConfig:
+        """Plan ``ai_rca`` overrides defaults; legacy ``rca.ai_powered`` still enables it."""
+        merged = _deep_merge(defaults.get("ai_rca") or {}, plan_ai_rca)
+        ai_rca = AiRcaConfig(**_filter_dataclass_kwargs(AiRcaConfig, merged))
+        if rca.ai_powered and not ai_rca.enabled:
+            ai_rca.enabled = True
+        if not ai_rca.gemini_api_key and rca.ai_api_key:
+            ai_rca.gemini_api_key = rca.ai_api_key
+        return ai_rca
 
     def _parse_post_execution(self, defaults: dict, plan_post: dict) -> PostExecutionConfig:
         default_retry = defaults.get("retry", {})
