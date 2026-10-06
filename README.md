@@ -336,9 +336,39 @@ or set one of these, which always override YAML:
 | `XTS_GEMINI_API_KEY` | `ai_rca.gemini_api_key` |
 | `XTS_ATS2_API_KEY` | `ats2.api_key` |
 | `XTS_SLACK_WEBHOOK` | Slack webhook for notifications |
+| `XTS_WIFI_PASSWORD` | Wi-Fi password for device preparation |
+| `XTS_JIRA_TOKEN` | Jira PAT (Server/DC) or API token (Cloud) |
 
 In GitLab, store them as **masked + protected** CI/CD variables (or inject
 from Vault); on bare metal, export them from a root-owned env file.
+
+## Failure triage and Jira
+
+After every run (and `analyze` / `retry`) the agent groups failures by root-cause
+signature and labels each group:
+
+- **History** - `NEW` (passed in earlier runs: a regression, with the last
+  passing build), `PERSISTENT`, `FLAKY`, or `NO_HISTORY`.
+- **Known issue / waiver** - from `config/known_issues.yaml`. Waivers must
+  expire and never change TradeFed results.
+- **Owner** - from `config/ownership.yaml` (a starter map: replace the
+  placeholder teams/components with yours).
+
+Output: `results/triage/triage_*.json` and a triage table in the HTML report.
+
+```bash
+# Seed history from past TradeFed results (oldest first is handled for you)
+xts-agent triage --import-history /opt/xts/android-cts/results/2026.10.04_16.16.31.269_4285
+# Triage any TradeFed results dir, no agent run needed
+xts-agent triage --results-dir /opt/xts/android-cts/results/<session_dir>
+```
+
+**Jira.** With `jira.enabled: true`, each actionable group gets one ticket
+(labelled `xts-sig-<signature>`); if an open ticket with that label exists the
+agent comments on it instead of filing a duplicate. Only `NEW`/`NO_HISTORY`
+groups open new tickets, capped by `max_new_issues_per_run`. Start with
+`mode: dry_run` (writes `results/triage/jira_preview_*.json`) and import past
+results first, otherwise the first run sees every group as `NO_HISTORY`.
 
 ## AI RCA (on-prem by default)
 

@@ -317,6 +317,19 @@ class Orchestrator:
             ownership=OwnershipMap.load(cfg.ownership_file),
         )
 
+    def _file_jira(self, report, stamp: str) -> None:
+        cfg = self.plan.jira
+        if cfg is None or not cfg.enabled:
+            return
+        from xts_agent.triage.jira_filer import JiraFiler
+
+        try:
+            JiraFiler.from_config(cfg).file(
+                report, preview_path=self._results_dir / "triage" / f"jira_preview_{stamp}.json"
+            )
+        except Exception as exc:
+            logger.error("Jira filing skipped: %s", exc)
+
     def plan_result_from_results_dirs(self, suite: str, results_dirs: List[str]) -> PlanResult:
         """Build a PlanResult from raw TradeFed result dirs (no agent report needed)."""
         from xts_agent.execution.tradefed_runner import ExecutionResult
@@ -348,6 +361,7 @@ class Orchestrator:
             logger.error("Triage failed: %s", exc, exc_info=True)
             return None
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._file_jira(report, stamp)
         path = report.save(self._results_dir / "triage" / f"triage_{stamp}.json")
         logger.info("Triage report: %s", path)
         self.last_triage = report

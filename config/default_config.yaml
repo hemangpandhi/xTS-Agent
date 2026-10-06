@@ -118,6 +118,23 @@ triage:
   history_window: 5                     # earlier runs compared for NEW/PERSISTENT/FLAKY
   history_db: ""                        # default: agent.database_path
 
+# One Jira ticket per actionable failure group (deduplicated by signature label).
+# Token only from the XTS_JIRA_TOKEN environment variable.
+jira:
+  enabled: false
+  mode: "dry_run"                       # dry_run = write results/triage/jira_preview_*.json only; live = file
+  base_url: "${XTS_JIRA_URL:-}"         # e.g. https://jira.example.com
+  project: ""                           # e.g. AAOS
+  issue_type: "Bug"
+  auth: "bearer"                        # bearer (Server/DC PAT) | basic (Cloud: user + API token)
+  user: "${XTS_JIRA_USER:-}"            # basic auth only
+  assignee_field: "name"                # "name" (Server/DC) | "accountId" (Cloud)
+  labels: ["xts-agent"]
+  file_labels: ["NEW", "NO_HISTORY"]    # history labels that get new tickets
+  max_new_issues_per_run: 20
+  comment_on_existing: true             # comment on the open ticket when a group recurs
+  report_url: "${CI_JOB_URL:-}"         # linked from tickets when set
+
 ats2:
   enabled: false                        # Set true to use OmniLab ATS 2.0
   base_url: ""                          # ATS 2.0 server URL

@@ -1707,6 +1707,99 @@ class TriageEngineTests(unittest.TestCase):
         self.assertEqual(s["by_team"], {"car": 1})
 
 
+class JiraFilerTests(unittest.TestCase):
+    class FakeClient:
+        def __init__(self, existing=None, reject_components=False):
+            self.existing = existing or {}
+            self.reject_components = reject_components
+            self.created, self.comments = [], []
+
+        def find_open_by_label(self, project, label):
+            return self.existing.get(label)
+
+        def create(self, fields):
+            from xts_agent.triage.jira_filer import JiraError
+
+            if self.reject_components and "components" in fields:
+                raise JiraError(400, '{"errors":{"components":"Component name not valid"}}')
+            self.created.append(fields)
+            return f"AAOS-{100 + len(self.created)}"
+
+        def comment(self, key, body):
+            self.comments.append((key, body))
+
+    def _report(self, specs):
+        """specs: list of (signature, label, waived, jira_key)."""
+        from xts_agent.triage.engine import TriagedGroup, TriageReport
+        from xts_agent.triage.known_issues import KnownIssue, KnownIssueMatch
+        from xts_agent.triage.ownership import Owner
+        from xts_agent.triage.signature import FailureGroup
+
+        report = TriageReport("cert", "development", "fp:user/k")
+        for sig, label, waived, jira in specs:
+            g = FailureGroup(sig, "java.lang.NullPointerException", "boom", [])
+            g.tests = [_tc("c.T", "t", "java.lang.NullPointerException: boom", "x86_64 CtsCarTestCases")]
+            g.suites = ["CTS"]
+            known = KnownIssueMatch(KnownIssue("KI", "k", jira=jira), waived) if (waived or jira) else None
+            report.groups.append(TriagedGroup(g, label, {}, Owner("car", "Car Framework"), "PRODUCT_BUG",
+                                              known=known, jira_key=jira))
+        return report
+
+    def _cfg(self, **kw):
+        from xts_agent.triage.jira_filer import JiraConfig
+
+        return JiraConfig(enabled=True, project="AAOS", **kw)
+
+    def test_live_dedupes_creates_and_skips(self):
+        from xts_agent.triage.jira_filer import JiraFiler
+
+        client = self.FakeClient(existing={"xts-sig-old": "AAOS-7"}, reject_components=True)
+        report = self._report([
+            ("old", "NEW", False, ""),          # open ticket exists -> comment
+            ("new1", "NEW", False, ""),         # create (component rejected -> retry)
+            ("pers", "PERSISTENT", False, ""),  # no ticket for PERSISTENT by default
+            ("waived", "NEW", True, ""),        # waived -> skip
+            ("tracked", "NEW", False, "AAOS-1"),  # known issue with ticket -> skip
+        ])
+        stats = JiraFiler(self._cfg(mode="live"), client).file(report)
+        self.assertEqual((stats["created"], stats["commented"]), (1, 1))
+        self.assertEqual(client.comments[0][0], "AAOS-7")
+        created = client.created[0]
+        self.assertNotIn("components", created)  # retried without unknown component
+        self.assertIn("xts-sig-new1", created["labels"])
+        self.assertTrue(created["summary"].startswith("[xTS][CTS] NullPointerException: boom"))
+        by_sig = {g.group.signature: g for g in report.groups}
+        self.assertEqual((by_sig["new1"].jira_key, by_sig["new1"].jira_action), ("AAOS-101", "created"))
+        self.assertEqual(by_sig["pers"].jira_key, "")
+
+    def test_dry_run_previews_and_caps(self):
+        import json
+
+        from xts_agent.triage.jira_filer import JiraFiler
+
+        report = self._report([(f"s{i}", "NEW", False, "") for i in range(5)])
+        with tempfile.TemporaryDirectory() as tmp:
+            preview = Path(tmp) / "preview.json"
+            stats = JiraFiler.from_config(self._cfg(max_new_issues_per_run=3)).file(report, preview)
+            self.assertEqual((stats["would_create"], stats["skipped_cap"]), (3, 2))
+            self.assertEqual(len(json.loads(preview.read_text())), 3)
+        self.assertEqual(report.groups[0].jira_action, "would create")
+
+    def test_live_requires_token_and_errors_hide_it(self):
+        import os
+
+        from xts_agent.triage.jira_filer import JiraClient, JiraError, JiraFiler
+
+        with patch.dict(os.environ, {}, clear=True), self.assertRaises(ValueError):
+            JiraFiler.from_config(self._cfg(mode="live", base_url="https://jira"))
+        client = JiraClient(self._cfg(base_url="https://jira"), "S3CRET")
+        self.assertEqual(client.session.headers["Authorization"], "Bearer S3CRET")
+        resp = MagicMock(status_code=401, text="Unauthorized", content=b"x")
+        with patch.object(client.session, "request", return_value=resp), self.assertRaises(JiraError) as ctx:
+            client.create({})
+        self.assertNotIn("S3CRET", str(ctx.exception))
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

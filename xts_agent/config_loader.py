@@ -312,6 +312,7 @@ class TestPlanConfig:
     ai_rca: AiRcaConfig = field(default_factory=AiRcaConfig)
     device_prep: DevicePrepConfig = field(default_factory=DevicePrepConfig)
     triage: TriageConfig = field(default_factory=TriageConfig)
+    jira: Any = None  # xts_agent.triage.jira_filer.JiraConfig
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -429,6 +430,7 @@ class ConfigLoader:
                     _deep_merge(defaults.get("triage") or {}, plan_data.get("triage") or {}),
                 )
             ),
+            jira=self._parse_jira(defaults, plan_data),
             raw_defaults=defaults,
         )
         self._apply_secret_env_overrides(plan)
@@ -466,6 +468,13 @@ class ConfigLoader:
                 f"({'; '.join(problems)}). Move filters to a development plan and track "
                 "known failures as waivers instead."
             )
+
+    @staticmethod
+    def _parse_jira(defaults: dict, plan_data: dict):
+        from xts_agent.triage.jira_filer import JiraConfig
+
+        merged = _deep_merge(defaults.get("jira") or {}, plan_data.get("jira") or {})
+        return JiraConfig(**_filter_dataclass_kwargs(JiraConfig, merged))
 
     @staticmethod
     def _parse_ai_rca(defaults: dict, plan_ai_rca: dict, rca: RCAPostConfig) -> AiRcaConfig:
