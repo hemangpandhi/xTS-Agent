@@ -114,6 +114,7 @@ class Orchestrator:
             suite_registry=self.suite_registry,
             results_dir=self._results_dir,
             run_state=RunState.for_plan(self._results_dir, plan.name),
+            history_estimate=self._history_estimate,
         )
 
         results = executor.execute_plan(
@@ -386,10 +387,19 @@ class Orchestrator:
                         "session_id": suite_res.session_id,
                         "devices": suite_res.device_serials,
                         "retry_count": suite_res.retry_count,
+                        "duration": suite_res.duration,
                     },
                 )
         except Exception as exc:
             logger.warning("ResultStore persistence skipped: %s", exc)
+
+    def _history_estimate(self, suite_name: str) -> Optional[float]:
+        """Measured device-hours for a suite from past runs, if any."""
+        try:
+            return ResultStore(self.plan.agent.database_path).estimate_device_hours(suite_name)
+        except Exception as exc:
+            logger.debug("No duration history for %s: %s", suite_name, exc)
+            return None
 
     def _slack(self) -> SlackNotifier:
         webhook = ""

@@ -35,7 +35,11 @@ execution:
   default_timeout_hours: 48             # Overall plan timeout
   suite_timeout_hours: 24               # Per-suite timeout
   kill_tradefed_on_timeout: true
-  max_concurrent_suites: 1             # Run suites sequentially by default
+  # >1 runs that many suites at once on an automatic device split weighted by
+  # expected device-hours (measured history, else built-in estimates). Each
+  # suite gets >= 1 device; freed devices go to the next pending suite.
+  # Overridable per plan with top-level `max_concurrent_suites:`.
+  max_concurrent_suites: 1
   reboot_between_suites: true
   cooldown_between_suites_secs: 60
 

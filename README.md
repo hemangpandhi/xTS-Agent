@@ -194,6 +194,14 @@ python3 -m xts_agent.cli run \
   --auto-retry
 ```
 
+**Running suites in parallel.** Set `max_concurrent_suites: N` in a plan (or
+`execution.max_concurrent_suites` in defaults). The agent picks one
+same-build device pool and splits it across the first N suites in proportion
+to their expected device-hours (measured from past runs on this host, else
+built-in estimates); every suite gets at least one device and at most its
+`max_shards`. When a suite finishes, its devices start the next pending suite.
+Validate one concurrent run on your xTS versions before relying on it.
+
 **Resuming an interrupted run.** Progress is checkpointed to
 `results/run_state/<plan>.json` after every suite and retry. If the host
 reboots or the job is cancelled, rerun the same command with `--resume`:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -41,6 +42,8 @@ class DeviceManager:
         self._allocated: set[str] = set()
         self.adb_timeout = adb_timeout
         self._type_cache: Dict[Tuple[str, str], str] = {}
+        # Suites may allocate/release concurrently
+        self._alloc_lock = threading.Lock()
 
     def discover_devices(self) -> List[DeviceInfo]:
         """List attached devices, probing them in parallel.
@@ -296,26 +299,28 @@ class DeviceManager:
         candidates: Optional[List[DeviceInfo]] = None,
     ) -> List[DeviceInfo]:
         available = candidates if candidates is not None else self.get_available_devices()
-        matching = [
-            d
-            for d in available
-            if d.serial not in self._allocated
-            and (device_type == "any" or d.device_type == device_type)
-        ]
-        if len(matching) < count:
-            raise ValueError(
-                f"Not enough available {device_type} devices. "
-                f"Requested: {count}, Available: {len(matching)}"
-            )
+        with self._alloc_lock:
+            matching = [
+                d
+                for d in available
+                if d.serial not in self._allocated
+                and (device_type == "any" or d.device_type == device_type)
+            ]
+            if len(matching) < count:
+                raise ValueError(
+                    f"Not enough available {device_type} devices. "
+                    f"Requested: {count}, Available: {len(matching)}"
+                )
 
-        allocated = matching[:count]
-        for d in allocated:
-            self._allocated.add(d.serial)
-        return allocated
+            allocated = matching[:count]
+            for d in allocated:
+                self._allocated.add(d.serial)
+            return allocated
 
     def release_devices(self, serials: List[str]) -> None:
-        for s in serials:
-            self._allocated.discard(s)
+        with self._alloc_lock:
+            for s in serials:
+                self._allocated.discard(s)
 
     def reboot_and_wait_all(self, serials: List[str], timeout: int = 120) -> Dict[str, bool]:
         """Reboot devices concurrently; returns serial -> came back healthy."""

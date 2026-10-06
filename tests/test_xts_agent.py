@@ -1064,6 +1064,107 @@ class ResumeTests(unittest.TestCase):
             self.assertTrue(all(c[0][0][1:3] == ["run", "commandAndExit"] for c in exe.call_args_list))
 
 
+class ParallelSuiteTests(unittest.TestCase):
+    def test_split_is_proportional_with_min_one_and_caps(self):
+        split = ShardManager.split_devices(list(range(11)), {"CTS": 40, "VTS": 20, "STS": 8})
+        self.assertEqual({k: len(v) for k, v in split.items()}, {"CTS": 7, "VTS": 3, "STS": 1})
+        capped = ShardManager.split_devices(list(range(11)), {"CTS": 40, "CATBOX": 12}, {"CATBOX": 2})
+        self.assertEqual(len(capped["CATBOX"]), 2)
+        self.assertEqual(len(capped["CTS"]), 9)
+        flat = [d for devs in split.values() for d in devs]
+        self.assertEqual(sorted(flat), list(range(11)))  # each device used once
+        with self.assertRaises(ValueError):
+            ShardManager.split_devices([1], {"CTS": 1, "VTS": 1})
+
+    def test_history_overrides_static_weight(self):
+        mgr = ShardManager(MagicMock())
+        self.assertEqual(mgr.suite_weight("CTS", lambda n: 123.0), 123.0)
+        self.assertEqual(mgr.suite_weight("CTS", lambda n: None), 40.0)
+
+    def test_estimate_device_hours_from_store(self):
+        from xts_agent.results.result_parser import TestResults
+        from xts_agent.results.result_store import ResultStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ResultStore(Path(tmp) / "db.sqlite")
+            for hours, devs in ((10, 4), (12, 4), (100, 4)):
+                store.save_run("p", "CTS", TestResults("CTS", {}, "", ""),
+                               {"status": "FAILED", "devices": ["d"] * devs, "duration": hours * 3600})
+            store.save_run("p", "CTS", TestResults("CTS", {}, "", ""),
+                           {"status": "DRY_RUN", "devices": ["d"], "duration": 1})
+            self.assertEqual(store.estimate_device_hours("CTS"), 48.0)  # median of 40/48/400
+            self.assertIsNone(store.estimate_device_hours("VTS"))
+
+    def test_scheduler_runs_concurrently_without_sharing_devices(self):
+        import threading
+        import time as _time
+
+        from xts_agent.config_loader import DeviceRequirements, PathsConfig, TestPlanConfig
+        from xts_agent.execution.tradefed_runner import ExecutionResult
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            suites = []
+            for prio, name in enumerate(("cts", "vts", "sts"), start=1):
+                tools = tmp / f"android-{name}" / "tools"
+                tools.mkdir(parents=True)
+                (tools / f"{name}-tradefed").write_text("#!/bin/sh\n", encoding="utf-8")
+                from xts_agent.config_loader import ShardingConfig
+
+                suites.append(SuiteConfig(name=name, plan=name, priority=prio,
+                                          package_path=str(tmp / f"android-{name}"),
+                                          sharding=ShardingConfig(shard_count="auto")))
+            plan = TestPlanConfig(name="p", suites=suites, devices=DeviceRequirements(min_devices=1),
+                                  paths=PathsConfig(), max_concurrent_suites=2)
+            from xts_agent.device.device_manager import DeviceInfo, DeviceManager
+
+            pool = [DeviceInfo(f"d{i}", "", "", "fp:user/k", 34, 100, "device", "aaos") for i in range(6)]
+            dm = DeviceManager()
+            dm.get_available_devices = MagicMock(return_value=pool)
+            dm.select_shard_pool = MagicMock(return_value=pool)
+
+            lock = threading.Lock()
+            in_use, spans, overlap = set(), [], []
+            running, peak = set(), []
+
+            def fake_execute(runner_self, cmd, timeout_hours, log_dir, env=None):
+                serials = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-s"]
+                with lock:
+                    overlap.extend(set(serials) & in_use)
+                    in_use.update(serials)
+                    running.add(cmd[3])
+                    peak.append(len(running))
+                start = _time.time()
+                _time.sleep(0.2 if cmd[3] == "cts" else 0.05)
+                with lock:
+                    in_use.difference_update(serials)
+                    running.discard(cmd[3])
+                spans.append((cmd[3], start, _time.time(), serials))
+                return ExecutionResult(True, None, 0, 0.1, None, "log")
+
+            executor = TestPlanExecutor(plan, dm, ShardManager(dm), None,
+                                        MagicMock(get_suite=MagicMock(return_value=None)),
+                                        results_dir=tmp / "results")
+            with patch.object(TradefedRunner, "execute", fake_execute):
+                result = executor.execute_plan(plan)
+
+        self.assertEqual(overlap, [])
+        self.assertLessEqual(max(peak), 2)  # never above max_concurrent_suites
+        by = {name: (start, end, serials) for name, start, end, serials in spans}
+        self.assertLess(by["vts"][0], by["cts"][1])  # cts and vts overlapped
+        self.assertGreaterEqual(by["sts"][0], by["vts"][1])  # sts waited for freed devices
+        self.assertGreater(len(by["cts"][2]), len(by["vts"][2]))  # cts weighted heavier
+        self.assertEqual(list(result.suites_results), ["cts", "vts", "sts"])
+        self.assertEqual(dm._allocated, set())
+
+    def test_concurrency_from_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "plan.yaml"
+            p.write_text("name: t\nmax_concurrent_suites: 3\nsuites: []\n", encoding="utf-8")
+            self.assertEqual(ConfigLoader(p).load_plan().max_concurrent_suites, 3)
+        self.assertEqual(ConfigLoader("config/test_plans/cts_only.yaml").load_plan().max_concurrent_suites, 1)
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

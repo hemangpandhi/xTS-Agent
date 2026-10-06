@@ -276,6 +276,8 @@ class TestPlanConfig:
     description: str = ""
     # "certification" runs must execute every module; "development" may filter
     profile: str = "development"
+    # >1 runs suites concurrently on an automatic, time-weighted device split
+    max_concurrent_suites: int = 1
     devices: DeviceRequirements = field(default_factory=DeviceRequirements)
     post_execution: PostExecutionConfig = field(default_factory=PostExecutionConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -372,10 +374,17 @@ class ConfigLoader:
         if profile == "certification":
             self._validate_certification(suites)
 
+        max_concurrent = int(
+            plan_data.get("max_concurrent_suites")
+            or plan_meta.get("max_concurrent_suites")
+            or (defaults.get("execution") or {}).get("max_concurrent_suites")
+            or 1
+        )
         plan = TestPlanConfig(
             name=name,
             description=description,
             profile=profile,
+            max_concurrent_suites=max(1, max_concurrent),
             suites=suites,
             devices=devices,
             post_execution=post_execution,

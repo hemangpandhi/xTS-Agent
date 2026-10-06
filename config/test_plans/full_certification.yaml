@@ -6,7 +6,9 @@ plan:
   name: "full_aaos_certification"
   description: "Complete xTS execution for AAOS Google Automotive Services (GAS) certification"
   target_completion_hours: 48
-  parallel_execution: false           # Suites run sequentially (TradeFed uses all devices per suite)
+  # Raise to run suites concurrently on an automatic, time-weighted device
+  # split (e.g. 2 = CTS alongside VTS/STS/...). 1 = sequential.
+  max_concurrent_suites: 1
 
 # Certification runs must execute every module: filters are rejected at load time.
 profile: certification

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .result_parser import TestResults
 
@@ -89,6 +89,25 @@ class ResultStore:
             except Exception:
                 continue
         return [k for k, states in outcomes.items() if "PASS" in states and "FAIL" in states]
+
+    def estimate_device_hours(self, suite_name: str, window_runs: int = 5) -> Optional[float]:
+        """Median device-hours (duration x devices) of recent completed runs."""
+        samples = []
+        for run in self.get_history(suite_name, window_runs * 3):
+            try:
+                meta = json.loads(run.get("metadata") or "{}")
+            except ValueError:
+                continue
+            duration = float(meta.get("duration") or 0)
+            devices = len(meta.get("devices") or [])
+            if duration > 0 and devices and meta.get("status") in ("PASSED", "FAILED"):
+                samples.append(duration / 3600 * devices)
+            if len(samples) >= window_runs:
+                break
+        if not samples:
+            return None
+        samples.sort()
+        return samples[len(samples) // 2]
 
     def get_trends(self, suite_name: str) -> Dict[str, List[float]]:
         history = self.get_history(suite_name, 50)

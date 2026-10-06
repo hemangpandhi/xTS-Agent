@@ -5,9 +5,10 @@ from __future__ import annotations
 import dataclasses
 import logging
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from xts_agent.config_loader import SuiteConfig, TestPlanConfig
 from xts_agent.results.result_parser import (
@@ -66,6 +67,7 @@ class TestPlanExecutor:
         suite_registry: Any,
         results_dir: str | Path = "./results",
         run_state: Optional[RunState] = None,
+        history_estimate: Optional[Callable[[str], Optional[float]]] = None,
     ):
         self.config = config
         self.device_manager = device_manager
@@ -76,6 +78,7 @@ class TestPlanExecutor:
         self.logs_dir = self.results_dir / "logs"
         self._last_runners: Dict[str, TradefedRunner] = {}
         self.run_state = run_state
+        self.history_estimate = history_estimate
         self._resuming = False
 
     def execute_plan(
@@ -98,26 +101,33 @@ class TestPlanExecutor:
         # Lower priority number runs first (cert plan: CTS=1 before CATBOX=6)
         suites.sort(key=lambda s: getattr(s, "priority", 100))
 
-        suites_results: Dict[str, SuiteResult] = {}
-        total_pass = total_fail = total_skip = 0
-        all_devices: List[str] = []
-        start_time = time.time()
-
         for suite_config in suites:
             if not suite_config.enabled:
                 logger.info("Skipping disabled suite: %s", suite_config.name)
-                continue
+        suites = [s for s in suites if s.enabled]
 
-            suite_res = self.execute_suite(suite_config, dry_run=dry_run, auto_retry=auto_retry)
+        start_time = time.time()
+        concurrency = int(getattr(plan, "max_concurrent_suites", 1) or 1)
+        if concurrency > 1 and len(suites) > 1 and not dry_run:
+            by_name = self._execute_parallel(plan, suites, auto_retry, concurrency)
+        else:
+            by_name = {}
+            for suite_config in suites:
+                suite_res = self.execute_suite(suite_config, dry_run=dry_run, auto_retry=auto_retry)
+                by_name[suite_config.name] = suite_res
+                if plan.devices.reboot_between_suites and not dry_run:
+                    self._reboot_between_suites(suite_res.device_serials)
+
+        # Report in priority order regardless of completion order
+        suites_results: Dict[str, SuiteResult] = {}
+        all_devices: List[str] = []
+        for suite_config in suites:
+            suite_res = by_name[suite_config.name]
             suites_results[suite_res.name] = suite_res
-            total_pass += suite_res.pass_count
-            total_fail += suite_res.fail_count
-            total_skip += suite_res.skip_count
             all_devices.extend(suite_res.device_serials)
-
-            if plan.devices.reboot_between_suites and not dry_run:
-                logger.info("Rebooting %s between suites", suite_res.device_serials)
-                self.device_manager.reboot_and_wait_all(list(suite_res.device_serials))
+        total_pass = sum(s.pass_count for s in suites_results.values())
+        total_fail = sum(s.fail_count for s in suites_results.values())
+        total_skip = sum(s.skip_count for s in suites_results.values())
 
         duration = time.time() - start_time
         final_status = overall_status(s.status for s in suites_results.values())
@@ -143,11 +153,112 @@ class TestPlanExecutor:
             profile=getattr(plan, "profile", "development"),
         )
 
+    def _reboot_between_suites(self, serials: List[str]) -> None:
+        if serials:
+            logger.info("Rebooting %s between suites", serials)
+            self.device_manager.reboot_and_wait_all(list(serials))
+
+    def _plan_pool(self, plan: TestPlanConfig) -> List[Any]:
+        """One same-build device pool for the whole plan (used by parallel runs)."""
+        available = self.device_manager.get_available_devices(
+            min_battery=plan.devices.min_battery_level
+        )
+        required = dict(plan.devices.properties or {})
+        if self._resuming and self.run_state is not None:
+            fps = {e.get("fingerprint") for e in (self.run_state.data.get("suites") or {}).values()}
+            fps.discard(None)
+            fps.discard("")
+            if len(fps) == 1:
+                required["ro.build.fingerprint"] = fps.pop()
+        return self.device_manager.select_shard_pool(
+            available, plan.devices.device_type or "any", required
+        )
+
+    def _execute_parallel(
+        self, plan: TestPlanConfig, suites: List[SuiteConfig], auto_retry: bool, concurrency: int
+    ) -> Dict[str, SuiteResult]:
+        """Run suites concurrently on an automatic, time-weighted device split.
+
+        The first ``concurrency`` suites (priority order) split the pool in
+        proportion to expected device-hours; when a suite finishes, its devices
+        are handed to the next pending suite.
+        """
+        results: Dict[str, SuiteResult] = {}
+        try:
+            pool = self._plan_pool(plan)
+            if len(pool) < max(plan.devices.min_devices, 1):
+                raise ValueError(
+                    f"Need at least {plan.devices.min_devices} device(s) on one build, found {len(pool)}"
+                )
+        except Exception as exc:
+            logger.error("Cannot start parallel execution: %s", exc)
+            for suite in suites:
+                results[suite.name] = self._failed_result(suite.name, [], str(exc))
+            return results
+
+        concurrency = min(concurrency, len(pool), len(suites))
+        pending = list(suites)
+        first, pending = pending[:concurrency], pending[concurrency:]
+        weights = {
+            s.name: self.shard_manager.suite_weight(s.name, self.history_estimate) for s in first
+        }
+        caps = {s.name: self.shard_manager.calculate_shard_count(len(pool), s) for s in first}
+        split = self.shard_manager.split_devices(pool, weights, caps)
+        assigned = {d.serial for devs in split.values() for d in devs}
+        free = [d for d in pool if d.serial not in assigned]
+        logger.info(
+            "Parallel split (max %s concurrent): %s",
+            concurrency,
+            {name: [d.serial for d in devs] for name, devs in split.items()},
+        )
+
+        with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="suite") as executor:
+            futures = {
+                executor.submit(self.execute_suite, s, False, auto_retry, split[s.name]): (s, split[s.name])
+                for s in first
+            }
+            while futures:
+                done, _ = wait(futures, return_when=FIRST_COMPLETED)
+                for future in done:
+                    suite, devs = futures.pop(future)
+                    try:
+                        results[suite.name] = future.result()
+                    except Exception as exc:  # execute_suite normally catches its own errors
+                        results[suite.name] = self._failed_result(suite.name, [], str(exc))
+                    if plan.devices.reboot_between_suites:
+                        self._reboot_between_suites([d.serial for d in devs])
+                    free.extend(devs)
+                # Never exceed the concurrency limit, even with idle devices
+                while pending and free and len(futures) < concurrency:
+                    nxt = pending.pop(0)
+                    cap = self.shard_manager.calculate_shard_count(len(free), nxt)
+                    take, free = free[:cap], free[cap:]
+                    logger.info("Starting %s on freed devices %s", nxt.name, [d.serial for d in take])
+                    futures[executor.submit(self.execute_suite, nxt, False, auto_retry, take)] = (nxt, take)
+        return results
+
+    @staticmethod
+    def _failed_result(name: str, serials: List[str], message: str) -> SuiteResult:
+        return SuiteResult(
+            name=name,
+            status="FAILED",
+            pass_count=0,
+            fail_count=0,
+            skip_count=0,
+            duration=0.0,
+            session_id=0,
+            results_dir="",
+            retry_count=0,
+            device_serials=list(serials),
+            error_message=message,
+        )
+
     def execute_suite(
         self,
         suite_config: SuiteConfig,
         dry_run: bool = False,
         auto_retry: bool = False,
+        assigned_devices: Optional[List[Any]] = None,
     ) -> SuiteResult:
         name = suite_config.name
         plan_name = suite_config.plan
@@ -202,16 +313,22 @@ class TestPlanExecutor:
                 logger.info("Resume: %s already PASSED in session %s; skipping", name, entry.get("session_id"))
                 return self._suite_result_from_entry(name, entry)
 
-            available = self.device_manager.get_available_devices(
-                min_battery=self.config.devices.min_battery_level
-            )
             device_type = self.config.devices.device_type or "any"
-            required_props = dict(self.config.devices.properties or {})
-            if entry and entry.get("fingerprint"):
-                # A resumed session may only continue on the build it started on
-                required_props["ro.build.fingerprint"] = entry["fingerprint"]
-            pool = self.device_manager.select_shard_pool(available, device_type, required_props)
-            if len(pool) < self.config.devices.min_devices:
+            if assigned_devices is not None:
+                # Parallel scheduler already picked same-build devices for us
+                pool = list(assigned_devices)
+                available = pool
+                device_type = "any"
+            else:
+                available = self.device_manager.get_available_devices(
+                    min_battery=self.config.devices.min_battery_level
+                )
+                required_props = dict(self.config.devices.properties or {})
+                if entry and entry.get("fingerprint"):
+                    # A resumed session may only continue on the build it started on
+                    required_props["ro.build.fingerprint"] = entry["fingerprint"]
+                pool = self.device_manager.select_shard_pool(available, device_type, required_props)
+            if assigned_devices is None and len(pool) < self.config.devices.min_devices:
                 raise ValueError(
                     f"Need at least {self.config.devices.min_devices} {device_type} device(s) "
                     f"on one build, found {len(pool)} (of {len(available)} available)"
@@ -284,19 +401,7 @@ class TestPlanExecutor:
 
         except Exception as exc:
             logger.error("Suite %s failed before/during execution: %s", name, exc)
-            return SuiteResult(
-                name=name,
-                status="FAILED",
-                pass_count=0,
-                fail_count=0,
-                skip_count=0,
-                duration=0.0,
-                session_id=0,
-                results_dir="",
-                retry_count=0,
-                device_serials=serials,
-                error_message=str(exc),
-            )
+            return self._failed_result(name, serials, str(exc))
         finally:
             if serials:
                 self.device_manager.release_devices(serials)
