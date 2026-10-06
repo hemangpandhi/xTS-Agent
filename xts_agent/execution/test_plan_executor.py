@@ -185,23 +185,33 @@ class TestPlanExecutor:
             available = self.device_manager.get_available_devices(
                 min_battery=self.config.devices.min_battery_level
             )
-            available_count = len(available)
-            if available_count < self.config.devices.min_devices:
+            device_type = self.config.devices.device_type or "any"
+            pool = self.device_manager.select_shard_pool(
+                available, device_type, self.config.devices.properties
+            )
+            if len(pool) < self.config.devices.min_devices:
                 raise ValueError(
-                    f"Need at least {self.config.devices.min_devices} devices, "
-                    f"found {available_count}"
+                    f"Need at least {self.config.devices.min_devices} {device_type} device(s) "
+                    f"on one build, found {len(pool)} (of {len(available)} available)"
                 )
 
-            shard_count = self.shard_manager.calculate_shard_count(
-                available_count, suite_config
-            )
+            shard_count = self.shard_manager.calculate_shard_count(len(pool), suite_config)
             if shard_count < 1:
                 raise ValueError("No devices available for sharding!")
 
-            device_type = self.config.devices.device_type or "any"
-            devices = self.device_manager.allocate_devices(shard_count, device_type)
+            devices = self.device_manager.allocate_devices(
+                shard_count, device_type, candidates=pool
+            )
             serials = [d.serial for d in devices]
-            logger.info("Allocated %s device(s): %s (shards=%s)", len(devices), serials, shard_count)
+            logger.info(
+                "Allocated %s device(s): %s (shards=%s, build=%s)",
+                len(devices),
+                serials,
+                shard_count,
+                devices[0].build_fingerprint if devices else "",
+            )
+            if getattr(self.config, "profile", "") == "certification" and devices:
+                _warn_if_not_user_build(devices[0].build_fingerprint)
 
             if not runner.tradefed_script.exists() and not (
                 runner.tools_dir / command_name
@@ -336,3 +346,14 @@ class TestPlanExecutor:
 def _error_message(reason: str, exec_res: ExecutionResult) -> str:
     tail = exec_res.output_excerpt[-500:] if exec_res.output_excerpt else ""
     return f"{reason}\n{tail}".strip()
+
+
+def _warn_if_not_user_build(fingerprint: str) -> None:
+    """Fingerprint ends with ``:<build_type>/<tags>``; submissions need ``user``."""
+    build_type = fingerprint.rsplit(":", 1)[-1].split("/", 1)[0] if ":" in fingerprint else ""
+    if build_type != "user":
+        logger.warning(
+            "Certification profile on a %r build (%s); official submissions require a user build",
+            build_type or "unknown",
+            fingerprint,
+        )

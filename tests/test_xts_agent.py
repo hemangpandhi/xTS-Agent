@@ -334,6 +334,7 @@ class ExecutorPriorityAndDevicesTests(unittest.TestCase):
         dm = MagicMock()
         dm.get_available_devices.return_value = [device]
         dm.allocate_devices.return_value = [device]
+        dm.select_shard_pool.return_value = [device]
 
         shard = ShardManager(dm)
         registry = MagicMock()
@@ -361,6 +362,7 @@ class ExecutorPriorityAndDevicesTests(unittest.TestCase):
         dm = MagicMock()
         dm.get_available_devices.return_value = [device]
         dm.allocate_devices.return_value = [device]
+        dm.select_shard_pool.return_value = [device]
 
         executor = TestPlanExecutor(
             plan, dm, ShardManager(dm), None, MagicMock(get_suite=MagicMock(return_value=None)),
@@ -387,6 +389,7 @@ class ExecutorPriorityAndDevicesTests(unittest.TestCase):
         dm = MagicMock()
         dm.get_available_devices.return_value = [device]
         dm.allocate_devices.return_value = [device]
+        dm.select_shard_pool.return_value = [device]
 
         executor = TestPlanExecutor(
             plan,
@@ -720,6 +723,54 @@ class ScopedCleanupTests(unittest.TestCase):
             res = runner.execute([str(script)], timeout_hours=0.01, log_dir=logs)
             self.assertEqual(res.return_code, 0)
             self.assertEqual(list(logs.glob("*.pid")), [])
+
+
+class ShardPoolTests(unittest.TestCase):
+    def _dev(self, serial, fp, dtype="aaos"):
+        from xts_agent.device.device_manager import DeviceInfo
+
+        return DeviceInfo(serial, "m", "p", fp, 34, 100, "device", dtype)
+
+    def test_shards_only_across_one_build(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        a = "google/car/cf:16/CP2A/1:userdebug/dev-keys"
+        b = "google/car/cf:16/CP2A/2:userdebug/dev-keys"
+        devices = [self._dev("s1", a), self._dev("s2", b), self._dev("s3", a), self._dev("s4", "")]
+        pool = DeviceManager().select_shard_pool(devices)
+        self.assertEqual([d.serial for d in pool], ["s1", "s3"])
+
+    def test_device_type_filtered_before_counting(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        fp = "x:user/release-keys"
+        devices = [self._dev(f"p{i}", fp, "phone") for i in range(6)] + [
+            self._dev(f"a{i}", fp) for i in range(4)
+        ]
+        dm = DeviceManager()
+        pool = dm.select_shard_pool(devices, "aaos")
+        self.assertEqual(len(pool), 4)
+        allocated = dm.allocate_devices(len(pool), "aaos", candidates=pool)
+        self.assertEqual({d.serial for d in allocated}, {"a0", "a1", "a2", "a3"})
+
+    def test_required_props_filter(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        fp = "x:user/release-keys"
+        devices = [self._dev("s1", fp), self._dev("s2", fp)]
+        props = {"s1": {"ro.product.model": "HU-A"}, "s2": {"ro.product.model": "HU-B"}}
+        with patch.object(DeviceManager, "get_device_properties", side_effect=lambda s: props[s]):
+            pool = DeviceManager().select_shard_pool(devices, required_props={"ro.product.model": "HU-B"})
+        self.assertEqual([d.serial for d in pool], ["s2"])
+
+    def test_user_build_warning(self):
+        from xts_agent.execution.test_plan_executor import _warn_if_not_user_build
+
+        with patch("xts_agent.execution.test_plan_executor.logger") as log:
+            _warn_if_not_user_build("google/cf/cf:16/CP2A/1:userdebug/dev-keys")
+            self.assertEqual(log.warning.call_count, 1)
+            _warn_if_not_user_build("oem/hu/hu:16/AB1/42:user/release-keys")
+            self.assertEqual(log.warning.call_count, 1)
 
 
 class LoadLatestPlanResultTests(unittest.TestCase):

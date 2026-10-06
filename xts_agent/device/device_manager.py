@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .adb_wrapper import AdbError, AdbWrapper
 
@@ -229,12 +229,62 @@ class DeviceManager:
                 available.append(d)
         return available
 
-    def allocate_devices(self, count: int, device_type: str = "any") -> List[DeviceInfo]:
-        available = self.get_available_devices()
+    def select_shard_pool(
+        self,
+        devices: List[DeviceInfo],
+        device_type: str = "any",
+        required_props: Optional[Dict[str, str]] = None,
+    ) -> List[DeviceInfo]:
+        """Largest set of matching devices that all run the same build.
+
+        Sharded xTS results are only valid when every shard ran the same
+        ``ro.build.fingerprint``; mixing builds silently corrupts a run.
+        """
+        matching = [d for d in devices if device_type == "any" or d.device_type == device_type]
+        if required_props:
+            matching = [d for d in matching if self._has_props(d.serial, required_props)]
+
+        groups: Dict[str, List[DeviceInfo]] = {}
+        unknown = []
+        for d in matching:
+            if d.build_fingerprint:
+                groups.setdefault(d.build_fingerprint, []).append(d)
+            else:
+                unknown.append(d.serial)
+        if unknown:
+            logger.warning("Excluding devices with unknown build fingerprint: %s", unknown)
+        if not groups:
+            return []
+        pool = max(groups.values(), key=len)
+        if len(groups) > 1:
+            logger.warning(
+                "Devices run %s different builds; sharding only across %s device(s) on %s. Others: %s",
+                len(groups),
+                len(pool),
+                pool[0].build_fingerprint,
+                {fp: [d.serial for d in ds] for fp, ds in groups.items() if ds is not pool},
+            )
+        return pool
+
+    def _has_props(self, serial: str, required: Dict[str, str]) -> bool:
+        props = self.get_device_properties(serial)
+        mismatched = {k: props.get(k) for k, v in required.items() if props.get(k) != str(v)}
+        if mismatched:
+            logger.info("Device %s does not match required props: %s", serial, mismatched)
+        return not mismatched
+
+    def allocate_devices(
+        self,
+        count: int,
+        device_type: str = "any",
+        candidates: Optional[List[DeviceInfo]] = None,
+    ) -> List[DeviceInfo]:
+        available = candidates if candidates is not None else self.get_available_devices()
         matching = [
             d
             for d in available
-            if device_type == "any" or d.device_type == device_type
+            if d.serial not in self._allocated
+            and (device_type == "any" or d.device_type == device_type)
         ]
         if len(matching) < count:
             raise ValueError(
