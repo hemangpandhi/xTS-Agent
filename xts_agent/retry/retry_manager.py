@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -87,8 +88,9 @@ class RetryManager:
 
             if self.isolation_handler and device_serials:
                 grade = suite_config.retry.isolation_grade
-                for serial in device_serials:
-                    self.isolation_handler.apply_isolation(serial, grade)
+                # Isolate all shards concurrently (each reboot can take minutes)
+                with ThreadPoolExecutor(max_workers=min(16, len(device_serials))) as pool:
+                    list(pool.map(lambda s: self.isolation_handler.apply_isolation(s, grade), device_serials))
 
             if cooldown > 0:
                 time.sleep(min(cooldown, 300))

@@ -102,10 +102,8 @@ class TestPlanExecutor:
             all_devices.extend(suite_res.device_serials)
 
             if plan.devices.reboot_between_suites and not dry_run:
-                for serial in suite_res.device_serials:
-                    logger.info("Rebooting %s between suites", serial)
-                    self.device_manager.reboot_device(serial)
-                    self.device_manager.wait_for_device(serial)
+                logger.info("Rebooting %s between suites", suite_res.device_serials)
+                self.device_manager.reboot_and_wait_all(list(suite_res.device_serials))
 
         duration = time.time() - start_time
         # Preserve order while uniquifying

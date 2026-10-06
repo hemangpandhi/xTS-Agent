@@ -885,6 +885,70 @@ class ShardPoolTests(unittest.TestCase):
             self.assertEqual(log.warning.call_count, 1)
 
 
+class DiscoveryTests(unittest.TestCase):
+    DUMPSYS = (
+        "Active default network: 100\n"
+        "  NetworkAgentInfo{network{100}  ni{WIFI CONNECTED}  nc{[ Transports: WIFI "
+        "Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&VALIDATED&NOT_VPN ]}}\n"
+        "  NetworkAgentInfo{network{101}  ni{MOBILE} nc{[ Capabilities: INTERNET ]}}\n"
+    )
+
+    def test_validated_network_reads_active_network_only(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        dm = DeviceManager()
+        with patch("xts_agent.device.device_manager.AdbWrapper.shell", return_value=self.DUMPSYS):
+            self.assertTrue(dm.has_validated_network("s"))
+        unvalidated = self.DUMPSYS.replace("Active default network: 100", "Active default network: 101")
+        with patch("xts_agent.device.device_manager.AdbWrapper.shell", return_value=unvalidated):
+            self.assertFalse(dm.has_validated_network("s"))
+        # The real Cuttlefish case: INTERNET without VALIDATED
+        no_val = self.DUMPSYS.replace("&VALIDATED", "")
+        with patch("xts_agent.device.device_manager.AdbWrapper.shell", return_value=no_val):
+            self.assertFalse(dm.has_validated_network("s"))
+
+    def test_discovery_probes_in_parallel_and_caches_type(self):
+        import threading
+        import time as _time
+
+        from xts_agent.device.device_manager import DeviceManager
+
+        serials = [f"s{i}" for i in range(8)]
+        listing = "List of devices attached\n" + "".join(f"{s} device\n" for s in serials) + "x offline\n"
+        active = {"now": 0, "peak": 0}
+        lock = threading.Lock()
+
+        def slow_props(serial):
+            with lock:
+                active["now"] += 1
+                active["peak"] = max(active["peak"], active["now"])
+            _time.sleep(0.05)
+            with lock:
+                active["now"] -= 1
+            return {"ro.build.fingerprint": "fp:user/k"}
+
+        dm = DeviceManager()
+        with patch("xts_agent.device.device_manager.AdbWrapper._run_cmd", return_value=listing), \
+                patch.object(DeviceManager, "get_device_properties", side_effect=slow_props), \
+                patch.object(DeviceManager, "is_aaos_device", return_value=True) as aaos, \
+                patch.object(DeviceManager, "_read_battery", return_value=(80, True)):
+            first = dm.discover_devices()
+            second = dm.discover_devices()
+        self.assertEqual([d.serial for d in first], serials + ["x"])
+        self.assertEqual(first[-1].state, "offline")
+        self.assertGreater(active["peak"], 1)
+        self.assertEqual(aaos.call_count, len(serials))  # cached on 2nd pass
+        self.assertEqual([d.device_type for d in second[:-1]], ["aaos"] * len(serials))
+
+    def test_reboot_and_wait_all_reports_failures(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        dm = DeviceManager()
+        with patch.object(DeviceManager, "reboot_device", return_value=True), \
+                patch.object(DeviceManager, "wait_for_device", side_effect=lambda s, t: s != "bad"):
+            self.assertEqual(dm.reboot_and_wait_all(["a", "bad"]), {"a": True, "bad": False})
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .adb_wrapper import AdbError, AdbWrapper
 
@@ -33,61 +35,68 @@ class DeviceInfo:
 
 
 class DeviceManager:
+    MAX_PROBE_WORKERS = 16
+
     def __init__(self, adb_timeout: int = 30):
         self._allocated: set[str] = set()
         self.adb_timeout = adb_timeout
+        self._type_cache: Dict[Tuple[str, str], str] = {}
 
     def discover_devices(self) -> List[DeviceInfo]:
-        devices: List[DeviceInfo] = []
+        """List attached devices, probing them in parallel.
+
+        Discovery only reads what allocation needs (props, type, battery); the
+        full health probe (storage, network, screen) is ``check_device_health``.
+        """
         try:
             output = AdbWrapper._run_cmd(["adb", "devices", "-l"], timeout=15)
-            lines = output.splitlines()[1:]
-            for line in lines:
-                if not line.strip():
-                    continue
-                parts = line.split()
-                if len(parts) < 2:
-                    continue
-                serial = parts[0]
-                state = parts[1]
-
-                if state != "device":
-                    devices.append(
-                        DeviceInfo(serial, "", "", "", 0, 0, state, "unknown")
-                    )
-                    continue
-
-                props = self.get_device_properties(serial)
-                model = props.get("ro.product.model", "")
-                product = props.get("ro.product.name", "")
-                fingerprint = props.get("ro.build.fingerprint", "")
-                sdk_str = props.get("ro.build.version.sdk", "0")
-                sdk_version = int(sdk_str) if sdk_str.isdigit() else 0
-
-                if self.is_aaos_device(serial):
-                    device_type = "aaos"
-                elif "emulator" in serial or serial.startswith("0.0.0.0"):
-                    device_type = "emulator"
-                else:
-                    device_type = "phone"
-
-                health = self.check_device_health(serial)
-                devices.append(
-                    DeviceInfo(
-                        serial=serial,
-                        model=model,
-                        product=product,
-                        build_fingerprint=fingerprint,
-                        sdk_version=sdk_version,
-                        battery_level=health.battery_level,
-                        state=state,
-                        device_type=device_type,
-                    )
-                )
         except AdbError as e:
             logger.error("Failed to discover devices: %s", e)
+            return []
 
-        return devices
+        entries = []
+        for line in output.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 2:
+                entries.append((parts[0], parts[1]))
+        if not entries:
+            return []
+        workers = min(self.MAX_PROBE_WORKERS, len(entries))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(lambda e: self._probe_device(*e), entries))
+
+    def _probe_device(self, serial: str, state: str) -> DeviceInfo:
+        if state != "device":
+            return DeviceInfo(serial, "", "", "", 0, 0, state, "unknown")
+
+        props = self.get_device_properties(serial)
+        fingerprint = props.get("ro.build.fingerprint", "")
+        sdk_str = props.get("ro.build.version.sdk", "0")
+
+        # Device type only changes on reflash, so cache it per (serial, build)
+        cache_key = (serial, fingerprint)
+        device_type = self._type_cache.get(cache_key)
+        if device_type is None:
+            if self.is_aaos_device(serial):
+                device_type = "aaos"
+            elif self._props_are_virtual(props) or "emulator" in serial:
+                device_type = "emulator"
+            else:
+                device_type = "phone"
+            if fingerprint:
+                self._type_cache[cache_key] = device_type
+
+        level, _ = self._read_battery(serial)
+        return DeviceInfo(
+            serial=serial,
+            model=props.get("ro.product.model", ""),
+            product=props.get("ro.product.name", ""),
+            build_fingerprint=fingerprint,
+            sdk_version=int(sdk_str) if sdk_str.isdigit() else 0,
+            battery_level=level,
+            state=state,
+            device_type=device_type,
+        )
 
     def get_device_properties(self, serial: str) -> Dict[str, str]:
         props: Dict[str, str] = {}
@@ -102,25 +111,46 @@ class DeviceManager:
             pass
         return props
 
+    def _read_battery(self, serial: str) -> Tuple[int, bool]:
+        """Return (level, charging); level defaults to 50 when unreadable."""
+        level = 50
+        charging = False
+        try:
+            out = AdbWrapper.shell(serial, "dumpsys battery", timeout=self.adb_timeout, silent=True)
+        except AdbError:
+            return level, charging
+        for line in out.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("level:"):
+                try:
+                    level = int(stripped.split(":", 1)[1].strip())
+                except ValueError:
+                    pass
+            if ("AC powered:" in stripped or "USB powered:" in stripped) and "true" in stripped.lower():
+                charging = True
+        return level, charging
+
+    def has_validated_network(self, serial: str) -> bool:
+        """True when Android has validated internet on the default network.
+
+        Uses the platform's own validation instead of pinging 8.8.8.8, which
+        lab networks often block and which costs seconds per device.
+        """
+        try:
+            out = AdbWrapper.shell(serial, "dumpsys connectivity", timeout=self.adb_timeout, silent=True)
+        except AdbError:
+            return False
+        active = re.search(r"Active default network:\s*(\d+)", out)
+        if not active:
+            return False
+        for line in out.splitlines():
+            if f"NetworkAgentInfo{{network{{{active.group(1)}}}" in line:
+                return re.search(r"Capabilities: \S*\bVALIDATED\b", line) is not None
+        return False
+
     def check_device_health(self, serial: str) -> HealthReport:
         try:
-            dumpsys_battery = AdbWrapper.shell(
-                serial, "dumpsys battery", timeout=self.adb_timeout, silent=True
-            )
-            level = 50
-            ac_powered = False
-            usb_powered = False
-            for line in dumpsys_battery.splitlines():
-                stripped = line.strip()
-                if stripped.startswith("level:"):
-                    try:
-                        level = int(stripped.split(":", 1)[1].strip())
-                    except ValueError:
-                        pass
-                if "AC powered:" in stripped and "true" in stripped.lower():
-                    ac_powered = True
-                if "USB powered:" in stripped and "true" in stripped.lower():
-                    usb_powered = True
+            level, charging = self._read_battery(serial)
 
             storage_out = AdbWrapper.shell(serial, "df /data", timeout=self.adb_timeout, silent=True)
             free_mb = 1000
@@ -134,16 +164,7 @@ class DeviceManager:
             except Exception:
                 pass
 
-            has_internet = False
-            try:
-                ping = AdbWrapper.shell(serial, "ping -c 1 -W 2 8.8.8.8", timeout=10, silent=True)
-                has_internet = (
-                    "1 received" in ping
-                    or "1 packets received" in ping
-                    or "bytes from" in ping
-                )
-            except AdbError:
-                has_internet = False
+            has_internet = self.has_validated_network(serial)
 
             is_screen_on = True
             try:
@@ -153,21 +174,14 @@ class DeviceManager:
                     timeout=self.adb_timeout,
                     silent=True
                 )
-                is_screen_on = "Awake" in dumpsys_power or "mWakefulness=Awake" in dumpsys_power
+                is_screen_on = "Awake" in dumpsys_power
             except AdbError:
                 pass
 
             # Cuttlefish / network ADB and emulators are exempt from battery gate
             battery_ok = level >= 20 or "0.0.0.0" in serial or "emulator" in serial
             healthy = battery_ok and free_mb > 500
-            return HealthReport(
-                level,
-                ac_powered or usb_powered,
-                free_mb,
-                has_internet,
-                is_screen_on,
-                healthy,
-            )
+            return HealthReport(level, charging, free_mb, has_internet, is_screen_on, healthy)
         except AdbError:
             return HealthReport(0, False, 0, False, False, False)
 
@@ -197,7 +211,9 @@ class DeviceManager:
 
     def is_virtual_device(self, serial: str) -> bool:
         """True for Cuttlefish/emulator, judged by device props rather than serial."""
-        props = self.get_device_properties(serial)
+        return self._props_are_virtual(self.get_device_properties(serial))
+
+    def _props_are_virtual(self, props: Dict[str, str]) -> bool:
         if not props:
             return False
         if props.get("ro.kernel.qemu") == "1" or props.get("ro.boot.qemu") == "1":
@@ -301,16 +317,33 @@ class DeviceManager:
         for s in serials:
             self._allocated.discard(s)
 
+    def reboot_and_wait_all(self, serials: List[str], timeout: int = 120) -> Dict[str, bool]:
+        """Reboot devices concurrently; returns serial -> came back healthy."""
+        def _one(serial: str) -> bool:
+            return self.reboot_device(serial) and self.wait_for_device(serial, timeout)
+
+        if not serials:
+            return {}
+        with ThreadPoolExecutor(max_workers=min(self.MAX_PROBE_WORKERS, len(serials))) as pool:
+            results = dict(zip(serials, pool.map(_one, serials)))
+        failed = [s for s, ok in results.items() if not ok]
+        if failed:
+            logger.warning("Devices did not come back after reboot: %s", failed)
+        return results
+
     def health_check_all(self, reboot_unhealthy: bool = False) -> Dict[str, HealthReport]:
-        reports: Dict[str, HealthReport] = {}
-        for device in self.discover_devices():
-            if device.state != "device":
-                reports[device.serial] = HealthReport(0, False, 0, False, False, False)
-                continue
-            report = self.check_device_health(device.serial)
-            reports[device.serial] = report
-            if reboot_unhealthy and not report.healthy:
-                logger.warning("Rebooting unhealthy device %s", device.serial)
-                self.reboot_device(device.serial)
-                self.wait_for_device(device.serial)
+        devices = self.discover_devices()
+        online = [d.serial for d in devices if d.state == "device"]
+        reports: Dict[str, HealthReport] = {
+            d.serial: HealthReport(0, False, 0, False, False, False)
+            for d in devices
+            if d.state != "device"
+        }
+        if online:
+            with ThreadPoolExecutor(max_workers=min(self.MAX_PROBE_WORKERS, len(online))) as pool:
+                reports.update(zip(online, pool.map(self.check_device_health, online)))
+        unhealthy = [s for s in online if not reports[s].healthy]
+        if reboot_unhealthy and unhealthy:
+            logger.warning("Rebooting unhealthy devices: %s", unhealthy)
+            self.reboot_and_wait_all(unhealthy)
         return reports
