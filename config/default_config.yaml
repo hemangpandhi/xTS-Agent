@@ -137,6 +137,17 @@ jira:
   comment_on_existing: true             # comment on the open ticket when a group recurs
   report_url: "${CI_JOB_URL:-}"         # linked from tickets when set
 
+# Optional archive of large artifacts (result zips, reports, triage) in S3 or
+# on-prem MinIO; URLs are recorded in the results database. Credentials come
+# from the standard AWS env vars (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY).
+artifacts:
+  store: "none"                         # none | s3  (needs the [s3] extra)
+  bucket: ""
+  prefix: "xts"
+  endpoint_url: ""                      # e.g. http://minio.lab:9000 for MinIO
+  region: ""
+  upload: ["results", "reports", "triage"]
+
 ats2:
   enabled: false                        # Set true to use OmniLab ATS 2.0
   base_url: ""                          # ATS 2.0 server URL

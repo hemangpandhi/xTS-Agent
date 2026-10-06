@@ -1964,6 +1964,40 @@ class StorageBackendTests(unittest.TestCase):
         self.assertNotIn("s3cret", repr(Database("postgresql://xts:s3cret@db.lab:5432/xts")))
 
 
+class ArtifactStoreTests(unittest.TestCase):
+    def test_reuses_tradefed_zip_zips_otherwise_and_respects_selection(self):
+        from xts_agent.storage.artifacts import ArtifactConfig, ArtifactStore, record_artifacts
+        from xts_agent.storage.db import Database
+
+        client = MagicMock()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            with_zip = tmp / "2026.10.06_01"
+            with_zip.mkdir()
+            (with_zip / "test_result.xml").write_text("<Result/>")
+            (tmp / "2026.10.06_01.zip").write_text("tf zip")
+            no_zip = tmp / "2026.10.07_01"
+            no_zip.mkdir()
+            (no_zip / "test_result.xml").write_text("<Result/>")
+            report = tmp / "r.json"
+            report.write_text("{}")
+            suites = {
+                "CTS": SuiteResult("CTS", "PASSED", 1, 0, 0, 1, 1, str(with_zip), 0),
+                "VTS": SuiteResult("VTS", "FAILED", 0, 0, 0, 1, 1, str(no_zip), 0),
+                "STS": SuiteResult("STS", "FAILED", 0, 0, 0, 1, 0, "", 0),  # no results dir
+            }
+            cfg = ArtifactConfig(store="s3", bucket="b", upload=["results"])
+            urls = ArtifactStore(cfg, client).upload_run("My Plan", suites, [report])
+            self.assertEqual(sorted(urls), ["CTS/results", "VTS/results"])  # reports not selected
+            uploaded = {Path(c[0][0]).name for c in client.upload_file.call_args_list}
+            self.assertIn("2026.10.06_01.zip", uploaded)  # TradeFed's own zip reused
+            self.assertTrue(urls["CTS/results"].startswith("s3://b/xts/My_Plan/"))
+            db = Database(tmp / "db.sqlite")
+            record_artifacts(db, "My Plan", urls)
+            self.assertEqual(db.query_one("SELECT COUNT(*) FROM run_artifacts")[0], 2)
+        self.assertEqual(ArtifactStore(ArtifactConfig()).upload_run("p", suites, []), {})  # disabled
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

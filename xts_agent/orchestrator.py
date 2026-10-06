@@ -50,6 +50,8 @@ class Orchestrator:
         self.last_plan_result: Optional[PlanResult] = None
         self.last_rca_report = None
         self.last_triage = None
+        self._last_report_files: List[Path] = []
+        self._last_triage_path: Optional[Path] = None
         self._results_dir = Path("results")
 
     def _initialize(self) -> TestPlanConfig:
@@ -153,6 +155,7 @@ class Orchestrator:
         if not dry_run:
             # Upload once per execution; regenerating reports must not re-upload
             self._upload_ats2(results)
+            self._upload_artifacts(results)
         self._persist_results(results)
         notifier.notify_plan_complete(results)
         return results
@@ -210,6 +213,7 @@ class Orchestrator:
         self.generate_reports(result, rca_report=rca)
         # Retry produced new (cumulative) sessions, so upload those results
         self._upload_ats2(result)
+        self._upload_artifacts(result)
         return result
 
     def _load_latest_plan_result(self) -> Optional[PlanResult]:
@@ -391,6 +395,7 @@ class Orchestrator:
         self._run_group_ai(report)
         self._file_jira(report, stamp)
         path = report.save(self._results_dir / "triage" / f"triage_{stamp}.json")
+        self._last_triage_path = path
         logger.info("Triage report: %s", path)
         self.last_triage = report
         return report
@@ -427,6 +432,27 @@ class Orchestrator:
         )
         for kind, path in written.items():
             logger.info("Generated %s report: %s", kind, Path(path).absolute())
+        self._last_report_files = [Path(p) for p in written.values()]
+
+    def _upload_artifacts(self, results: PlanResult) -> None:
+        from xts_agent.storage.artifacts import ArtifactStore, record_artifacts
+
+        store = ArtifactStore(self.plan.artifacts) if self.plan.artifacts else None
+        if store is None or not store.enabled:
+            return
+        try:
+            urls = store.upload_run(
+                results.plan_name,
+                results.suites_results,
+                self._last_report_files,
+                self._last_triage_path,
+            )
+            record_artifacts(self.database(), results.plan_name, urls)
+            for name, url in urls.items():
+                logger.info("Artifact %s -> %s", name, url)
+        except Exception as exc:
+            # Never fail a finished run because the archive is unreachable
+            logger.error("Artifact upload failed: %s", exc)
 
     def _upload_ats2(self, results: PlanResult) -> None:
         ats_cfg = self.plan.ats2

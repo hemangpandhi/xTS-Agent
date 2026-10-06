@@ -321,6 +321,7 @@ class TestPlanConfig:
     device_prep: DevicePrepConfig = field(default_factory=DevicePrepConfig)
     triage: TriageConfig = field(default_factory=TriageConfig)
     jira: Any = None  # xts_agent.triage.jira_filer.JiraConfig
+    artifacts: Any = None  # xts_agent.storage.artifacts.ArtifactConfig
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -439,6 +440,7 @@ class ConfigLoader:
                 )
             ),
             jira=self._parse_jira(defaults, plan_data),
+            artifacts=self._parse_artifacts(defaults, plan_data),
             raw_defaults=defaults,
         )
         self._apply_secret_env_overrides(plan)
@@ -478,6 +480,13 @@ class ConfigLoader:
                 f"({'; '.join(problems)}). Move filters to a development plan and track "
                 "known failures as waivers instead."
             )
+
+    @staticmethod
+    def _parse_artifacts(defaults: dict, plan_data: dict):
+        from xts_agent.storage.artifacts import ArtifactConfig
+
+        merged = _deep_merge(defaults.get("artifacts") or {}, plan_data.get("artifacts") or {})
+        return ArtifactConfig(**_filter_dataclass_kwargs(ArtifactConfig, merged))
 
     @staticmethod
     def _parse_jira(defaults: dict, plan_data: dict):
