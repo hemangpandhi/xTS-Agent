@@ -690,6 +690,25 @@ class RetryManagerTests(unittest.TestCase):
         self.assertEqual(res.status, "PASSED")
         self.assertEqual(res.session_id, 6)
 
+    def test_failed_but_incomplete_still_retries_not_executed(self):
+        from xts_agent.execution.tradefed_runner import ExecutionResult
+
+        # Shape of real session 7: 1303 failures and 524 of 1251 modules done
+        failed_incomplete = INCOMPLETE_XML.replace('failed="0"', 'failed="1303"')
+        suite = SuiteConfig(name="cts", plan="cts")
+        suite.retry.max_retries = 1
+        runner = TradefedRunner("/opt/xts/android-cts", "cts-tradefed")
+        with tempfile.TemporaryDirectory() as tmp:
+            xml = Path(tmp) / "test_result.xml"
+            xml.write_text(failed_incomplete, encoding="utf-8")
+            current = self._suite_result("FAILED", 7)
+            current.details = ResultParser().parse_xml(xml)
+            with patch("time.sleep"), patch.object(
+                TradefedRunner, "execute", return_value=ExecutionResult(True, None, 0, 1.0, None, "log")
+            ) as exec_mock:
+                self._manager().retry_suite_until_done(runner, current, suite, ["s1"], tmp)
+        self.assertNotIn("--retry-type", exec_mock.call_args[0][0])
+
     def test_retry_without_results_stops_and_keeps_status(self):
         from xts_agent.execution.tradefed_runner import ExecutionResult
 
@@ -947,6 +966,102 @@ class DiscoveryTests(unittest.TestCase):
         with patch.object(DeviceManager, "reboot_device", return_value=True), \
                 patch.object(DeviceManager, "wait_for_device", side_effect=lambda s, t: s != "bad"):
             self.assertEqual(dm.reboot_and_wait_all(["a", "bad"]), {"a": True, "bad": False})
+
+
+class ResumeTests(unittest.TestCase):
+    FP = "oem/hu/hu:16/AB1/42:user/release-keys"
+
+    def _setup(self, tmp: Path):
+        from xts_agent.config_loader import DeviceRequirements, PathsConfig, TestPlanConfig
+        from xts_agent.execution.run_state import RunState
+
+        for suite in ("cts", "vts"):
+            tools = tmp / f"android-{suite}" / "tools"
+            tools.mkdir(parents=True)
+            (tools / f"{suite}-tradefed").write_text("#!/bin/sh\n", encoding="utf-8")
+        suites = [
+            SuiteConfig(name="cts", plan="cts", priority=1, package_path=str(tmp / "android-cts")),
+            SuiteConfig(name="vts", plan="vts", priority=2, package_path=str(tmp / "android-vts")),
+        ]
+        plan = TestPlanConfig(
+            name="cert", suites=suites, devices=DeviceRequirements(min_devices=1), paths=PathsConfig()
+        )
+        device = MagicMock(serial="hu-1", device_type="aaos", build_fingerprint=self.FP)
+        dm = MagicMock()
+        dm.get_available_devices.return_value = [device]
+        dm.select_shard_pool.return_value = [device]
+        dm.allocate_devices.return_value = [device]
+        state = RunState.for_plan(tmp / "results", "cert")
+        executor = TestPlanExecutor(
+            plan, dm, ShardManager(dm), None, MagicMock(get_suite=MagicMock(return_value=None)),
+            results_dir=tmp / "results", run_state=state,
+        )
+        return plan, executor, dm, state
+
+    @staticmethod
+    def _result_dir(tmp: Path, suite: str, name: str, xml: str) -> Path:
+        d = tmp / f"android-{suite}" / "results" / name
+        d.mkdir(parents=True)
+        (d / "test_result.xml").write_text(xml, encoding="utf-8")
+        return d
+
+    def test_resume_skips_passed_and_continues_interrupted_suite(self):
+        from xts_agent.execution.tradefed_runner import ExecutionResult
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            plan, executor, dm, state = self._setup(tmp)
+            cts_dir = self._result_dir(tmp, "cts", "2026.10.07_01.00.00.000_1", PASSING_XML)
+
+            # --- first run: CTS passes, then the host dies inside VTS ---
+            state.start("cert", "certification")
+            state.suite_updated(SuiteResult("cts", "PASSED", 1, 0, 0, 1.0, 3, str(cts_dir), 0))
+            vts_runner = TradefedRunner(tmp / "android-vts", "vts-tradefed")
+            state.suite_started("vts", vts_runner.snapshot_result_dirs(), self.FP, ["hu-1"])
+            # TradeFed had flushed a partial result before the crash
+            partial = self._result_dir(tmp, "vts", "2026.10.07_02.00.00.000_2", INCOMPLETE_XML)
+
+            # --- resume ---
+            calls = []
+
+            def fake_execute(self_runner, cmd, timeout_hours, log_dir, env=None):
+                calls.append(cmd)
+                # The retry session writes its own (cumulative) result dir
+                done = self._result_dir(tmp, "vts", "2026.10.07_03.00.00.000_3", PASSING_XML)
+                return ExecutionResult(True, 1, 0, 1.0, str(done), "log")
+
+            with patch.object(TradefedRunner, "execute", fake_execute), patch.object(
+                TradefedRunner, "resolve_session_id", return_value=0
+            ):
+                result = executor.execute_plan(plan, resume=True)
+
+            self.assertEqual(len(calls), 1, calls)  # CTS skipped, VTS continued once
+            cmd = calls[0]
+            self.assertEqual(cmd[1:4], ["run", "retry", "--retry"])
+            self.assertEqual(cmd[cmd.index("--retry") + 1], "0")
+            self.assertNotIn("--retry-type", cmd)  # incomplete => FAILED + NOT_EXECUTED
+            required = dm.select_shard_pool.call_args_list[-1][0][2]
+            self.assertEqual(required["ro.build.fingerprint"], self.FP)
+            self.assertEqual(result.suites_results["cts"].status, "PASSED")
+            self.assertEqual(result.suites_results["vts"].status, "PASSED")
+            self.assertEqual(result.overall_status, "PASSED")
+            self.assertTrue(state.data["complete"])
+            self.assertTrue(partial.exists())
+
+    def test_resume_after_complete_run_starts_fresh(self):
+        from xts_agent.execution.tradefed_runner import ExecutionResult
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            plan, executor, dm, state = self._setup(tmp)
+            state.start("cert", "certification")
+            state.mark_complete("PASSED")
+            with patch.object(
+                TradefedRunner, "execute", return_value=ExecutionResult(True, None, 0, 1.0, None, "log")
+            ) as exe:
+                executor.execute_plan(plan, resume=True)
+            self.assertEqual(exe.call_count, 2)
+            self.assertTrue(all(c[0][0][1:3] == ["run", "commandAndExit"] for c in exe.call_args_list))
 
 
 class LoadLatestPlanResultTests(unittest.TestCase):

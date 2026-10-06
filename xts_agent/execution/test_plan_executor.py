@@ -14,9 +14,11 @@ from xts_agent.results.result_parser import (
     ResultParser,
     TestResults,
     derive_suite_status,
+    has_unexecuted_modules,
     overall_status,
 )
 
+from .run_state import RunState
 from .tradefed_runner import ExecutionResult, TradefedRunner
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,7 @@ class TestPlanExecutor:
         retry_manager: Any,
         suite_registry: Any,
         results_dir: str | Path = "./results",
+        run_state: Optional[RunState] = None,
     ):
         self.config = config
         self.device_manager = device_manager
@@ -72,14 +75,25 @@ class TestPlanExecutor:
         self.results_dir = Path(results_dir)
         self.logs_dir = self.results_dir / "logs"
         self._last_runners: Dict[str, TradefedRunner] = {}
+        self.run_state = run_state
+        self._resuming = False
 
     def execute_plan(
         self,
         plan_config: Optional[TestPlanConfig] = None,
         dry_run: bool = False,
         auto_retry: bool = False,
+        resume: bool = False,
     ) -> PlanResult:
         plan = plan_config or self.config
+        if self.run_state is not None and not dry_run:
+            self._resuming = resume and self.run_state.load()
+            if resume and not self._resuming:
+                logger.warning("No unfinished run state for %s; starting a fresh run", plan.name)
+            if self._resuming:
+                logger.info("Resuming %s from %s", plan.name, self.run_state.path)
+            else:
+                self.run_state.start(plan.name, getattr(plan, "profile", "development"))
         suites = list(plan.suites)
         # Lower priority number runs first (cert plan: CTS=1 before CATBOX=6)
         suites.sort(key=lambda s: getattr(s, "priority", 100))
@@ -106,6 +120,9 @@ class TestPlanExecutor:
                 self.device_manager.reboot_and_wait_all(list(suite_res.device_serials))
 
         duration = time.time() - start_time
+        final_status = overall_status(s.status for s in suites_results.values())
+        if self.run_state is not None and not dry_run:
+            self.run_state.mark_complete(final_status)
         # Preserve order while uniquifying
         seen = set()
         unique_devices = []
@@ -121,7 +138,7 @@ class TestPlanExecutor:
             total_fail=total_fail,
             total_skip=total_skip,
             duration=duration,
-            overall_status=overall_status(s.status for s in suites_results.values()),
+            overall_status=final_status,
             device_serials=unique_devices,
             profile=getattr(plan, "profile", "development"),
         )
@@ -180,13 +197,20 @@ class TestPlanExecutor:
                     device_serials=serials,
                 )
 
+            entry = self.run_state.suite(name) if (self._resuming and self.run_state) else None
+            if entry and entry.get("status") == "PASSED":
+                logger.info("Resume: %s already PASSED in session %s; skipping", name, entry.get("session_id"))
+                return self._suite_result_from_entry(name, entry)
+
             available = self.device_manager.get_available_devices(
                 min_battery=self.config.devices.min_battery_level
             )
             device_type = self.config.devices.device_type or "any"
-            pool = self.device_manager.select_shard_pool(
-                available, device_type, self.config.devices.properties
-            )
+            required_props = dict(self.config.devices.properties or {})
+            if entry and entry.get("fingerprint"):
+                # A resumed session may only continue on the build it started on
+                required_props["ro.build.fingerprint"] = entry["fingerprint"]
+            pool = self.device_manager.select_shard_pool(available, device_type, required_props)
             if len(pool) < self.config.devices.min_devices:
                 raise ValueError(
                     f"Need at least {self.config.devices.min_devices} {device_type} device(s) "
@@ -218,25 +242,33 @@ class TestPlanExecutor:
                     f"TradeFed script not found under {runner.tools_dir}: {command_name}"
                 )
 
-            retry_dict = dataclasses.asdict(suite_config.retry)
-            cmd = runner.build_run_command(
-                plan=plan_name,
-                shard_count=len(serials),
-                retry_config=retry_dict,
-                exclude_filters=suite_config.exclude_filters,
-                include_filters=suite_config.include_filters,
-                extra_args=suite_config.extra_args,
-                device_serials=serials,
-                modules=suite_config.modules,
-            )
-            logger.info("Executing: %s", " ".join(cmd))
+            fingerprint = devices[0].build_fingerprint if devices else ""
+            suite_res = self._resume_suite(name, entry, runner, suite_config, serials) if entry else None
+            if suite_res is None:
+                if self.run_state is not None:
+                    self.run_state.suite_started(
+                        name, runner.snapshot_result_dirs(), fingerprint, serials
+                    )
+                retry_dict = dataclasses.asdict(suite_config.retry)
+                cmd = runner.build_run_command(
+                    plan=plan_name,
+                    shard_count=len(serials),
+                    retry_config=retry_dict,
+                    exclude_filters=suite_config.exclude_filters,
+                    include_filters=suite_config.include_filters,
+                    extra_args=suite_config.extra_args,
+                    device_serials=serials,
+                    modules=suite_config.modules,
+                )
+                logger.info("Executing: %s", " ".join(cmd))
 
-            exec_res = runner.execute(
-                cmd,
-                timeout_hours=suite_config.timeout_hours,
-                log_dir=self.logs_dir,
-            )
-            suite_res = self._to_suite_result(name, exec_res, serials, retry_count=0)
+                exec_res = runner.execute(
+                    cmd,
+                    timeout_hours=suite_config.timeout_hours,
+                    log_dir=self.logs_dir,
+                )
+                suite_res = self._to_suite_result(name, exec_res, serials, retry_count=0)
+            self._checkpoint(suite_res)
 
             if auto_retry and self.retry_manager and suite_res.status != "PASSED":
                 suite_res = self.retry_manager.retry_suite_until_done(
@@ -245,6 +277,7 @@ class TestPlanExecutor:
                     suite_config=suite_config,
                     device_serials=serials,
                     log_dir=self.logs_dir,
+                    on_attempt=self._checkpoint,
                 )
 
             return suite_res
@@ -268,6 +301,64 @@ class TestPlanExecutor:
             if serials:
                 self.device_manager.release_devices(serials)
                 logger.info("Released devices: %s", serials)
+
+    def _checkpoint(self, suite_res: SuiteResult) -> None:
+        if self.run_state is not None:
+            self.run_state.suite_updated(suite_res)
+
+    def _suite_result_from_entry(self, name: str, entry: dict) -> SuiteResult:
+        exec_res = ExecutionResult(
+            success=True,
+            session_id=entry.get("session_id"),
+            return_code=0,
+            duration=0.0,
+            results_dir=entry.get("results_dir") or None,
+            log_path="",
+        )
+        res = self._to_suite_result(
+            name, exec_res, entry.get("device_serials") or [], entry.get("retry_count", 0)
+        )
+        return res
+
+    def _resume_suite(
+        self,
+        name: str,
+        entry: dict,
+        runner: TradefedRunner,
+        suite_config: SuiteConfig,
+        serials: List[str],
+    ) -> Optional[SuiteResult]:
+        """Continue an interrupted suite from its last TradeFed session.
+
+        Returns None when there is nothing to continue from (fresh run needed).
+        """
+        session_id = entry.get("session_id")
+        results_dir = entry.get("results_dir") or ""
+        if session_id is None:
+            # Interrupted during the first invocation: find the dir it created
+            results_dir = runner.find_results_dir("", before=set(entry.get("before") or [])) or ""
+            session_id = runner.resolve_session_id(results_dir) if results_dir else None
+        if session_id is None:
+            logger.info("Resume: no TradeFed session recorded for %s; running it fresh", name)
+            return None
+
+        current = self._suite_result_from_entry(
+            name, {**entry, "session_id": session_id, "results_dir": results_dir}
+        )
+        current.device_serials = list(serials)
+        if not has_unexecuted_modules(current):
+            # Complete-but-failed suites continue through normal auto-retry
+            return current
+
+        logger.info(
+            "Resume: continuing %s from session %s (%s)", name, session_id, current.error_message
+        )
+        cmd = runner.build_retry_command(session_id, retry_type=None, device_serials=serials)
+        exec_res = runner.execute(cmd, timeout_hours=suite_config.timeout_hours, log_dir=self.logs_dir)
+        if exec_res.results_dir is None:
+            logger.error("Resume retry for %s produced no results; keeping session %s", name, session_id)
+            return current
+        return self._to_suite_result(name, exec_res, serials, retry_count=current.retry_count + 1)
 
     def _resolve_package_path(self, suite_config: SuiteConfig) -> Path:
         if suite_config.package_path:

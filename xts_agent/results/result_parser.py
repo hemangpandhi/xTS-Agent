@@ -63,6 +63,18 @@ class TestResults:
         return self.modules_total == 0 or self.modules_done >= self.modules_total
 
 
+def has_unexecuted_modules(suite_result) -> bool:
+    """True when a suite's results show modules that never ran.
+
+    Status alone is not enough: failures take precedence over INCOMPLETE, so
+    a FAILED suite can still have hundreds of modules left to execute.
+    """
+    details = getattr(suite_result, "details", None)
+    if details is not None and hasattr(details, "is_complete"):
+        return not details.is_complete
+    return getattr(suite_result, "status", "") == "INCOMPLETE"
+
+
 def derive_suite_status(parsed: Optional[TestResults], exec_success: bool) -> Tuple[str, str]:
     """Return ``(status, reason)`` for a suite from its parsed results.
 

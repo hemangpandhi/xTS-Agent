@@ -194,6 +194,20 @@ python3 -m xts_agent.cli run \
   --auto-retry
 ```
 
+**Resuming an interrupted run.** Progress is checkpointed to
+`results/run_state/<plan>.json` after every suite and retry. If the host
+reboots or the job is cancelled, rerun the same command with `--resume`:
+suites that already passed are skipped, and an interrupted suite continues
+from its last TradeFed session with `run retry` (failed + not-executed
+modules) on devices running the same build, instead of starting over.
+
+```bash
+python3 -m xts_agent.cli run \
+  --plan config/test_plans/full_certification.yaml \
+  --config config/default_config.yaml \
+  --auto-retry --resume
+```
+
 Helpers:
 
 ```bash

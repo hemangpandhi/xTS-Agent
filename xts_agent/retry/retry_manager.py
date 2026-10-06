@@ -7,10 +7,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from xts_agent.config_loader import SuiteConfig
-from xts_agent.results.result_parser import ResultParser, derive_suite_status
+from xts_agent.results.result_parser import (
+    ResultParser,
+    derive_suite_status,
+    has_unexecuted_modules,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,7 @@ class RetryManager:
         suite_config: SuiteConfig,
         device_serials: Sequence[str],
         log_dir: str | Path,
+        on_attempt: Optional[Callable[[Any], None]] = None,
     ) -> Any:
         """Run TradeFed `run retry` up to suite max_retries.
 
@@ -95,9 +100,10 @@ class RetryManager:
             if cooldown > 0:
                 time.sleep(min(cooldown, 300))
 
-            # Incomplete runs must also re-run NOT_EXECUTED modules
+            # Runs with unexecuted modules must also re-run NOT_EXECUTED ones,
+            # even when they are FAILED (failures outrank INCOMPLETE)
             attempt_retry_type = retry_type
-            if current.status == "INCOMPLETE" and str(retry_type).upper() == "FAILED":
+            if has_unexecuted_modules(current) and str(retry_type).upper() == "FAILED":
                 attempt_retry_type = None
             cmd = runner.build_retry_command(
                 session_id=current.session_id,
@@ -154,6 +160,8 @@ class RetryManager:
                 device_serials=list(device_serials),
                 error_message=reason,
             )
+            if on_attempt is not None:
+                on_attempt(current)
             self.retry_history.append(
                 {
                     "suite": current.name,

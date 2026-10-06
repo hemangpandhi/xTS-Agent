@@ -12,6 +12,7 @@ from xts_agent.config_loader import ConfigLoader, TestPlanConfig
 from xts_agent.device.adb_wrapper import AdbWrapper
 from xts_agent.device.device_manager import DeviceManager
 from xts_agent.execution.ats2_client import ATS2Client
+from xts_agent.execution.run_state import RunState
 from xts_agent.execution.shard_manager import ShardManager
 from xts_agent.execution.test_plan_executor import PlanResult, SuiteResult, TestPlanExecutor
 from xts_agent.rca.diagnostic_collector import DiagnosticCollector
@@ -86,7 +87,9 @@ class Orchestrator:
 
         return self.plan
 
-    def run_plan(self, auto_retry: bool = False, dry_run: bool = False) -> PlanResult:
+    def run_plan(
+        self, auto_retry: bool = False, dry_run: bool = False, resume: bool = False
+    ) -> PlanResult:
         plan = self._initialize()
         notifier = self._slack()
         notifier.notify_start(plan.name)
@@ -110,9 +113,12 @@ class Orchestrator:
             retry_manager=self.retry_manager,
             suite_registry=self.suite_registry,
             results_dir=self._results_dir,
+            run_state=RunState.for_plan(self._results_dir, plan.name),
         )
 
-        results = executor.execute_plan(plan, dry_run=dry_run, auto_retry=effective_retry)
+        results = executor.execute_plan(
+            plan, dry_run=dry_run, auto_retry=effective_retry, resume=resume
+        )
         self.last_plan_result = results
         logger.info("Plan Execution Finished: %s", results.overall_status)
         logger.info(

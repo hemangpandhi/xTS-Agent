@@ -63,10 +63,16 @@ def setup(config_path: Optional[str]):
 @click.option("--config", "config_path", default=None, help="Path to default_config.yaml")
 @click.option("--auto-retry", is_flag=True, help="Automatically retry failures")
 @click.option("--dry-run", is_flag=True, help="Dry run without executing tests")
-def run(plan: str, config_path: Optional[str], auto_retry: bool, dry_run: bool):
+@click.option(
+    "--resume",
+    is_flag=True,
+    help="Continue an interrupted run of this plan: skip passed suites, "
+    "retry incomplete ones from their last TradeFed session",
+)
+def run(plan: str, config_path: Optional[str], auto_retry: bool, dry_run: bool, resume: bool):
     """Run test plan."""
     orchestrator = _build_orchestrator(plan, config_path)
-    result = orchestrator.run_plan(auto_retry=auto_retry, dry_run=dry_run)
+    result = orchestrator.run_plan(auto_retry=auto_retry, dry_run=dry_run, resume=resume)
     if result.overall_status not in ("PASSED", "DRY_RUN"):
         sys.exit(1)
 
