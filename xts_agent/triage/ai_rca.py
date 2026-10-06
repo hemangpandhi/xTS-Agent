@@ -143,7 +143,14 @@ class GroupAIAnalyzer:
     def analyze(self, report: TriageReport) -> Dict[str, int]:
         stats = {"analyzed": 0, "cached": 0, "unparseable": 0}
         model = getattr(self.provider, "model_id", "") or type(self.provider).__name__
+        # Actionable groups first; known-but-classified groups (no Jira yet or
+        # waived) are included after them to keep measuring AI agreement.
         targets = [tg for tg in report.groups if tg.actionable][: self.max_groups]
+        eval_slots = max(0, self.max_groups - len(targets))
+        targets += [
+            tg for tg in report.groups
+            if not tg.actionable and tg.known and tg.known.issue.classification
+        ][:eval_slots]
         for tg in targets:
             sig = tg.group.signature
             cached = self.cache.get(sig, model) if self.cache else None

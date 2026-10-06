@@ -1827,12 +1827,23 @@ class GroupAiTests(unittest.TestCase):
             self.assertEqual(provider.generate.call_count, 2)
             self.assertTrue(all(c.kwargs.get("json_mode") for c in provider.generate.call_args_list))
             self.assertIn("1 failing tests", provider.generate.call_args_list[0][0][0])
-            self.assertIsNone(report.groups[3].ai)  # waived group never sent to the LLM
+            self.assertIsNone(report.groups[3].ai)  # cap reached: waived group not analysed
 
             again = JiraFilerTests._report(None, [("a", "NEW", False, "")])
             stats = GroupAIAnalyzer(provider, cache_db=db).analyze(again)
             self.assertEqual((stats["cached"], provider.generate.call_count), (1, 2))
             self.assertTrue(again.groups[0].ai["cached"])
+
+    def test_agreement_with_human_classified_known_issues(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        report = JiraFilerTests._report(None, [("w1", "NEW", True, ""), ("w2", "NEW", True, "")])
+        report.groups[0].known.issue.classification = "ENVIRONMENT_ISSUE"
+        report.groups[1].known.issue.classification = "PRODUCT_BUG"
+        provider = MagicMock(model_id="m")
+        provider.generate.return_value = '{"root_cause": "r", "classification": "ENVIRONMENT_ISSUE", "confidence": 0.9}'
+        GroupAIAnalyzer(provider, max_groups=5).analyze(report)  # spare slots go to eval
+        self.assertEqual(report.summary["ai_agreement"], {"evaluated": 2, "agreed": 1, "rate": 0.5})
 
     def test_unparseable_output_is_ignored(self):
         from xts_agent.triage.ai_rca import GroupAIAnalyzer

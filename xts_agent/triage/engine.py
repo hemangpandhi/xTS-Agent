@@ -100,6 +100,27 @@ class TriageReport:
             "waived_groups": sum(1 for t in self.groups if t.waived),
             "by_label": dict(Counter(t.label for t in self.groups)),
             "by_team": dict(Counter(t.owner.team for t in self.groups if t.actionable)),
+            "ai_agreement": self.ai_agreement,
+        }
+
+    @property
+    def ai_agreement(self) -> Dict[str, Any]:
+        """AI vs human classification on known issues: the running eval set.
+
+        Known issues carry a human-assigned classification; every time the AI
+        analyses such a group we learn whether it agreed. Check this before
+        trusting AI suggestions on unknown groups.
+        """
+        pairs = [
+            (t.ai.get("classification"), t.known.issue.classification)
+            for t in self.groups
+            if t.ai and t.known and t.known.issue.classification
+        ]
+        agree = sum(1 for ai, human in pairs if ai == human)
+        return {
+            "evaluated": len(pairs),
+            "agreed": agree,
+            "rate": round(agree / len(pairs), 2) if pairs else None,
         }
 
     def to_dict(self) -> Dict[str, Any]:
