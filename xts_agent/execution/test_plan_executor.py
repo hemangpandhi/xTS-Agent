@@ -364,6 +364,7 @@ class TestPlanExecutor:
                 )
 
             fingerprint = devices[0].build_fingerprint if devices else ""
+            runner.lease_fds = list(self.device_manager.lease_fds(serials))
             suite_res = self._resume_suite(name, entry, runner, suite_config, serials) if entry else None
             if suite_res is None:
                 if self.run_state is not None:

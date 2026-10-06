@@ -194,6 +194,13 @@ python3 -m xts_agent.cli run \
   --auto-retry
 ```
 
+**Several agents on one host.** Devices are leased host-wide through lock
+files in `device.lease_dir` (default `/var/tmp/xts-agent/leases`, or
+`XTS_LEASE_DIR`), so concurrent CI jobs or a manual run never share a device;
+a busy device's error names the holder (pid, user, CI job). TradeFed inherits
+the lease, so devices stay locked while it runs even if the agent is killed.
+All agents on a host must use the same lease directory.
+
 **Running suites in parallel.** Set `max_concurrent_suites: N` in a plan (or
 `execution.max_concurrent_suites` in defaults). The agent picks one
 same-build device pool and splits it across the first N suites in proportion

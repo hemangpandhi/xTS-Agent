@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import fcntl
+import getpass
 import logging
+import os
 import re
+import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .adb_wrapper import AdbError, AdbWrapper
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_LEASE_DIR = "/var/tmp/xts-agent/leases"
 
 
 @dataclass
@@ -42,8 +49,13 @@ class DeviceManager:
     MAX_PROBE_WORKERS = 16
     MIN_FREE_MB = 500
 
-    def __init__(self, adb_timeout: int = 30):
+    def __init__(self, adb_timeout: int = 30, lease_dir: Optional[str] = None):
         self._allocated: set[str] = set()
+        # Host-wide per-device locks so separate agent processes (parallel CI
+        # jobs, a manual run) never share a device. The kernel drops a lock
+        # when its holder dies, so stale lock files are harmless.
+        self.lease_dir = Path(lease_dir or os.environ.get("XTS_LEASE_DIR") or DEFAULT_LEASE_DIR)
+        self._leases: Dict[str, int] = {}
         self.adb_timeout = adb_timeout
         self._type_cache: Dict[Tuple[str, str], str] = {}
         # Suites may allocate/release concurrently
@@ -271,11 +283,80 @@ class DeviceManager:
         except AdbError:
             return False
 
+    # ---- cross-process leases -------------------------------------------------
+
+    def _lease_path(self, serial: str) -> Path:
+        return self.lease_dir / (re.sub(r"[^A-Za-z0-9_.-]", "_", serial) + ".lock")
+
+    def _open_lease_file(self, serial: str) -> int:
+        if not self.lease_dir.exists():
+            self.lease_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                os.chmod(self.lease_dir, 0o1777)  # shared by CI and human users
+            except PermissionError:
+                pass
+        fd = os.open(self._lease_path(serial), os.O_RDWR | os.O_CREAT, 0o666)
+        try:
+            os.fchmod(fd, 0o666)
+        except PermissionError:
+            pass
+        return fd
+
+    def _try_lease(self, serial: str) -> bool:
+        if serial in self._leases:
+            return True
+        fd = self._open_lease_file(serial)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            return False
+        holder = (
+            f"pid={os.getpid()} user={getpass.getuser()} host={socket.gethostname()} "
+            f"job={os.environ.get('CI_JOB_ID', '-')} since={time.strftime('%Y-%m-%dT%H:%M:%S')}\n"
+        )
+        os.ftruncate(fd, 0)
+        os.pwrite(fd, holder.encode(), 0)
+        self._leases[serial] = fd
+        return True
+
+    def _release_lease(self, serial: str) -> None:
+        fd = self._leases.pop(serial, None)
+        if fd is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    def leased_elsewhere(self, serial: str) -> Optional[str]:
+        """Holder description if another process leases ``serial``, else None."""
+        if serial in self._leases:
+            return None
+        try:
+            fd = self._open_lease_file(serial)
+        except OSError as exc:
+            logger.warning("Cannot check lease for %s: %s", serial, exc)
+            return None
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            return None
+        except BlockingIOError:
+            return os.pread(fd, 512, 0).decode(errors="replace").strip() or "another process"
+        finally:
+            os.close(fd)
+
+    def lease_fds(self, serials: List[str]) -> List[int]:
+        """Lease fds to hand to TradeFed so the lock outlives a crashed agent."""
+        return [self._leases[s] for s in serials if s in self._leases]
+
     def get_available_devices(self, min_battery: int = 20) -> List[DeviceInfo]:
         all_devices = self.discover_devices()
         available: List[DeviceInfo] = []
         for d in all_devices:
             if d.state != "device" or d.serial in self._allocated:
+                continue
+            holder = self.leased_elsewhere(d.serial)
+            if holder:
+                logger.info("Skipping %s: leased by %s", d.serial, holder)
                 continue
             if not d.battery_present or d.battery_level >= min_battery:
                 available.append(d)
@@ -341,13 +422,23 @@ class DeviceManager:
                 if d.serial not in self._allocated
                 and (device_type == "any" or d.device_type == device_type)
             ]
-            if len(matching) < count:
+            allocated = []
+            busy = []
+            for d in matching:
+                if len(allocated) == count:
+                    break
+                if self._try_lease(d.serial):
+                    allocated.append(d)
+                else:
+                    busy.append(d.serial)
+            if len(allocated) < count:
+                for d in allocated:
+                    self._release_lease(d.serial)
                 raise ValueError(
-                    f"Not enough available {device_type} devices. "
-                    f"Requested: {count}, Available: {len(matching)}"
+                    f"Not enough available {device_type} devices. Requested: {count}, "
+                    f"Available: {len(allocated)}"
+                    + (f" (leased by other processes: {busy})" if busy else "")
                 )
-
-            allocated = matching[:count]
             for d in allocated:
                 self._allocated.add(d.serial)
             return allocated
@@ -356,6 +447,7 @@ class DeviceManager:
         with self._alloc_lock:
             for s in serials:
                 self._allocated.discard(s)
+                self._release_lease(s)
 
     def reboot_and_wait_all(self, serials: List[str], timeout: int = 120) -> Dict[str, bool]:
         """Reboot devices concurrently; returns serial -> came back healthy."""

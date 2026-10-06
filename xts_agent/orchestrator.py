@@ -52,6 +52,9 @@ class Orchestrator:
         self.plan = self.config_loader.load_plan()
         self._results_dir = Path(self.plan.agent.results_dir or "results")
         self._results_dir.mkdir(parents=True, exist_ok=True)
+        lease_dir = (self.plan.raw_defaults.get("device") or {}).get("lease_dir")
+        if lease_dir:
+            self.device_manager.lease_dir = Path(lease_dir)
         (self._results_dir / "logs").mkdir(parents=True, exist_ok=True)
         (self._results_dir / "reports").mkdir(parents=True, exist_ok=True)
 

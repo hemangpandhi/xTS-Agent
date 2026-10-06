@@ -86,6 +86,9 @@ class TradefedRunner:
         self.suite_path = Path(suite_path)
         self.command_name = command_name
         self._process: Optional[subprocess.Popen] = None
+        # Device lease fds inherited by TradeFed, so devices stay locked while
+        # it runs even if the agent process dies
+        self.lease_fds: Sequence[int] = ()
 
     @property
     def tools_dir(self) -> Path:
@@ -216,6 +219,7 @@ class TradefedRunner:
                     text=True,
                     env=run_env,
                     start_new_session=True,
+                    pass_fds=tuple(self.lease_fds),
                 )
                 # start_new_session => pgid == pid; recorded for scoped cleanup
                 pidfile = log_path.parent / f"tradefed_{self._process.pid}.pid"

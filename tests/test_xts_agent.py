@@ -41,6 +41,25 @@ at org.junit.Assume.assumeTrue(Assume.java:50)</StackTrace>
 """
 
 
+_LEASE_TMP = None
+
+
+def setUpModule():
+    # Keep device lease files out of the real host-wide lease dir
+    import os
+
+    global _LEASE_TMP
+    _LEASE_TMP = tempfile.TemporaryDirectory()
+    os.environ["XTS_LEASE_DIR"] = _LEASE_TMP.name
+
+
+def tearDownModule():
+    import os
+
+    os.environ.pop("XTS_LEASE_DIR", None)
+    _LEASE_TMP.cleanup()
+
+
 PASSING_XML = """<?xml version='1.0' encoding='UTF-8' standalone='no' ?>
 <Result suite_name="CTS">
   <Summary pass="1" failed="0" modules_done="1" modules_total="1" />
@@ -1223,6 +1242,77 @@ class HealthGateTests(unittest.TestCase):
             report = DeviceManager().check_device_health("s")
         self.assertFalse(report.healthy)
         self.assertEqual(report.problems, ["battery 5%", "only 100 MB free on /data"])
+
+
+class LeaseTests(unittest.TestCase):
+    HOLDER = """
+import os, sys, time
+from xts_agent.device.device_manager import DeviceInfo, DeviceManager
+dm = DeviceManager(lease_dir=sys.argv[1])
+dev = DeviceInfo("s1", "", "", "fp", 34, 100, "device", "aaos")
+dm.allocate_devices(1, candidates=[dev])
+if sys.argv[2] == "spawn-and-crash":
+    import subprocess
+    child = subprocess.Popen(["sleep", "30"], pass_fds=dm.lease_fds(["s1"]), start_new_session=True)
+    print(child.pid, flush=True)
+    os._exit(0)  # agent dies without releasing; TradeFed stand-in keeps running
+print("held", flush=True)
+time.sleep(30)
+"""
+
+    def _devices(self):
+        from xts_agent.device.device_manager import DeviceInfo
+
+        return [DeviceInfo(s, "", "", "fp", 34, 100, "device", "aaos") for s in ("s1", "s2")]
+
+    def _spawn(self, lease_dir, mode):
+        import subprocess
+        import sys
+
+        proc = subprocess.Popen(
+            [sys.executable, "-c", self.HOLDER, lease_dir, mode], stdout=subprocess.PIPE, text=True
+        )
+        return proc, proc.stdout.readline().strip()
+
+    def test_other_process_cannot_take_leased_device(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        with tempfile.TemporaryDirectory() as leases:
+            holder, _ = self._spawn(leases, "hold")
+            try:
+                dm = DeviceManager(lease_dir=leases)
+                self.assertIn("pid=", dm.leased_elsewhere("s1") or "")
+                got = dm.allocate_devices(1, candidates=self._devices())
+                self.assertEqual([d.serial for d in got], ["s2"])  # s1 skipped
+                with self.assertRaises(ValueError) as ctx:
+                    DeviceManager(lease_dir=leases).allocate_devices(2, candidates=self._devices())
+                self.assertIn("leased by other processes", str(ctx.exception))
+                dm.release_devices(["s2"])
+            finally:
+                holder.kill()
+                holder.wait()
+            # Holder died: the kernel dropped its lock
+            self.assertIsNone(DeviceManager(lease_dir=leases).leased_elsewhere("s1"))
+
+    def test_lease_survives_agent_crash_while_tradefed_runs(self):
+        import os
+        import signal
+        import time as _time
+
+        from xts_agent.device.device_manager import DeviceManager
+
+        with tempfile.TemporaryDirectory() as leases:
+            agent, child_pid = self._spawn(leases, "spawn-and-crash")
+            agent.wait(timeout=10)
+            try:
+                self.assertIsNotNone(DeviceManager(lease_dir=leases).leased_elsewhere("s1"))
+            finally:
+                os.kill(int(child_pid), signal.SIGKILL)
+            for _ in range(50):
+                if DeviceManager(lease_dir=leases).leased_elsewhere("s1") is None:
+                    break
+                _time.sleep(0.1)
+            self.assertIsNone(DeviceManager(lease_dir=leases).leased_elsewhere("s1"))
 
 
 class LoadLatestPlanResultTests(unittest.TestCase):
