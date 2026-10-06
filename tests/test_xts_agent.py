@@ -1617,6 +1617,37 @@ issues:
         self.assertTrue(m.waived)
 
 
+class OwnershipTests(unittest.TestCase):
+    def test_routing_first_match_default_and_group_majority(self):
+        from xts_agent.triage.ownership import OwnershipMap
+        from xts_agent.triage.signature import FailureGroup
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "own.yaml"
+            p.write_text(
+                "default: {team: triage}\nrules:\n"
+                "  - {module_regex: '^CtsCar', team: car, jira_component: Car, assignee: alice}\n"
+                "  - {module_regex: '^Cts', team: catch-all}\n"
+                "  - {module_regex: '[', team: broken}\n"
+            )
+            with self.assertLogs("xts_agent.triage.ownership", "ERROR"):
+                om = OwnershipMap.load(p)
+        self.assertEqual(om.owner_for_module("x86_64 CtsCarTestCases[instant]").assignee, "alice")
+        self.assertEqual(om.owner_for_module("arm64-v8a CtsMediaTestCases").team, "catch-all")
+        self.assertEqual(om.owner_for_module("VtsHal").team, "triage")
+        g = FailureGroup("s", "E", "m", [])
+        g.tests = [_tc("c", "t", "E: m", module=m) for m in
+                   ("x86_64 CtsCarA", "x86_64 CtsMedia", "x86_64 CtsCarA")]
+        self.assertEqual(om.owner_for_group(g).team, "car")
+
+    def test_shipped_starter_map_loads(self):
+        from xts_agent.triage.ownership import OwnershipMap
+
+        om = OwnershipMap.load("config/ownership.yaml")
+        self.assertGreater(len(om.rules), 10)
+        self.assertEqual(om.owner_for_module("x86_64 CtsCarTestCases").team, "aaos-car-framework")
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json
