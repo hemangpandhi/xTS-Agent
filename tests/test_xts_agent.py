@@ -1554,6 +1554,69 @@ class FailureHistoryTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM triage_failures").fetchone()[0], 0)
 
 
+class KnownIssueTests(unittest.TestCase):
+    YAML = """
+issues:
+  - id: KI-1
+    title: focus
+    jira: AAOS-1
+    classification: environment_issue
+    match:
+      message_regex: "kitchensink was focused"
+    waiver:
+      reason: cuttlefish only
+      expires: 2026-12-31
+      builds_regex: "aosp_cf"
+  - id: KI-2
+    title: bad waiver
+    match: {module_regex: "CtsX"}
+    waiver: {reason: "no expiry"}
+  - id: KI-3
+    title: cert waiver
+    match: {test_regex: "CtsCar"}
+    waiver: {reason: ok, expires: 2026-12-31, profiles: [certification, development]}
+"""
+
+    def _db(self):
+        from xts_agent.triage.known_issues import KnownIssueDB
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "ki.yaml"
+            p.write_text(self.YAML, encoding="utf-8")
+            with self.assertLogs("xts_agent.triage.known_issues", "ERROR"):
+                return KnownIssueDB.load(p)
+
+    def _group(self, msg, module="x86_64 CtsTextTestCases"):
+        from xts_agent.triage.signature import group_failures
+
+        return group_failures([("CTS", _tc("c.T", "t", f"junit.framework.AssertionFailedError: {msg}", module))])[0]
+
+    def test_waiver_rules(self):
+        import datetime as dt
+
+        db = self._db()
+        self.assertEqual([i.id for i in db.issues], ["KI-1", "KI-3"])  # no-expiry waiver rejected
+        g = self._group("x com.google.android.car.kitchensink was focused in 5s")
+        day = dt.date(2026, 10, 7)
+        m = db.match(g, "development", "generic/aosp_cf_x86_64_auto/x:userdebug", day)
+        self.assertEqual((m.issue.id, m.issue.jira, m.waived), ("KI-1", "AAOS-1", True))
+        self.assertEqual(m.issue.classification, "ENVIRONMENT_ISSUE")
+        self.assertFalse(db.match(g, "certification", "aosp_cf", day).waived)  # dev-only waiver
+        self.assertFalse(db.match(g, "development", "oem/hu/hu:user", day).waived)  # other build
+        expired = db.match(g, "development", "aosp_cf", dt.date(2027, 1, 1))
+        self.assertFalse(expired.waived)
+        self.assertTrue(expired.waiver_expired)
+        self.assertIsNone(db.match(self._group("unrelated"), "development", "aosp_cf", day))
+
+    def test_certification_waiver_must_be_explicit(self):
+        import datetime as dt
+
+        g = self._group("boom", module="x86_64 CtsCarTestCases")
+        g.tests[0].module = "x86_64 CtsCarTestCases"
+        m = self._db().match(g, "certification", "fp", dt.date(2026, 10, 7))
+        self.assertTrue(m.waived)
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json
