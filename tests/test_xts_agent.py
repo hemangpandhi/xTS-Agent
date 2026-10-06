@@ -220,6 +220,44 @@ class LlmProviderTests(unittest.TestCase):
         self.assertNotIn("SECRET-KEY", " ".join(logs.output) + out)
 
 
+class SecretsTests(unittest.TestCase):
+    def _load(self, defaults: str, plan: str = "name: t\nsuites: []\n", env=None):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, env or {}, clear=False):
+            d = Path(tmp) / "defaults.yaml"
+            d.write_text(defaults, encoding="utf-8")
+            p = Path(tmp) / "plan.yaml"
+            p.write_text(plan, encoding="utf-8")
+            return ConfigLoader(p, defaults_path=d).load_plan()
+
+    def test_env_reference_expanded(self):
+        plan = self._load(
+            'ats2:\n  api_key: "${MY_ATS_KEY}"\n  base_url: "${ATS_URL:-http://ats.local}"\n',
+            env={"MY_ATS_KEY": "from-env"},
+        )
+        self.assertEqual(plan.ats2.api_key, "from-env")
+        self.assertEqual(plan.ats2.base_url, "http://ats.local")
+
+    def test_fixed_env_overrides_win(self):
+        plan = self._load(
+            'ats2:\n  api_key: "${UNSET_ON_PURPOSE:-}"\nreporting:\n  notifications:\n    slack_webhook: ""\n',
+            plan="name: t\nsuites: []\npost_execution:\n  reporting:\n    notifications:\n      slack_webhook: ''\n",
+            env={"XTS_ATS2_API_KEY": "a", "XTS_SLACK_WEBHOOK": "https://hooks/x", "XTS_GEMINI_API_KEY": "g"},
+        )
+        self.assertEqual(plan.ats2.api_key, "a")
+        self.assertEqual(plan.ai_rca.gemini_api_key, "g")
+        self.assertEqual(plan.post_execution.reporting.notifications["slack_webhook"], "https://hooks/x")
+        # raw defaults are not mutated by the override
+        self.assertEqual(plan.raw_defaults["reporting"]["notifications"]["slack_webhook"], "")
+
+    def test_plaintext_secret_warns(self):
+        with self.assertLogs("xts_agent.config_loader", "WARNING") as logs:
+            self._load("ai_rca:\n  gemini_api_key: AIzaPlainText\n")
+        self.assertTrue(any("Plaintext secret at ai_rca.gemini_api_key" in m for m in logs.output))
+        self.assertFalse(any("AIzaPlainText" in m for m in logs.output))
+
+
 class ShardManagerTests(unittest.TestCase):
     def test_auto_shard_count(self):
         mgr = ShardManager(device_manager=MagicMock())

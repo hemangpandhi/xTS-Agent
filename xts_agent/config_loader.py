@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -20,6 +22,52 @@ import yaml
 logger = logging.getLogger(__name__)
 
 PROFILES = ("certification", "development")
+
+# ${VAR} or ${VAR:-default} anywhere in a YAML string value
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+# Keys whose values are credentials and must not be committed in plaintext
+SECRET_KEYS = frozenset(
+    {"api_key", "ai_api_key", "gemini_api_key", "slack_webhook", "wifi_password"}
+)
+
+
+def _expand_env(value: Any, source: Path, key_path: str = "") -> Any:
+    """Expand ${VAR} references and warn about plaintext secrets."""
+    if isinstance(value, dict):
+        return {
+            k: _expand_env(v, source, f"{key_path}.{k}" if key_path else str(k))
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_expand_env(v, source, key_path) for v in value]
+    if not isinstance(value, str):
+        return value
+
+    if key_path.rsplit(".", 1)[-1] in SECRET_KEYS and value and not _ENV_REF.search(value):
+        logger.warning(
+            "Plaintext secret at %s in %s; use \"${ENV_VAR}\" and a secret store instead",
+            key_path,
+            source,
+        )
+
+    def _sub(match: "re.Match[str]") -> str:
+        name, default = match.group(1), match.group(2)
+        if name in os.environ:
+            return os.environ[name]
+        if default is None:
+            logger.warning("Environment variable %s (referenced at %s) is not set", name, key_path)
+        return default or ""
+
+    return _ENV_REF.sub(_sub, value)
+
+
+# Environment variables that override secret settings regardless of YAML
+SECRET_ENV_OVERRIDES = {
+    "XTS_GEMINI_API_KEY": "ai_rca.gemini_api_key",
+    "XTS_ATS2_API_KEY": "ats2.api_key",
+    "XTS_SLACK_WEBHOOK": "post_execution.reporting.notifications.slack_webhook",
+}
 
 
 class ConfigError(ValueError):
@@ -262,7 +310,7 @@ class ConfigLoader:
         with open(self.defaults_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         logger.info("Loaded defaults from %s", self.defaults_path)
-        return data
+        return _expand_env(data, self.defaults_path)
 
     def load_plan(self) -> TestPlanConfig:
         if not self.plan_path.exists():
@@ -270,7 +318,7 @@ class ConfigLoader:
 
         defaults = self.load_defaults()
         with open(self.plan_path, encoding="utf-8") as f:
-            plan_data = yaml.safe_load(f) or {}
+            plan_data = _expand_env(yaml.safe_load(f) or {}, self.plan_path)
 
         # Support nested `plan:` metadata block from certification YAML
         plan_meta = plan_data.get("plan") if isinstance(plan_data.get("plan"), dict) else {}
@@ -324,7 +372,7 @@ class ConfigLoader:
         if profile == "certification":
             self._validate_certification(suites)
 
-        return TestPlanConfig(
+        plan = TestPlanConfig(
             name=name,
             description=description,
             profile=profile,
@@ -337,6 +385,22 @@ class ConfigLoader:
             ai_rca=ai_rca,
             raw_defaults=defaults,
         )
+        self._apply_secret_env_overrides(plan)
+        return plan
+
+    @staticmethod
+    def _apply_secret_env_overrides(plan: "TestPlanConfig") -> None:
+        if os.environ.get("XTS_GEMINI_API_KEY"):
+            plan.ai_rca.gemini_api_key = os.environ["XTS_GEMINI_API_KEY"]
+        if os.environ.get("XTS_ATS2_API_KEY"):
+            plan.ats2.api_key = os.environ["XTS_ATS2_API_KEY"]
+        if os.environ.get("XTS_SLACK_WEBHOOK"):
+            reporting = plan.post_execution.reporting
+            # Copy: the dict may be shared with raw_defaults
+            reporting.notifications = {
+                **(reporting.notifications or {}),
+                "slack_webhook": os.environ["XTS_SLACK_WEBHOOK"],
+            }
 
     def _validate_certification(self, suites: List[SuiteConfig]) -> None:
         """Filtered or partial runs are not valid certification results."""

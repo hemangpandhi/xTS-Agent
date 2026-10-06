@@ -273,6 +273,38 @@ Defaults: `config/default_config.yaml`.
 
 ---
 
+## Secrets
+
+Never commit credentials in YAML (the loader warns when a secret-named key
+holds a plaintext value). Either reference an environment variable anywhere
+in a plan or `default_config.yaml`:
+
+```yaml
+ats2:
+  api_key: "${XTS_ATS2_API_KEY}"
+  base_url: "${ATS2_URL:-https://ats.example.internal}"
+```
+
+or set one of these, which always override YAML:
+
+| Variable | Setting |
+|----------|---------|
+| `XTS_GEMINI_API_KEY` | `ai_rca.gemini_api_key` |
+| `XTS_ATS2_API_KEY` | `ats2.api_key` |
+| `XTS_SLACK_WEBHOOK` | Slack webhook for notifications |
+
+In GitLab, store them as **masked + protected** CI/CD variables (or inject
+from Vault); on bare metal, export them from a root-owned env file.
+
+## AI RCA (on-prem by default)
+
+`ai_rca` defaults to `provider: llama_cpp`, so failure logs, stack traces and
+retrieved OEM source never leave the host. External providers (`gemini`) are
+refused unless `ai_rca.allow_external_providers: true` is set explicitly —
+get your security/legal sign-off before enabling it.
+
+---
+
 ## Outputs
 
 | Artifact | Path |
