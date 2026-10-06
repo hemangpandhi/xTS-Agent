@@ -159,7 +159,12 @@ ai_rca:
   llama_n_ctx: 16384 # Large context for logs + code
   llama_n_gpu_layers: -1 # -1 offloads everything to GPU
   
-  # RAG / OEM Code Indexer
+  # One structured LLM call per actionable failure group (largest first),
+  # cached by signature; results are advisory (shown in reports and Jira)
+  max_groups: 20
+
+  # RAG / OEM Code Indexer (build/update with `xts-agent index-code`)
+  embedding_model: "all-MiniLM-L6-v2"   # or a local model dir for offline labs
   index_db_path: "config/known_failures/chroma_db"
   source_code_paths:
     - "/mnt/aosp/vendor"

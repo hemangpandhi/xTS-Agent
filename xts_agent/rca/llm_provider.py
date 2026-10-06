@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import requests
 
@@ -22,9 +23,11 @@ class ExternalProviderNotAllowed(ValueError):
 
 
 class LLMProvider(ABC):
+    model_id: str = ""
+
     @abstractmethod
-    def generate(self, prompt: str) -> str:
-        pass
+    def generate(self, prompt: str, json_mode: bool = False) -> str:
+        """Return the model's text; with json_mode the model is asked for a JSON object."""
 
 
 class GeminiProvider(LLMProvider):
@@ -32,16 +35,20 @@ class GeminiProvider(LLMProvider):
         self.api_key = api_key
         self.model = model
         self.timeout_secs = timeout_secs
+        self.model_id = f"gemini:{model}"
         # Key goes in a header, never the URL, so it cannot leak into logs
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, json_mode: bool = False) -> str:
         if not self.api_key:
             return "Error: Gemini API key not configured."
 
+        generation = {"temperature": 0.2}
+        if json_mode:
+            generation["responseMimeType"] = "application/json"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2},
+            "generationConfig": generation,
         }
         headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
         try:
@@ -67,6 +74,7 @@ class LlamaCppProvider(LLMProvider):
         self.n_ctx = n_ctx
         self.n_gpu_layers = n_gpu_layers
         self.llm = None
+        self.model_id = f"llama_cpp:{Path(model_path).name}" if model_path else "llama_cpp"
 
     def _lazy_load(self):
         if self.llm is None:
@@ -88,13 +96,15 @@ class LlamaCppProvider(LLMProvider):
                 logger.error("Failed to load llama.cpp model: %s", e)
                 raise
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, json_mode: bool = False) -> str:
         if not self.model_path:
             return "Error: llama_model_path not configured."
 
         try:
             self._lazy_load()
+            extra = {"response_format": {"type": "json_object"}} if json_mode else {}
             response = self.llm.create_chat_completion(
+                **extra,
                 messages=[
                     {
                         "role": "system",

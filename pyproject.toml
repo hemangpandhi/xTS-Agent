@@ -23,7 +23,11 @@ dependencies = [
 ai = [
     "chromadb>=0.4.0",
     "sentence-transformers>=2.2.0",
-    "llama-cpp-python>=0.2.50"
+    "llama-cpp-python>=0.2.50",
+    # ChromaDB needs SQLite >= 3.35; Ubuntu 20.04 ships 3.31
+    "pysqlite3-binary>=0.5; platform_system == 'Linux'",
+    # chromadb's telemetry dependency; >=3.16 uses Python 3.9+ syntax
+    "posthog<3.16; python_version < '3.9'"
 ]
 
 [project.scripts]

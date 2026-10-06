@@ -284,6 +284,10 @@ class AiRcaConfig:
     llama_n_gpu_layers: int = -1
     index_db_path: str = "config/known_failures/chroma_db"
     source_code_paths: List[str] = field(default_factory=list)
+    # sentence-transformers model name, or a local path for offline labs
+    embedding_model: str = "all-MiniLM-L6-v2"
+    # LLM calls per run: one per actionable failure group, largest first
+    max_groups: int = 20
 
 @dataclass
 class TriageConfig:

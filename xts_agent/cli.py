@@ -201,6 +201,21 @@ def triage(plan, config_path, results_dirs, history_dirs, suite, top):
         click.echo(f"{g.group.count:5d}  {g.label:<10} {g.owner.team:<22} {g.group.title[:70]}{known}")
 
 
+@main.command("index-code")
+@click.option("--plan", default="config/test_plans/full_certification.yaml")
+@click.option("--config", "config_path", default=None)
+def index_code(plan: str, config_path: Optional[str]):
+    """Build/update the local OEM source index used by AI RCA (needs the [ai] extra)."""
+    orchestrator = _build_orchestrator(plan, config_path)
+    orchestrator._initialize()
+    paths = orchestrator.plan.ai_rca.source_code_paths
+    if not paths:
+        click.echo("ai_rca.source_code_paths is empty; nothing to index", err=True)
+        sys.exit(2)
+    total = orchestrator.code_indexer().index_codebase()
+    click.echo(f"Indexed {total} chunks from {', '.join(paths)}")
+
+
 @main.command("device-check")
 @click.option("--plan", default="config/test_plans/smoke_test.yaml")
 @click.option("--config", "config_path", default=None)

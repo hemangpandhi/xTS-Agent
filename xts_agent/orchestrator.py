@@ -317,6 +317,31 @@ class Orchestrator:
             ownership=OwnershipMap.load(cfg.ownership_file),
         )
 
+    def code_indexer(self):
+        from xts_agent.rca.code_indexer import OEMCodeIndexer
+
+        cfg = self.plan.ai_rca
+        return OEMCodeIndexer(cfg.index_db_path, cfg.source_code_paths, cfg.embedding_model)
+
+    def _run_group_ai(self, report) -> None:
+        cfg = self.plan.ai_rca
+        if not cfg.enabled:
+            return
+        from xts_agent.rca.llm_provider import get_llm_provider
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        try:
+            provider = get_llm_provider(cfg)  # refuses external providers without opt-in
+            indexer = self.code_indexer() if cfg.source_code_paths else None
+            GroupAIAnalyzer(
+                provider,
+                indexer=indexer,
+                cache_db=self.plan.triage.history_db or self.plan.agent.database_path,
+                max_groups=cfg.max_groups,
+            ).analyze(report)
+        except Exception as exc:
+            logger.error("AI RCA skipped: %s", exc)
+
     def _file_jira(self, report, stamp: str) -> None:
         cfg = self.plan.jira
         if cfg is None or not cfg.enabled:
@@ -361,6 +386,7 @@ class Orchestrator:
             logger.error("Triage failed: %s", exc, exc_info=True)
             return None
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._run_group_ai(report)
         self._file_jira(report, stamp)
         path = report.save(self._results_dir / "triage" / f"triage_{stamp}.json")
         logger.info("Triage report: %s", path)
@@ -432,18 +458,12 @@ class Orchestrator:
         diagnostics = DiagnosticCollector(
             AdbWrapper, self._results_dir / "diagnostics"
         )
-        ai_analyzer = None
-        if self.plan.ai_rca.enabled:
-            from xts_agent.rca.ai_analyzer import AIAnalyzer
-
-            ai_analyzer = AIAnalyzer(self.plan.ai_rca)
-
+        # AI analysis runs once per failure group in triage, not per test here
         engine = RCAEngine(
             config=rca_cfg,
             diagnostic_collector=diagnostics,
             failure_classifier=classifier,
             pattern_matcher=pattern_matcher,
-            ai_analyzer=ai_analyzer,
         )
         report = engine.analyze_plan_results(results)
         logger.info(

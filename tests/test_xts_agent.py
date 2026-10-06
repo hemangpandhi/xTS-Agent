@@ -1800,6 +1800,63 @@ class JiraFilerTests(unittest.TestCase):
         self.assertNotIn("S3CRET", str(ctx.exception))
 
 
+class GroupAiTests(unittest.TestCase):
+    def test_parse_validates_and_clamps(self):
+        from xts_agent.triage.ai_rca import parse_ai_json
+
+        ok = parse_ai_json('Sure! {"root_cause": "focus stolen", "classification": "environment_issue", '
+                           '"confidence": 1.7, "suggested_fix": "disable kitchensink"} done')
+        self.assertEqual((ok["classification"], ok["confidence"]), ("ENVIRONMENT_ISSUE", 1.0))
+        self.assertEqual(parse_ai_json('{"root_cause": "x", "classification": "ALIENS"}')["classification"], "UNKNOWN")
+        self.assertIsNone(parse_ai_json("I think it is a product bug"))
+        self.assertIsNone(parse_ai_json('{"classification": "PRODUCT_BUG"}'))  # no root cause
+
+    def test_one_call_per_actionable_group_capped_and_cached(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        report = JiraFilerTests._report(None, [
+            ("a", "NEW", False, ""), ("b", "NEW", False, ""), ("c", "NEW", False, ""),
+            ("waived", "NEW", True, ""),
+        ])
+        provider = MagicMock(model_id="llama_cpp:test.gguf")
+        provider.generate.return_value = '{"root_cause": "r", "classification": "PRODUCT_BUG", "confidence": 0.8}'
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "c.db")
+            stats = GroupAIAnalyzer(provider, cache_db=db, max_groups=2).analyze(report)
+            self.assertEqual(stats["analyzed"], 2)
+            self.assertEqual(provider.generate.call_count, 2)
+            self.assertTrue(all(c.kwargs.get("json_mode") for c in provider.generate.call_args_list))
+            self.assertIn("1 failing tests", provider.generate.call_args_list[0][0][0])
+            self.assertIsNone(report.groups[3].ai)  # waived group never sent to the LLM
+
+            again = JiraFilerTests._report(None, [("a", "NEW", False, "")])
+            stats = GroupAIAnalyzer(provider, cache_db=db).analyze(again)
+            self.assertEqual((stats["cached"], provider.generate.call_count), (1, 2))
+            self.assertTrue(again.groups[0].ai["cached"])
+
+    def test_unparseable_output_is_ignored(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        report = JiraFilerTests._report(None, [("a", "NEW", False, "")])
+        provider = MagicMock(model_id="m")
+        provider.generate.return_value = "Failed to generate RCA using llama.cpp: boom"
+        stats = GroupAIAnalyzer(provider).analyze(report)
+        self.assertEqual(stats["unparseable"], 1)
+        self.assertIsNone(report.groups[0].ai)
+
+    def test_chunk_ids_are_stable(self):
+        from xts_agent.rca.code_indexer import CHUNK_LINES, OEMCodeIndexer
+
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "Foo.java"
+            f.write_text("\n".join(f"int line{i} = {i}; // padding padding padding" for i in range(130)))
+            first = OEMCodeIndexer.chunk_file(f)
+            second = OEMCodeIndexer.chunk_file(f)
+        self.assertEqual([c[0] for c in first], [c[0] for c in second])
+        self.assertTrue(all(len(c[1].split("\n")) <= CHUNK_LINES for c in first))
+        self.assertEqual(first[1][2], CHUNK_LINES - 10 + 1)  # overlapping windows
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json
