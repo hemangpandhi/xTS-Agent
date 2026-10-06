@@ -199,7 +199,7 @@ MIN_DEVICES=4 TEST_PLAN=config/test_plans/cts_only.yaml \
   ./scripts/run_when_devices_ready.sh
 
 NUM_DEVICES=10 SPAWN_CLUSTER=1 \
-  TEST_PLAN=config/test_plans/full_cts_hardware.yaml \
+  TEST_PLAN=config/test_plans/dev_cts_hardware_triage.yaml \
   ./scripts/run_nightly.sh
 ```
 
@@ -253,14 +253,21 @@ docker compose -f docker/docker-compose.yml run --rm xts-agent \
 
 ## Test plans
 
-| Plan file | TradeFed plan | Use when |
-|-----------|---------------|----------|
-| `smoke_test.yaml` | `cts` + include filter | First hardware check |
-| `cts_only.yaml` | `cts`, `shard_count: auto` | **Hardware multi-device CTS** |
-| `full_cts_hardware.yaml` | `cts`, auto shards | Full hardware CTS |
-| `full_certification.yaml` | `cts` (+ VTS/STS/…) | Full AAOS cert |
-| `full_cts.yaml` | **`cts-virtual-device`** | **Cuttlefish / virtual only** |
-| `vts_only.yaml` / `catbox_functional.yaml` | suite-specific | Manual single-suite |
+| Plan file | Profile | TradeFed plan | Use when |
+|-----------|---------|---------------|----------|
+| `smoke_test.yaml` | development | `cts` + include filter | First hardware check |
+| `cts_only.yaml` | certification | `cts`, `shard_count: auto` | **Hardware multi-device CTS** |
+| `full_cts_hardware.yaml` | certification | `cts`, auto shards | Full hardware CTS |
+| `dev_cts_hardware_triage.yaml` | development | `cts` minus known-failing modules | Fast nightly/triage iteration |
+| `full_certification.yaml` | certification | `cts` (+ VTS/STS/…) | Full AAOS cert |
+| `full_cts.yaml` | development | **`cts-virtual-device`** | **Cuttlefish / virtual only** |
+| `vts_only.yaml` / `catbox_functional.yaml` | certification | suite-specific | Manual single-suite |
+
+**Profiles.** A plan declares `profile: certification` or `profile: development`
+(default). Certification plans must run every module: any `exclude_filters`,
+`include_filters` or `modules` subset is rejected at load time, because filtered
+results are not valid for submission. Reports are labelled with the profile.
+Keep module exclusions in development plans only.
 
 Defaults: `config/default_config.yaml`.
 

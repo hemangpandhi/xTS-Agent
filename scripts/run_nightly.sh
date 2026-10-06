@@ -17,8 +17,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 XTS_AGENT_HOME="${XTS_AGENT_HOME:-${ROOT_DIR}}"
 NUM_DEVICES="${NUM_DEVICES:-10}"
 WAIT_TIMEOUT_SECS="${WAIT_TIMEOUT_SECS:-1800}"
-# Default to hardware CTS; override with full_cts.yaml for Cuttlefish/virtual.
-TEST_PLAN="${TEST_PLAN:-config/test_plans/full_cts_hardware.yaml}"
+# Default to the fast development triage plan (skips known-failing modules).
+# Use full_cts_hardware.yaml for a certification-grade run, full_cts.yaml for Cuttlefish.
+TEST_PLAN="${TEST_PLAN:-config/test_plans/dev_cts_hardware_triage.yaml}"
 CONFIG_PATH="${CONFIG_PATH:-config/default_config.yaml}"
 STOP_EXISTING="${STOP_EXISTING:-0}"
 SPAWN_CLUSTER="${SPAWN_CLUSTER:-1}"

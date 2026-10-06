@@ -8,6 +8,9 @@ plan:
   target_completion_hours: 48
   parallel_execution: false           # Suites run sequentially (TradeFed uses all devices per suite)
 
+# Certification runs must execute every module: filters are rejected at load time.
+profile: certification
+
 device_requirements:
   min_devices: 6                      # Minimum 6 devices for 2-day target
   device_type: "any"                 # aaos | emulator | any
@@ -43,8 +46,6 @@ suites:
     timeout_hours: 20
     extra_args:
       - "--skip-system-status-check"
-    exclude_filters:
-      file: "config/known_failures/cts_known_failures.txt"
     modules: []                        # Empty = run all modules
 
   - name: vts
@@ -69,8 +70,6 @@ suites:
       bugreport_on_failure: true
     timeout_hours: 12
     extra_args: []
-    exclude_filters:
-      file: "config/known_failures/vts_known_failures.txt"
     modules: []
 
   - name: sts
@@ -92,7 +91,6 @@ suites:
       bugreport_on_failure: true
     timeout_hours: 6
     extra_args: []
-    exclude_filters: {}
     modules: []
 
   - name: gts
@@ -116,7 +114,6 @@ suites:
       bugreport_on_failure: true
     timeout_hours: 8
     extra_args: []
-    exclude_filters: {}
     modules: []
 
   - name: ats
@@ -139,7 +136,6 @@ suites:
       bugreport_on_failure: true
     timeout_hours: 4
     extra_args: []
-    exclude_filters: {}
     modules: []
 
   - name: catbox
@@ -161,7 +157,6 @@ suites:
       screenshot_on_failure: true
     timeout_hours: 4
     extra_args: []
-    exclude_filters: {}
     modules: []
     # CATBox-specific sub-plans (can be run individually)
     sub_plans:

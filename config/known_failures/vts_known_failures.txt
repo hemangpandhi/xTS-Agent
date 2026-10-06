@@ -1,4 +1,5 @@
 # VTS Known Failure Exclusion Filters
+# Development profile only: certification plans reject exclude filters.
 # ====================================
 # Format: <ModuleName> <TestClass>#<TestMethod>
 # ─── Add your exclusions below this line ─────────────────────

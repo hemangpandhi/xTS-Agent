@@ -1,5 +1,6 @@
 name: "Official CTS Run"
 description: "Executing real Google CTS TradeFed engine"
+profile: development
 suites:
   - name: "cts"
     priority: 100

@@ -27,6 +27,11 @@
                 <span class="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold bg-white text-indigo-900 shadow">
                     Status: {{ plan.overall_status }}
                 </span>
+                {% if plan.profile == 'certification' %}
+                <span class="ml-2 inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900">Certification profile</span>
+                {% else %}
+                <span class="ml-2 inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900" title="Filtered or partial runs are not valid for certification">Development profile &mdash; not for certification</span>
+                {% endif %}
                 <p class="text-xs text-blue-200 mt-2 font-mono">Execution Time: {{ (plan.duration / 3600)|round(2) }} hrs</p>
             </div>
         </div>

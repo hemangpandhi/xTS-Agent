@@ -1,5 +1,8 @@
+# Certification-grade full CTS on physical/network ADB devices.
+# profile: certification forbids exclude/include filters and module subsets.
 name: Full CTS Hardware Sharded Run
 description: Full CTS on physical/network ADB devices (not cts-virtual-device)
+profile: certification
 devices:
   min_devices: 1
 suites:
@@ -7,94 +10,6 @@ suites:
   priority: 1
   plan: cts
   enabled: true
-  exclude_filters:
-  - CtsNpuManagerMoblyTestCases
-  - CtsWifiMoblyTestCases
-  - CtsAppExitTestCases[instant]
-  - CtsAppFgsTestCases
-  - CtsAppFunctionTestCases[run-on-secondary-user]
-  - CtsAppSecurityHostTestCases
-  - CtsAppServiceTestCases
-  - CtsAppStartAtomHostTestCases[instant]
-  - CtsAppTestCases
-  - CtsAppTestCases[instant]
-  - CtsAutoFillServiceTestCases
-  - CtsAutoFillServiceTestCases[instant]
-  - CtsBluetoothTestCases
-  - CtsCameraTestCases
-  - CtsCarTestCases
-  - CtsContentResolverTestCases
-  - CtsContentTestCases
-  - CtsContentTestCases[instant]
-  - CtsDevicePolicyManagerTestCases
-  - CtsDevicePolicyTestCases
-  - CtsDevicePolicyTestCases[run-on-secondary-user]
-  - CtsDownloadManagerApi28
-  - CtsDownloadManagerInstaller
-  - CtsDownloadManagerTestCases
-  - CtsGraphicsTestCases[instant]
-  - CtsHardwareHealthAtomHostTestCases
-  - CtsHardwareHealthAtomHostTestCases[instant]
-  - CtsHibernationTestCases
-  - CtsHiddenApiBlocklistApi27TestCases
-  - CtsHiddenApiBlocklistApi28TestCases
-  - CtsHiddenApiBlocklistCurrentApiTestCases
-  - CtsHiddenApiBlocklistDebugClassTestCases
-  - CtsHiddenApiBlocklistTestApiTestCases
-  - CtsHostsideNetworkPolicyTests
-  - CtsHostsideNetworkPolicyTests[instant]
-  - CtsInputMethodServiceHostTestCases[instant]
-  - CtsInputMethodTestCases
-  - CtsInputMethodTestCases32
-  - CtsInputTestCases
-  - CtsKeystorePerformanceTestCases
-  - CtsKeystoreTestCases
-  - CtsLibcoreTestCases
-  - CtsNetAtomHostTestCases
-  - CtsNetAtomHostTestCases[instant]
-  - CtsOsTestCases
-  - CtsOsTestCases[instant]
-  - CtsPackageInstallTestCases
-  - CtsPackageUninstallTestCases
-  - CtsPackageUninstallTestCases[run-on-secondary-user]
-  - CtsPermissionUiTestCases
-  - CtsPreferenceTestCases
-  - CtsProviderUiTestCases
-  - CtsSafetyCenterTestCases
-  - CtsScopedStorageCompatHostTest
-  - CtsSecurityTestCases
-  - CtsSensorPrivacyTestCases
-  - CtsSettingsHostTestCases
-  - CtsSharesheetTestCases
-  - CtsStatsdAtomHostTestCases
-  - CtsStatsdAtomHostTestCases[instant]
-  - CtsStorageHostTestCases
-  - CtsSurfaceControlTests
-  - CtsSuspendAppsTestCases
-  - CtsSyncManagerTestsCases
-  - CtsTelecomTestCases
-  - CtsTelephonyAtomHostTestCases
-  - CtsTelephonyAtomHostTestCases[instant]
-  - CtsTextTestCases
-  - CtsViewTestCases
-  - CtsVirtualDevicesAppLaunchTestCases
-  - CtsWebkitTestCases
-  - CtsWidgetTestCases
-  - CtsWifiAtomHostTestCases
-  - CtsWifiAtomHostTestCases[instant]
-  - CtsWifiBroadcastsHostTestCases
-  - CtsWifiTestCases
-  - CtsWindowManagerDeviceActivity
-  - CtsWindowManagerDeviceBackNavigation
-  - CtsWindowManagerDeviceDisplay
-  - CtsWindowManagerDeviceDragAndDrop
-  - CtsWindowManagerDeviceInput
-  - CtsWindowManagerDeviceInsets
-  - CtsWindowManagerDeviceMultiDisplay
-  - CtsWindowManagerDeviceWindow
-  - CtsWindowManagerHostTestCases
-  - CtsWindowManagerJetpackTestCases
-  - CtsWindowManagerSdk34TestCases
   sharding:
     enabled: true
     shard_count: auto

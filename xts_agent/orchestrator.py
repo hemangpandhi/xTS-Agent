@@ -177,6 +177,7 @@ class Orchestrator:
             duration=self.last_plan_result.duration,
             overall_status=overall,
             device_serials=self.last_plan_result.device_serials,
+            profile=self.last_plan_result.profile,
         )
         self.last_plan_result = result
         rca = self._run_rca(result) if plan.post_execution.rca.enabled else None
@@ -249,6 +250,7 @@ class Orchestrator:
             duration=data.get("duration", 0.0),
             overall_status=data.get("status", "UNKNOWN"),
             device_serials=data.get("device_serials") or [],
+            profile=data.get("profile", "development"),
         )
 
     def analyze(self, enable_rca: bool = True, classify_failures: bool = True):

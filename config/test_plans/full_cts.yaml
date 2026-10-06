@@ -1,5 +1,6 @@
 name: "Full CTS Sharded Run"
 description: "Executing full CTS TradeFed engine across all devices"
+profile: development
 devices:
   min_devices: 1
 suites:

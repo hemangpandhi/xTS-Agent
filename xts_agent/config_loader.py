@@ -19,6 +19,13 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+PROFILES = ("certification", "development")
+
+
+class ConfigError(ValueError):
+    """Raised when a test plan is invalid for its declared profile."""
+
+
 DEFAULT_CONFIG_CANDIDATES = (
     Path("config/default_config.yaml"),
     Path(__file__).resolve().parent.parent / "config" / "default_config.yaml",
@@ -214,6 +221,8 @@ class TestPlanConfig:
     name: str
     suites: List[SuiteConfig]
     description: str = ""
+    # "certification" runs must execute every module; "development" may filter
+    profile: str = "development"
     devices: DeviceRequirements = field(default_factory=DeviceRequirements)
     post_execution: PostExecutionConfig = field(default_factory=PostExecutionConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -266,6 +275,9 @@ class ConfigLoader:
             or "Unnamed Plan"
         )
         description = plan_data.get("description") or plan_meta.get("description") or ""
+        profile = str(plan_data.get("profile") or plan_meta.get("profile") or "development").lower()
+        if profile not in PROFILES:
+            raise ConfigError(f"Unknown profile {profile!r} in {self.plan_path}; use one of {PROFILES}")
 
         # Device requirements: accept `devices` or `device_requirements`
         device_raw = plan_data.get("devices") or plan_data.get("device_requirements") or {}
@@ -304,9 +316,13 @@ class ConfigLoader:
                 )
             )
 
+        if profile == "certification":
+            self._validate_certification(suites)
+
         return TestPlanConfig(
             name=name,
             description=description,
+            profile=profile,
             suites=suites,
             devices=devices,
             post_execution=post_execution,
@@ -316,6 +332,23 @@ class ConfigLoader:
             ai_rca=ai_rca,
             raw_defaults=defaults,
         )
+
+    def _validate_certification(self, suites: List[SuiteConfig]) -> None:
+        """Filtered or partial runs are not valid certification results."""
+        problems = []
+        for suite in suites:
+            if not suite.enabled:
+                continue
+            for attr in ("exclude_filters", "include_filters", "modules"):
+                values = getattr(suite, attr)
+                if values:
+                    problems.append(f"{suite.name}.{attr} has {len(values)} entr(y/ies)")
+        if problems:
+            raise ConfigError(
+                f"{self.plan_path} is profile: certification but restricts the test set "
+                f"({'; '.join(problems)}). Move filters to a development plan and track "
+                "known failures as waivers instead."
+            )
 
     @staticmethod
     def _parse_ai_rca(defaults: dict, plan_ai_rca: dict, rca: RCAPostConfig) -> AiRcaConfig:

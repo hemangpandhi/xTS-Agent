@@ -98,6 +98,54 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertIn("html", plan.post_execution.reporting.formats)
 
 
+class ProfileTests(unittest.TestCase):
+    def _load(self, plan_yaml: str):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "plan.yaml"
+            p.write_text(plan_yaml, encoding="utf-8")
+            return ConfigLoader(p).load_plan()
+
+    def test_certification_rejects_filters(self):
+        from xts_agent.config_loader import ConfigError
+
+        for key, value in (
+            ("exclude_filters", "[CtsCarTestCases]"),
+            ("include_filters", "[CtsBionicTestCases]"),
+            ("modules", "[CtsOsTestCases]"),
+        ):
+            with self.subTest(key=key), self.assertRaises(ConfigError):
+                self._load(f"name: c\nprofile: certification\nsuites:\n- name: cts\n  {key}: {value}\n")
+
+    def test_development_allows_filters_and_is_default(self):
+        plan = self._load("name: d\nsuites:\n- name: cts\n  exclude_filters: [CtsCarTestCases]\n")
+        self.assertEqual(plan.profile, "development")
+        self.assertEqual(plan.suites[0].exclude_filters, ["CtsCarTestCases"])
+
+    def test_unknown_profile_rejected(self):
+        from xts_agent.config_loader import ConfigError
+
+        with self.assertRaises(ConfigError):
+            self._load("name: x\nprofile: certified\nsuites: []\n")
+
+    def test_shipped_plans_load_with_expected_profiles(self):
+        expected = {
+            "full_certification.yaml": "certification",
+            "full_cts_hardware.yaml": "certification",
+            "cts_only.yaml": "certification",
+            "vts_only.yaml": "certification",
+            "catbox_functional.yaml": "certification",
+            "dev_cts_hardware_triage.yaml": "development",
+            "smoke_test.yaml": "development",
+            "full_cts.yaml": "development",
+        }
+        for name, profile in expected.items():
+            with self.subTest(plan=name):
+                plan = ConfigLoader(f"config/test_plans/{name}").load_plan()
+                self.assertEqual(plan.profile, profile)
+        dev = ConfigLoader("config/test_plans/dev_cts_hardware_triage.yaml").load_plan()
+        self.assertIn("CtsCarTestCases", dev.suites[0].exclude_filters)
+
+
 class AiRcaConfigTests(unittest.TestCase):
     def _load(self, defaults: str, plan: str):
         with tempfile.TemporaryDirectory() as tmp:

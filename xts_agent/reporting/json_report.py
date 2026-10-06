@@ -38,6 +38,7 @@ class JSONReportGenerator:
         data = {
             "status": getattr(plan_result, "overall_status", "unknown"),
             "plan_name": getattr(plan_result, "plan_name", ""),
+            "profile": getattr(plan_result, "profile", "development"),
             "duration": getattr(plan_result, "duration", 0),
             "total_pass": getattr(plan_result, "total_pass", 0),
             "total_fail": getattr(plan_result, "total_fail", 0),

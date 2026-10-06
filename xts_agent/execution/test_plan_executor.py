@@ -49,6 +49,7 @@ class PlanResult:
     duration: float
     overall_status: str
     device_serials: List[str] = field(default_factory=list)
+    profile: str = "development"
 
 
 class TestPlanExecutor:
@@ -124,6 +125,7 @@ class TestPlanExecutor:
             duration=duration,
             overall_status=overall_status(s.status for s in suites_results.values()),
             device_serials=unique_devices,
+            profile=getattr(plan, "profile", "development"),
         )
 
     def execute_suite(
