@@ -195,8 +195,22 @@ class SuiteConfig:
     sharding: ShardingConfig = field(default_factory=ShardingConfig)
 
 
+
+@dataclass
+class AiRcaConfig:
+    enabled: bool = False
+    provider: str = "gemini"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-1.5-pro"
+    llama_model_path: str = ""
+    llama_n_ctx: int = 16384
+    llama_n_gpu_layers: int = -1
+    index_db_path: str = "config/known_failures/chroma_db"
+    source_code_paths: List[str] = field(default_factory=list)
+
 @dataclass
 class TestPlanConfig:
+
     name: str
     suites: List[SuiteConfig]
     description: str = ""
@@ -205,6 +219,7 @@ class TestPlanConfig:
     paths: PathsConfig = field(default_factory=PathsConfig)
     agent: AgentSettings = field(default_factory=AgentSettings)
     ats2: ATS2Config = field(default_factory=ATS2Config)
+    ai_rca: AiRcaConfig = field(default_factory=AiRcaConfig)
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 

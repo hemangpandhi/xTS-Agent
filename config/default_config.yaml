@@ -95,3 +95,23 @@ ats2:
   base_url: ""                          # ATS 2.0 server URL
   api_key: ""                           # CI/CD API key
   timeout_secs: 30
+
+# AI Root Cause Analysis Configuration
+ai_rca:
+  enabled: false
+  provider: "gemini" # Options: "gemini" or "llama_cpp"
+  
+  # Gemini Configuration
+  gemini_api_key: ""
+  gemini_model: "gemini-1.5-pro"
+  
+  # Llama.cpp (Local GPU) Configuration
+  llama_model_path: "/path/to/models/DeepSeek-Coder-V2.gguf"
+  llama_n_ctx: 16384 # Large context for logs + code
+  llama_n_gpu_layers: -1 # -1 offloads everything to GPU
+  
+  # RAG / OEM Code Indexer
+  index_db_path: "config/known_failures/chroma_db"
+  source_code_paths:
+    - "/mnt/aosp/vendor"
+    - "/mnt/aosp/hardware"

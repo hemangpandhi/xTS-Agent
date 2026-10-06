@@ -316,10 +316,10 @@ class Orchestrator:
             AdbWrapper, self._results_dir / "diagnostics"
         )
         ai_analyzer = None
-        if rca_cfg.ai_powered and rca_cfg.ai_api_key:
+        if hasattr(self.plan, 'ai_rca') and self.plan.ai_rca.enabled:
             from xts_agent.rca.ai_analyzer import AIAnalyzer
 
-            ai_analyzer = AIAnalyzer(rca_cfg.ai_api_key, rca_cfg.ai_model)
+            ai_analyzer = AIAnalyzer(self.plan.ai_rca)
 
         engine = RCAEngine(
             config=rca_cfg,
