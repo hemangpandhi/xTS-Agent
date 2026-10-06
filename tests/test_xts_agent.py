@@ -1485,6 +1485,75 @@ class SignatureTests(unittest.TestCase):
         )
 
 
+class FailureHistoryTests(unittest.TestCase):
+    def _run(self, start_ms, fp, outcomes, done=True):
+        """outcomes: {test_name: "PASS"|"FAIL"} in module CtsM (x86_64)."""
+        from xts_agent.results.result_parser import ModuleResult, TestCaseResult, TestResults
+
+        cases = [
+            TestCaseResult("c.T", name, res, "boom" if res == "FAIL" else None,
+                           "java.lang.AssertionError: boom" if res == "FAIL" else None,
+                           module="x86_64 CtsM")
+            for name, res in outcomes.items()
+        ]
+        mod = ModuleResult("CtsM", done, 0, 0, 0, cases, abi="x86_64")
+        res = TestResults("CTS", {"build_fingerprint": fp}, "", "", modules=[mod])
+        res.start_ms = start_ms
+        return res
+
+    def _classify(self, history, current):
+        from xts_agent.results.result_parser import ResultParser
+
+        failed = ResultParser().get_failed_tests(current)
+        labels = history.classify("CTS", current, [(t.module, t.test_id) for t in failed])
+        return {k.split("#")[-1]: v for k, v in labels.items()}
+
+    def test_labels_new_persistent_flaky_and_no_history(self):
+        from xts_agent.triage.history import FailureHistory
+
+        with tempfile.TemporaryDirectory() as tmp:
+            h = FailureHistory(Path(tmp) / "h.db")
+            h.record_run("CTS", self._run(1, "b1", {"new": "PASS", "pers": "FAIL", "flaky": "FAIL"}), results_dir="r1")
+            h.record_run("CTS", self._run(2, "b2", {"new": "PASS", "pers": "FAIL", "flaky": "PASS"}), results_dir="r2")
+            cur = self._run(3, "b3", {"new": "FAIL", "pers": "FAIL", "flaky": "FAIL", "fresh": "FAIL"})
+            cur.modules.append(self._run(3, "b3", {"x": "FAIL"}).modules[0])
+            cur.modules[-1].name = "CtsOther"
+            for tc in cur.modules[-1].test_cases:
+                tc.module = "x86_64 CtsOther"
+            labels = self._classify(h, cur)
+        self.assertEqual(labels["new"].label, "NEW")
+        self.assertEqual(labels["new"].last_pass_build, "b2")
+        self.assertEqual(labels["pers"].label, "PERSISTENT")
+        self.assertEqual(labels["pers"].first_fail_build, "b1")
+        self.assertEqual(labels["flaky"].label, "FLAKY")
+        self.assertEqual(labels["x"].label, "NO_HISTORY")  # module never ran before
+
+    def test_partial_module_is_not_evidence_of_pass(self):
+        from xts_agent.triage.history import FailureHistory
+
+        with tempfile.TemporaryDirectory() as tmp:
+            h = FailureHistory(Path(tmp) / "h.db")
+            # interrupted before reaching the test: module not done, no failure
+            h.record_run("CTS", self._run(1, "b1", {"other": "PASS"}, done=False), results_dir="r1")
+            labels = self._classify(h, self._run(2, "b2", {"t": "FAIL"}))
+        self.assertEqual(labels["t"].label, "NO_HISTORY")
+
+    def test_retry_session_replaces_same_invocation(self):
+        import sqlite3
+
+        from xts_agent.triage.history import FailureHistory
+
+        with tempfile.TemporaryDirectory() as tmp:
+            h = FailureHistory(Path(tmp) / "h.db")
+            self.assertIsNotNone(h.record_run("CTS", self._run(1, "b", {"t": "FAIL"}), results_dir="2026.01.01_a"))
+            # retry of the same invocation (same start) fixed it
+            self.assertIsNotNone(h.record_run("CTS", self._run(1, "b", {"t": "PASS"}), results_dir="2026.01.02_b"))
+            self.assertIsNone(h.record_run("CTS", self._run(1, "b", {"t": "FAIL"}), results_dir="2026.01.01_a"))
+            conn = sqlite3.connect(Path(tmp) / "h.db")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM triage_runs").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM triage_failures").fetchone()[0], 0)
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

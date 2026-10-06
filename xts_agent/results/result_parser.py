@@ -57,6 +57,8 @@ class TestResults:
     )
     modules_done: int = 0
     modules_total: int = 0
+    # Invocation start (epoch ms) from <Result start=...>; orders runs in history
+    start_ms: int = 0
 
     @property
     def is_complete(self) -> bool:
@@ -134,6 +136,10 @@ class ResultParser:
             start_time=root.attrib.get("start_display", ""),
             end_time=root.attrib.get("end_display", ""),
         )
+        try:
+            results.start_ms = int(root.attrib.get("start", 0) or 0)
+        except ValueError:
+            results.start_ms = 0
 
         build_info = root.find("Build")
         if build_info is not None:
