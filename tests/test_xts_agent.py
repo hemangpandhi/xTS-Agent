@@ -1426,6 +1426,65 @@ class QuarantineTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text())["hu"]["consecutive_failures"], 200)
 
 
+def _tc(cls, test, stack, module="x86_64 CtsTextTestCases"):
+    from xts_agent.results.result_parser import TestCaseResult
+
+    return TestCaseResult(cls, test, "FAIL", stack.split("\n")[0], stack, module=module)
+
+
+FOCUS_STACK = (
+    "junit.framework.AssertionFailedError: Timed out waiting for activity "
+    "ComponentInfo{{android.text.cts/{act}}} to gain focus; {h} com.google.android.car.kitchensink "
+    "was focused in 5003ms\n"
+    "\tat junit.framework.Assert.fail(Assert.java:57)\n"
+    "\tat android.server.wm.WindowManagerStateHelper.waitForFocus(WindowManagerStateHelper.java:{line})\n"
+    "\tat {cls}.{test}({file}.java:{line2})\n"
+)
+
+
+class SignatureTests(unittest.TestCase):
+    def _focus(self, cls, test, act, h, line):
+        stack = FOCUS_STACK.format(act=act, h=h, line=line, cls=cls, test=test,
+                                   file=cls.rsplit(".", 1)[-1], line2=line + 7)
+        return _tc(cls, test, stack)
+
+    def test_same_root_cause_across_tests_and_classes_groups_together(self):
+        from xts_agent.triage.signature import compute_signature, group_failures
+
+        a = self._focus("android.text.method.cts.KeyListenerTest", "testA", "A.KeyListenerCtsActivity", "5a3b2", 101)
+        b = self._focus("android.widget.cts.ListViewTest", "testB", "B.ListViewCtsActivity", "9f0e1c", 202)
+        self.assertEqual(compute_signature(a), compute_signature(b))
+        groups = group_failures([("CTS", a), ("CTS", b)])
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].count, 2)
+        self.assertIn("<component>", groups[0].message)
+
+    def test_direct_assertions_in_different_test_classes_stay_separate(self):
+        from xts_agent.triage.signature import compute_signature
+
+        stack = "java.lang.AssertionError: expected:<1> but was:<2>\n\tat org.junit.Assert.fail(Assert.java:89)\n\tat {c}.t({c}.java:{n})"
+        a = _tc("android.a.cts.ATest", "t", stack.format(c="android.a.cts.ATest", n=10))
+        b = _tc("android.a.cts.ATest", "t2", stack.format(c="android.a.cts.ATest", n=99))
+        c = _tc("android.b.cts.BTest", "t", stack.format(c="android.b.cts.BTest", n=10))
+        self.assertEqual(compute_signature(a), compute_signature(b))  # line numbers ignored
+        self.assertNotEqual(compute_signature(a), compute_signature(c))
+
+    def test_different_exceptions_differ(self):
+        from xts_agent.triage.signature import compute_signature
+
+        npe = _tc("X", "t", "java.lang.NullPointerException: boom\n\tat X.t(X.java:1)")
+        ise = _tc("X", "t", "java.lang.IllegalStateException: boom\n\tat X.t(X.java:1)")
+        self.assertNotEqual(compute_signature(npe), compute_signature(ise))
+
+    def test_normalize_message(self):
+        from xts_agent.triage.signature import normalize_message
+
+        self.assertEqual(
+            normalize_message("event bindInput(pid=25752) not found within 5000ms: uid 0x1f"),
+            "event bindInput(pid=<n>) not found within <n>ms: uid <hex>",
+        )
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json
