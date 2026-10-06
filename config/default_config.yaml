@@ -103,9 +103,13 @@ ats2:
 # AI Root Cause Analysis Configuration
 ai_rca:
   enabled: false
-  provider: "gemini" # Options: "gemini" or "llama_cpp"
-  
-  # Gemini Configuration
+  provider: "llama_cpp"                 # "llama_cpp" (on-prem, default) or "gemini" (external)
+  # External providers receive failure logs, stack traces and retrieved OEM
+  # source code. They are refused unless this is explicitly set to true.
+  allow_external_providers: false
+  request_timeout_secs: 120
+
+  # Gemini Configuration (external; requires allow_external_providers: true)
   gemini_api_key: ""
   gemini_model: "gemini-1.5-pro"
   

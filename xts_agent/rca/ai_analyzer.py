@@ -24,7 +24,13 @@ class AIAnalysisResult:
 class AIAnalyzer:
     def __init__(self, ai_rca_config: AiRcaConfig):
         self.config = ai_rca_config
-        self.triage_engine = AITriageEngine(ai_rca_config) if ai_rca_config.enabled else None
+        self.triage_engine = None
+        if ai_rca_config.enabled:
+            try:
+                self.triage_engine = AITriageEngine(ai_rca_config)
+            except ValueError as exc:
+                # Misconfigured/disallowed provider: keep RCA running without AI
+                logger.error("AI RCA disabled: %s", exc)
 
     def analyze_failure(
         self, test_id: str, stack_trace: str, logcat_excerpt: str

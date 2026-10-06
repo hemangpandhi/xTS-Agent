@@ -206,7 +206,12 @@ class SuiteConfig:
 @dataclass
 class AiRcaConfig:
     enabled: bool = False
-    provider: str = "gemini"
+    # On-prem by default: failure logs and OEM source never leave the host
+    provider: str = "llama_cpp"
+    # Must be explicitly true to send logs/stack traces/OEM source to a
+    # third-party API (e.g. gemini)
+    allow_external_providers: bool = False
+    request_timeout_secs: int = 120
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-pro"
     llama_model_path: str = ""

@@ -173,6 +173,53 @@ class AiRcaConfigTests(unittest.TestCase):
         self.assertFalse(self._load("", "").ai_rca.enabled)
 
 
+class LlmProviderTests(unittest.TestCase):
+    def _cfg(self, **kw):
+        from xts_agent.config_loader import AiRcaConfig
+
+        return AiRcaConfig(enabled=True, **kw)
+
+    def test_defaults_are_on_prem(self):
+        from xts_agent.rca.llm_provider import LlamaCppProvider, get_llm_provider
+
+        cfg = self._cfg()
+        self.assertEqual(cfg.provider, "llama_cpp")
+        self.assertFalse(cfg.allow_external_providers)
+        self.assertIsInstance(get_llm_provider(cfg), LlamaCppProvider)
+
+    def test_external_provider_refused_without_opt_in(self):
+        from xts_agent.rca.llm_provider import ExternalProviderNotAllowed, get_llm_provider
+
+        with self.assertRaises(ExternalProviderNotAllowed):
+            get_llm_provider(self._cfg(provider="gemini", gemini_api_key="k"))
+
+    def test_analyzer_falls_back_when_external_refused(self):
+        from xts_agent.rca.ai_analyzer import AIAnalyzer
+
+        analyzer = AIAnalyzer(self._cfg(provider="gemini", gemini_api_key="k"))
+        self.assertIsNone(analyzer.triage_engine)
+        self.assertEqual(analyzer.analyze_failure("t", "stack", "").confidence, 0.4)
+
+    def test_gemini_key_in_header_with_timeout_and_not_logged(self):
+        import requests
+
+        from xts_agent.rca.llm_provider import get_llm_provider
+
+        provider = get_llm_provider(
+            self._cfg(provider="gemini", gemini_api_key="SECRET-KEY", allow_external_providers=True,
+                      request_timeout_secs=42)
+        )
+        self.assertNotIn("SECRET-KEY", provider.url)
+        err = requests.ConnectionError(f"failed for {provider.url}?key=SECRET-KEY")
+        with patch("requests.post", side_effect=err) as post, self.assertLogs(
+            "xts_agent.rca.llm_provider", "ERROR"
+        ) as logs:
+            out = provider.generate("prompt")
+        self.assertEqual(post.call_args.kwargs["headers"]["x-goog-api-key"], "SECRET-KEY")
+        self.assertEqual(post.call_args.kwargs["timeout"], 42)
+        self.assertNotIn("SECRET-KEY", " ".join(logs.output) + out)
+
+
 class ShardManagerTests(unittest.TestCase):
     def test_auto_shard_count(self):
         mgr = ShardManager(device_manager=MagicMock())
