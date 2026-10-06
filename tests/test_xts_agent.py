@@ -307,6 +307,14 @@ class TradefedRunnerTests(unittest.TestCase):
         self.assertIn("--include-filter", cmd)
         self.assertIn("--skip-system-status-check", cmd)
 
+    def test_retry_command_shards_across_all_serials(self):
+        runner = TradefedRunner("/tmp/android-cts", "cts-tradefed")
+        cmd = runner.build_retry_command(7, "FAILED", device_serials=["a", "b", "c"])
+        self.assertEqual(cmd[cmd.index("--shard-count") + 1], "3")
+        self.assertEqual(cmd[cmd.index("--retry") + 1], "7")
+        single = runner.build_retry_command(7, "FAILED", device_serials=["a"])
+        self.assertNotIn("--shard-count", single)
+
     @staticmethod
     def _make_result_dir(root: Path, name: str) -> Path:
         d = root / name

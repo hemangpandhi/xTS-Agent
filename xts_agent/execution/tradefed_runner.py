@@ -167,7 +167,11 @@ class TradefedRunner:
         # TradeFed accepts FAILED or NOT_EXECUTED; omitting the flag retries both
         if retry_type and str(retry_type).upper() != "BOTH":
             cmd.extend(["--retry-type", str(retry_type).upper()])
-        for serial in device_serials or []:
+        serials = list(device_serials or [])
+        # Without --shard-count TradeFed runs the whole retry on one device
+        if len(serials) > 1:
+            cmd.extend(["--shard-count", str(len(serials))])
+        for serial in serials:
             cmd.extend(["-s", serial])
         return cmd
 
