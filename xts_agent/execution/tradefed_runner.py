@@ -117,6 +117,8 @@ class TradefedRunner:
         extra_args: Optional[Sequence[str]] = None,
         device_serials: Optional[Sequence[str]] = None,
         modules: Optional[Sequence[str]] = None,
+        diagnostics: Optional[dict] = None,
+        sharding_options: Optional[dict] = None,
     ) -> List[str]:
         cmd = self.resolve_command_prefix() + ["run", "commandAndExit", plan]
         retry_config = retry_config or {}
@@ -128,6 +130,14 @@ class TradefedRunner:
 
         if shard_count > 1:
             cmd.extend(["--shard-count", str(shard_count)])
+            # Only emit flags that differ from TradeFed's defaults
+            sharding_options = sharding_options or {}
+            if sharding_options.get("dynamic_sharding") is False:
+                cmd.append("--no-dynamic-sharding")
+            if sharding_options.get("intra_module_sharding") is False:
+                cmd.append("--no-intra-module-sharding")
+            if sharding_options.get("token_sharding"):
+                cmd.append("--enable-token-sharding")
 
         # Pin allocated devices so TradeFed does not grab unrelated ADB targets
         for serial in device_serials:
@@ -148,7 +158,19 @@ class TradefedRunner:
             if retry_config.get("reboot_at_last_retry"):
                 cmd.append("--reboot-at-last-retry")
 
-        cmd.extend(["--logcat-on-failure", "--screenshot-on-failure"])
+        diagnostics = diagnostics if diagnostics is not None else {
+            "logcat_on_failure": True,
+            "screenshot_on_failure": True,
+        }
+        if diagnostics.get("logcat_on_failure"):
+            cmd.append("--logcat-on-failure")
+            if diagnostics.get("max_logcat_size_mb"):
+                size = int(diagnostics["max_logcat_size_mb"]) * 1024 * 1024
+                cmd.extend(["--logcat-on-failure-size", str(size)])
+        if diagnostics.get("screenshot_on_failure"):
+            cmd.append("--screenshot-on-failure")
+        if diagnostics.get("bugreport_on_failure"):
+            cmd.append("--bugreport-on-failure")
 
         for f in exclude_filters:
             cmd.extend(["--exclude-filter", f])

@@ -12,13 +12,11 @@ agent:
 
 paths:
   xts_packages_dir: "/opt/xts"         # Base directory for downloaded xTS packages
-  tools_dir: "/opt/xts/tools"
-  java_home: ""                        # Auto-detect if empty
-  android_sdk: ""                      # Auto-detect from ANDROID_HOME if empty
-  adb_path: ""                         # Auto-detect from PATH if empty
+  java_home: ""                        # JDK for TradeFed; empty = environment's JAVA_HOME/PATH
+  android_sdk: ""                      # SDK root (aapt2); empty = ANDROID_HOME / common locations
+  adb_path: ""                         # adb binary; empty = first adb on PATH
 
 device:
-  health_check_interval_secs: 300       # Device health check every 5 minutes
   min_battery_level: 20                 # Minimum battery percentage
   adb_timeout_secs: 30                  # ADB command timeout
   reboot_timeout_secs: 120              # Device reboot timeout
@@ -46,23 +44,21 @@ device:
   extra_commands: []                    # Additional `adb shell` commands, e.g. OEM demo-mode off
 
 execution:
-  default_timeout_hours: 48             # Overall plan timeout
   suite_timeout_hours: 24               # Per-suite timeout
-  kill_tradefed_on_timeout: true
   # >1 runs that many suites at once on an automatic device split weighted by
   # expected device-hours (measured history, else built-in estimates). Each
   # suite gets >= 1 device; freed devices go to the next pending suite.
   # Overridable per plan with top-level `max_concurrent_suites:`.
   max_concurrent_suites: 1
-  reboot_between_suites: true
-  cooldown_between_suites_secs: 60
+  reboot_between_suites: false         # default for plans that do not set devices.reboot_between_suites
+  cooldown_between_suites_secs: 0      # pause between sequential suites (e.g. thermal settle)
 
 sharding:
-  default_mode: "auto"                  # auto | fixed | disabled
   max_shard_count: 16                   # Upper limit on shard count
-  dynamic_sharding: true                # Use TradeFed dynamic sharding
-  token_sharding: false                 # Enable for heterogeneous devices
-  intra_module_sharding: true           # Split large modules across shards
+  # Passed to TradeFed (per suite overridable under `sharding:`)
+  dynamic_sharding: true                # --[no-]dynamic-sharding
+  token_sharding: false                 # --enable-token-sharding (heterogeneous devices)
+  intra_module_sharding: true           # --[no-]intra-module-sharding
 
 retry:
   intra_module:
@@ -75,18 +71,15 @@ retry:
     max_retries: 2
     retry_type: "FAILED"                # FAILED | NOT_EXECUTED | BOTH
     cooldown_secs: 60
-  agent_retry:
-    enabled: true
-    max_retries: 2
-    classify_before_retry: true
 
+# TradeFed failure diagnostics (per suite overridable under `artifacts:`)
 diagnostics:
-  logcat_on_failure: true
-  screenshot_on_failure: true
-  bugreport_on_failure: true
-  collect_tombstones: true
-  collect_anr_traces: true
-  max_logcat_size_mb: 50
+  logcat_on_failure: true               # --logcat-on-failure
+  screenshot_on_failure: true           # --screenshot-on-failure
+  # A bugreport per failing test costs minutes each and GBs of disk on a run
+  # with hundreds of failures; enable per suite when needed.
+  bugreport_on_failure: false           # --bugreport-on-failure
+  max_logcat_size_mb: 50                # --logcat-on-failure-size
 
 rca:
   enabled: true
@@ -95,7 +88,6 @@ rca:
   ai_model: "gemini-2.0-flash"
   patterns_file: "config/known_failures/patterns.yaml"
   classify_failures: true
-  generate_report: true
 
 reporting:
   formats:
@@ -106,12 +98,8 @@ reporting:
   junit_xml: true                       # GitLab-compatible
   junit_detail: "failures"              # failures = failing tests + 1 summary case/module; all = every test
   json_summary: true
-  include_stack_traces: true
-  include_logcat_excerpts: true
-  max_logcat_excerpt_lines: 100
   notifications:
     slack_webhook: ""                   # Slack webhook URL
-    email: []                           # Email recipients
 
 triage:
   enabled: true                         # group failures + history + known issues + owners

@@ -59,6 +59,8 @@ class Orchestrator:
         self._results_dir = Path(self.plan.agent.results_dir or "results")
         self._results_dir.mkdir(parents=True, exist_ok=True)
         device_defaults = self.plan.raw_defaults.get("device") or {}
+        self.device_manager.adb_timeout = int(device_defaults.get("adb_timeout_secs", 30))
+        self.device_manager.reboot_timeout = int(device_defaults.get("reboot_timeout_secs", 120))
         if device_defaults.get("lease_dir") and not os.environ.get("XTS_LEASE_DIR"):
             self.device_manager.lease_dir = Path(device_defaults["lease_dir"])
         self.device_manager.quarantine_threshold = int(
@@ -89,6 +91,7 @@ class Orchestrator:
         )
         self.retry_manager = RetryManager(self.plan, isolation_handler=isolation)
 
+        self._apply_tool_paths()
         EnvironmentValidator.ensure_aapt2_on_path()
         for suite in self.plan.suites:
             if not suite.enabled:
@@ -100,6 +103,26 @@ class Orchestrator:
                 EnvironmentValidator.check_tradefed_script(script)
 
         return self.plan
+
+    def _apply_tool_paths(self) -> None:
+        """Honour paths.java_home / android_sdk / adb_path for this process and TradeFed."""
+        paths = self.plan.paths
+        prepend = []
+        if paths.java_home:
+            os.environ["JAVA_HOME"] = paths.java_home
+            prepend.append(str(Path(paths.java_home) / "bin"))
+        if paths.android_sdk:
+            os.environ["ANDROID_HOME"] = paths.android_sdk
+            os.environ["ANDROID_SDK_ROOT"] = paths.android_sdk
+        if paths.adb_path:
+            adb = Path(paths.adb_path)
+            prepend.append(str(adb.parent if adb.name == "adb" else adb))
+        missing = [p for p in prepend if not Path(p).exists()]
+        if missing:
+            logger.warning("Configured tool paths do not exist: %s", missing)
+        if prepend:
+            os.environ["PATH"] = os.pathsep.join(prepend + [os.environ.get("PATH", "")])
+            logger.info("Tool paths from config: %s", prepend)
 
     def run_plan(
         self, auto_retry: bool = False, dry_run: bool = False, resume: bool = False

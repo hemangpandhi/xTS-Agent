@@ -57,6 +57,7 @@ class DeviceManager:
         # when its holder dies, so stale lock files are harmless.
         self.lease_dir = Path(lease_dir or os.environ.get("XTS_LEASE_DIR") or DEFAULT_LEASE_DIR)
         self._leases: Dict[str, int] = {}
+        self.reboot_timeout = 120
         self.quarantine_threshold = 3
         self.quarantine_hours = 24.0
         self.adb_timeout = adb_timeout
@@ -248,7 +249,8 @@ class DeviceManager:
         except AdbError:
             return False
 
-    def wait_for_device(self, serial: str, timeout: int = 120) -> bool:
+    def wait_for_device(self, serial: str, timeout: Optional[int] = None) -> bool:
+        timeout = timeout or self.reboot_timeout
         try:
             AdbWrapper.wait_for_device(serial, timeout)
             start = time.time()
@@ -477,7 +479,7 @@ class DeviceManager:
                 self._allocated.discard(s)
                 self._release_lease(s)
 
-    def reboot_and_wait_all(self, serials: List[str], timeout: int = 120) -> Dict[str, bool]:
+    def reboot_and_wait_all(self, serials: List[str], timeout: Optional[int] = None) -> Dict[str, bool]:
         """Reboot devices concurrently; returns serial -> came back healthy."""
         def _one(serial: str) -> bool:
             return self.reboot_device(serial) and self.wait_for_device(serial, timeout)

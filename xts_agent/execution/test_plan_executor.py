@@ -114,7 +114,11 @@ class TestPlanExecutor:
             by_name = self._execute_parallel(plan, suites, auto_retry, concurrency)
         else:
             by_name = {}
-            for suite_config in suites:
+            cooldown = int(getattr(plan, "cooldown_between_suites_secs", 0) or 0)
+            for index, suite_config in enumerate(suites):
+                if index and cooldown > 0 and not dry_run:
+                    logger.info("Cooling down %ss before %s", cooldown, suite_config.name)
+                    time.sleep(cooldown)
                 suite_res = self.execute_suite(suite_config, dry_run=dry_run, auto_retry=auto_retry)
                 by_name[suite_config.name] = suite_res
                 if plan.devices.reboot_between_suites and not dry_run:
@@ -297,6 +301,8 @@ class TestPlanExecutor:
                     extra_args=suite_config.extra_args,
                     device_serials=serials,
                     modules=suite_config.modules,
+                    diagnostics=dataclasses.asdict(suite_config.diagnostics),
+                    sharding_options=dataclasses.asdict(suite_config.sharding),
                 )
                 logger.info("DRY RUN command: %s", " ".join(cmd))
                 return SuiteResult(
@@ -384,6 +390,8 @@ class TestPlanExecutor:
                     extra_args=suite_config.extra_args,
                     device_serials=serials,
                     modules=suite_config.modules,
+                    diagnostics=dataclasses.asdict(suite_config.diagnostics),
+                    sharding_options=dataclasses.asdict(suite_config.sharding),
                 )
                 logger.info("Executing: %s", " ".join(cmd))
 

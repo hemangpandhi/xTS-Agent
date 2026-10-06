@@ -19,14 +19,6 @@ from xts_agent.results.result_parser import (
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class RetryResult:
-    tests_retried: int
-    tests_passed_on_retry: int
-    tests_still_failing: int
-    total_retry_attempts: int
-
-
 class RetryManager:
     """Suite-level and agent-level retry orchestration around TradefedRunner."""
 
@@ -188,32 +180,6 @@ class RetryManager:
             session_id, retry_type, device_serials=device_serials
         )
         return self.tradefed_runner.execute(cmd, timeout_hours=timeout_hours, log_dir=log_dir)
-
-    def execute_agent_retry(
-        self,
-        failed_tests: list,
-        device_manager: Any,
-        classifications: Optional[Dict[str, str]] = None,
-    ) -> RetryResult:
-        """Filter retryable failures based on RCA classifications when provided."""
-        classifications = classifications or {}
-        skip_classes = {"PRODUCT_BUG", "TEST_BUG"}
-        retried = [
-            t
-            for t in failed_tests
-            if classifications.get(getattr(t, "test_name", ""), "") not in skip_classes
-        ]
-        logger.info(
-            "Agent retry candidates: %s (of %s failed)",
-            len(retried),
-            len(failed_tests),
-        )
-        return RetryResult(
-            tests_retried=len(retried),
-            tests_passed_on_retry=0,
-            tests_still_failing=len(failed_tests),
-            total_retry_attempts=0,
-        )
 
     def get_retry_summary(self) -> Dict[str, Any]:
         return {

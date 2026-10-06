@@ -23,8 +23,3 @@ class SuiteRetryConfig:
     max_retries: int
     retry_type: str
     isolation_grade: IsolationGrade
-
-@dataclass
-class AgentRetryConfig:
-    enabled: bool
-    smart_retry: bool

@@ -177,6 +177,51 @@ class ProfileTests(unittest.TestCase):
         self.assertIn("CtsCarTestCases", dev.suites[0].exclude_filters)
 
 
+class ConfigKeyTests(unittest.TestCase):
+    def test_shipped_configs_have_no_unknown_keys(self):
+        import glob
+
+        import yaml
+
+        from xts_agent.config_loader import _defaults_schema, _plan_schema, warn_unknown_keys
+
+        defaults = yaml.safe_load(open("config/default_config.yaml"))
+        self.assertEqual(warn_unknown_keys(defaults, _defaults_schema(), Path("d")), [])
+        for plan in glob.glob("config/test_plans/*.yaml"):
+            with self.subTest(plan=plan):
+                data = yaml.safe_load(open(plan))
+                self.assertEqual(warn_unknown_keys(data, _plan_schema(), Path(plan)), [])
+
+    def test_typos_are_reported(self):
+        from xts_agent.config_loader import _plan_schema, warn_unknown_keys
+
+        data = {"name": "x", "suites": [{"name": "cts", "retry": {"max_retires": 2}}], "devcies": {}}
+        with self.assertLogs("xts_agent.config_loader", "WARNING"):
+            unknown = warn_unknown_keys(data, _plan_schema(), Path("p.yaml"))
+        self.assertEqual(sorted(unknown), ["devcies", "suites[0].retry.max_retires"])
+
+    def test_diagnostics_and_sharding_reach_tradefed(self):
+        import dataclasses
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "d.yaml"
+            d.write_text("diagnostics: {bugreport_on_failure: false, max_logcat_size_mb: 2}\n"
+                         "sharding: {dynamic_sharding: false, token_sharding: true}\n")
+            p = Path(tmp) / "p.yaml"
+            p.write_text("name: t\nsuites:\n- name: cts\n  artifacts: {bugreport_on_failure: true}\n"
+                         "  sharding: {intra_module_sharding: false}\n")
+            suite = ConfigLoader(p, defaults_path=d).load_plan().suites[0]
+        cmd = TradefedRunner("/tmp/android-cts", "cts-tradefed").build_run_command(
+            "cts", shard_count=2, device_serials=["a", "b"],
+            diagnostics=dataclasses.asdict(suite.diagnostics),
+            sharding_options=dataclasses.asdict(suite.sharding),
+        )
+        for flag in ("--bugreport-on-failure", "--no-dynamic-sharding", "--no-intra-module-sharding",
+                     "--enable-token-sharding", "--logcat-on-failure"):
+            self.assertIn(flag, cmd)
+        self.assertEqual(cmd[cmd.index("--logcat-on-failure-size") + 1], str(2 * 1024 * 1024))
+
+
 class AiRcaConfigTests(unittest.TestCase):
     def _load(self, defaults: str, plan: str):
         with tempfile.TemporaryDirectory() as tmp:

@@ -148,6 +148,17 @@ class ShardingConfig:
     dynamic_sharding: bool = True
     intra_module_sharding: bool = True
     max_shards: int = 16
+    token_sharding: bool = False
+
+
+@dataclass
+class DiagnosticsConfig:
+    """TradeFed failure diagnostics; defaults section + per-suite `artifacts:`."""
+
+    logcat_on_failure: bool = True
+    screenshot_on_failure: bool = True
+    bugreport_on_failure: bool = False
+    max_logcat_size_mb: int = 50
 
 
 @dataclass
@@ -185,19 +196,10 @@ class SuiteRetryPostConfig:
 
 
 @dataclass
-class AgentRetryPostConfig:
-    enabled: bool = True
-    max_retries: int = 2
-    classify_before_retry: bool = True
-    rules: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class RCAPostConfig:
     enabled: bool = True
     ai_powered: bool = False
     failure_classification: bool = True
-    generate_report: bool = True
     baseline_path: str = ""
     patterns_file: str = "config/known_failures/patterns.yaml"
     ai_api_key: str = ""
@@ -218,7 +220,6 @@ class ReportingPostConfig:
 @dataclass
 class PostExecutionConfig:
     suite_retry: SuiteRetryPostConfig = field(default_factory=SuiteRetryPostConfig)
-    agent_retry: AgentRetryPostConfig = field(default_factory=AgentRetryPostConfig)
     rca: RCAPostConfig = field(default_factory=RCAPostConfig)
     reporting: ReportingPostConfig = field(default_factory=ReportingPostConfig)
 
@@ -234,7 +235,6 @@ class ATS2Config:
 @dataclass
 class PathsConfig:
     xts_packages_dir: str = "/opt/xts"
-    tools_dir: str = "/opt/xts/tools"
     java_home: str = ""
     android_sdk: str = ""
     adb_path: str = ""
@@ -269,6 +269,7 @@ class SuiteConfig:
     modules: List[str] = field(default_factory=list)
     retry: RetryConfig = field(default_factory=RetryConfig)
     sharding: ShardingConfig = field(default_factory=ShardingConfig)
+    diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
 
 
 
@@ -312,6 +313,7 @@ class TestPlanConfig:
     profile: str = "development"
     # >1 runs suites concurrently on an automatic, time-weighted device split
     max_concurrent_suites: int = 1
+    cooldown_between_suites_secs: int = 0
     devices: DeviceRequirements = field(default_factory=DeviceRequirements)
     post_execution: PostExecutionConfig = field(default_factory=PostExecutionConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -323,6 +325,110 @@ class TestPlanConfig:
     jira: Any = None  # xts_agent.triage.jira_filer.JiraConfig
     artifacts: Any = None  # xts_agent.storage.artifacts.ArtifactConfig
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+def _names(cls: type) -> Dict[str, None]:
+    return {f.name: None for f in fields(cls)}
+
+
+def _defaults_schema() -> Dict[str, Any]:
+    from xts_agent.storage.artifacts import ArtifactConfig
+    from xts_agent.triage.jira_filer import JiraConfig
+
+    return {
+        "agent": _names(AgentSettings),
+        "paths": _names(PathsConfig),
+        "device": {
+            **_names(DevicePrepConfig),
+            **dict.fromkeys(
+                ("min_battery_level", "adb_timeout_secs", "reboot_timeout_secs", "lease_dir",
+                 "quarantine_after_failures", "quarantine_hours", "virtual_reset_command")
+            ),
+        },
+        "execution": dict.fromkeys(
+            ("suite_timeout_hours", "max_concurrent_suites", "reboot_between_suites",
+             "cooldown_between_suites_secs")
+        ),
+        "sharding": dict.fromkeys(
+            ("max_shard_count", "dynamic_sharding", "token_sharding", "intra_module_sharding")
+        ),
+        "retry": {
+            "intra_module": dict.fromkeys(
+                ("max_testcase_run_count", "strategy", "isolation_grade", "reboot_at_last_retry")
+            ),
+            "suite_retry": dict.fromkeys(("enabled", "max_retries", "retry_type", "cooldown_secs")),
+        },
+        "diagnostics": _names(DiagnosticsConfig),
+        "rca": dict.fromkeys(
+            ("enabled", "ai_powered", "ai_api_key", "ai_model", "patterns_file", "classify_failures")
+        ),
+        "reporting": {
+            **dict.fromkeys(("formats", "html_report", "junit_xml", "json_summary", "junit_detail")),
+            "notifications": {"slack_webhook": None},
+        },
+        "triage": _names(TriageConfig),
+        "jira": _names(JiraConfig),
+        "artifacts": _names(ArtifactConfig),
+        "ats2": _names(ATS2Config),
+        "ai_rca": _names(AiRcaConfig),
+    }
+
+
+def _plan_schema() -> Dict[str, Any]:
+    defaults = _defaults_schema()
+    suite_keys = {
+        **_names(SuiteConfig),
+        "retry": dict.fromkeys(
+            ("max_retries", "max_attempts", "strategy", "retry_strategy", "max_testcase_run_count",
+             "isolation_grade", "reboot_at_last_retry", "retry_type")
+        ),
+        "sharding": _names(ShardingConfig),
+        "artifacts": _names(DiagnosticsConfig),
+        "sub_plans": None,  # documentation only
+    }
+    return {
+        "name": None,
+        "description": None,
+        "profile": None,
+        "max_concurrent_suites": None,
+        "plan": dict.fromkeys(
+            ("name", "description", "profile", "max_concurrent_suites", "target_completion_hours")
+        ),
+        "devices": _names(DeviceRequirements),
+        "device_requirements": _names(DeviceRequirements),
+        "suites": [suite_keys],
+        "post_execution": {
+            "suite_retry": _names(SuiteRetryPostConfig),
+            "rca": {**_names(RCAPostConfig), "classify_failures": None},
+            "reporting": {
+                **_names(ReportingPostConfig),
+                "notifications": {"slack_webhook": None},
+            },
+        },
+        "ai_rca": defaults["ai_rca"],
+        "triage": defaults["triage"],
+        "jira": defaults["jira"],
+        "artifacts": defaults["artifacts"],
+    }
+
+
+def warn_unknown_keys(data: Any, schema: Any, source: Path, where: str = "") -> List[str]:
+    """Warn about keys the agent does not read (usually typos); returns their paths."""
+    unknown: List[str] = []
+    if isinstance(schema, list) and isinstance(data, list):
+        for i, item in enumerate(data):
+            unknown += warn_unknown_keys(item, schema[0], source, f"{where}[{i}]")
+        return unknown
+    if not isinstance(schema, dict) or not isinstance(data, dict):
+        return unknown
+    for key, value in data.items():
+        path = f"{where}.{key}" if where else str(key)
+        if key not in schema:
+            unknown.append(path)
+            logger.warning("Unknown config key '%s' in %s is ignored (typo?)", path, source)
+        elif schema[key] is not None:
+            unknown += warn_unknown_keys(value, schema[key], source, path)
+    return unknown
 
 
 class ConfigLoader:
@@ -350,6 +456,7 @@ class ConfigLoader:
         with open(self.defaults_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         logger.info("Loaded defaults from %s", self.defaults_path)
+        warn_unknown_keys(data, _defaults_schema(), self.defaults_path)
         return _expand_env(data, self.defaults_path)
 
     def load_plan(self) -> TestPlanConfig:
@@ -359,6 +466,7 @@ class ConfigLoader:
         defaults = self.load_defaults()
         with open(self.plan_path, encoding="utf-8") as f:
             plan_data = _expand_env(yaml.safe_load(f) or {}, self.plan_path)
+        warn_unknown_keys(plan_data, _plan_schema(), self.plan_path)
 
         # Support nested `plan:` metadata block from certification YAML
         plan_meta = plan_data.get("plan") if isinstance(plan_data.get("plan"), dict) else {}
@@ -379,6 +487,9 @@ class ConfigLoader:
             default_device = defaults.get("device", {})
             merged_devices = {
                 "min_battery_level": default_device.get("min_battery_level", 20),
+                "reboot_between_suites": bool(
+                    (defaults.get("execution") or {}).get("reboot_between_suites", False)
+                ),
                 **device_raw,
             }
         else:
@@ -406,6 +517,7 @@ class ConfigLoader:
                     default_retry=default_retry,
                     default_sharding=default_sharding,
                     default_timeout=default_timeout,
+                    default_diagnostics=defaults.get("diagnostics") or {},
                 )
             )
 
@@ -423,6 +535,9 @@ class ConfigLoader:
             description=description,
             profile=profile,
             max_concurrent_suites=max(1, max_concurrent),
+            cooldown_between_suites_secs=int(
+                (defaults.get("execution") or {}).get("cooldown_between_suites_secs", 0) or 0
+            ),
             suites=suites,
             devices=devices,
             post_execution=post_execution,
@@ -520,23 +635,11 @@ class ConfigLoader:
             },
             plan_post.get("suite_retry") or {},
         )
-        agent_retry_src = _deep_merge(
-            {
-                "enabled": default_retry.get("agent_retry", {}).get("enabled", True),
-                "max_retries": default_retry.get("agent_retry", {}).get("max_retries", 2),
-                "classify_before_retry": default_retry.get("agent_retry", {}).get(
-                    "classify_before_retry", True
-                ),
-                "rules": {},
-            },
-            plan_post.get("agent_retry") or {},
-        )
         rca_src = _deep_merge(
             {
                 "enabled": default_rca.get("enabled", True),
                 "ai_powered": default_rca.get("ai_powered", False),
                 "failure_classification": default_rca.get("classify_failures", True),
-                "generate_report": default_rca.get("generate_report", True),
                 "baseline_path": "",
                 "patterns_file": default_rca.get(
                     "patterns_file", "config/known_failures/patterns.yaml"
@@ -578,9 +681,6 @@ class ConfigLoader:
             suite_retry=SuiteRetryPostConfig(
                 **_filter_dataclass_kwargs(SuiteRetryPostConfig, suite_retry_src)
             ),
-            agent_retry=AgentRetryPostConfig(
-                **_filter_dataclass_kwargs(AgentRetryPostConfig, agent_retry_src)
-            ),
             rca=RCAPostConfig(**_filter_dataclass_kwargs(RCAPostConfig, rca_src)),
             reporting=reporting,
         )
@@ -593,6 +693,7 @@ class ConfigLoader:
         default_retry: dict,
         default_sharding: dict,
         default_timeout: float,
+        default_diagnostics: Optional[dict] = None,
     ) -> SuiteConfig:
         name = str(suite_data.get("name", "unknown"))
         name_lower = name.lower()
@@ -671,6 +772,15 @@ class ConfigLoader:
                     default_sharding.get("max_shard_count", 16),
                 )
             ),
+            token_sharding=bool(
+                sharding_raw.get("token_sharding", default_sharding.get("token_sharding", False))
+            ),
+        )
+        diagnostics = DiagnosticsConfig(
+            **_filter_dataclass_kwargs(
+                DiagnosticsConfig,
+                _deep_merge(default_diagnostics or {}, suite_data.get("artifacts") or {}),
+            )
         )
 
         return SuiteConfig(
@@ -688,4 +798,5 @@ class ConfigLoader:
             modules=list(suite_data.get("modules") or []),
             retry=retry,
             sharding=sharding,
+            diagnostics=diagnostics,
         )
