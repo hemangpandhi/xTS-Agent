@@ -43,6 +43,7 @@ at org.junit.Assume.assumeTrue(Assume.java:50)</StackTrace>
 
 _LEASE_TMP = None
 _PREP_PATCH = None
+_SURVIVAL_PATCH = None
 
 
 def setUpModule():
@@ -51,11 +52,15 @@ def setUpModule():
 
     global _LEASE_TMP
     _LEASE_TMP = tempfile.TemporaryDirectory()
-    os.environ["XTS_LEASE_DIR"] = _LEASE_TMP.name
-    # Executor tests use fake serials: never send prep commands to real adb
-    global _PREP_PATCH
+    # Subdir, so the ledger (stored next to lease_dir) also stays in the temp dir
+    os.environ["XTS_LEASE_DIR"] = str(Path(_LEASE_TMP.name) / "leases")
+    # Executor tests use fake serials: never send prep commands to real adb or
+    # probe real adb for post-suite device survival
+    global _PREP_PATCH, _SURVIVAL_PATCH
     _PREP_PATCH = patch("xts_agent.execution.test_plan_executor.DevicePreparer")
     _PREP_PATCH.start()
+    _SURVIVAL_PATCH = patch.object(TestPlanExecutor, "_record_device_survival")
+    _SURVIVAL_PATCH.start()
 
 
 def tearDownModule():
@@ -64,6 +69,7 @@ def tearDownModule():
     os.environ.pop("XTS_LEASE_DIR", None)
     _LEASE_TMP.cleanup()
     _PREP_PATCH.stop()
+    _SURVIVAL_PATCH.stop()
 
 
 PASSING_XML = """<?xml version='1.0' encoding='UTF-8' standalone='no' ?>
@@ -1362,6 +1368,62 @@ class DevicePrepTests(unittest.TestCase):
         self.assertEqual(plan.device_prep.wifi_password, "envpw")
         self.assertEqual(plan.device_prep.extra_commands, ["cmd car_service x"])
         self.assertFalse(plan.devices.prepare)
+
+
+class QuarantineTests(unittest.TestCase):
+    def test_quarantine_after_consecutive_failures_and_reset(self):
+        from xts_agent.device.device_ledger import DeviceLedger
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = DeviceLedger(Path(tmp) / "ledger.json", threshold=3, hours=1)
+            self.assertFalse(ledger.record_failure("hu", "offline"))
+            ledger.record_success("hu")  # success resets the streak
+            self.assertFalse(ledger.record_failure("hu", "offline"))
+            self.assertFalse(ledger.record_failure("hu", "reboot"))
+            self.assertTrue(ledger.record_failure("hu", "reboot"))
+            self.assertIn("3 consecutive failures", ledger.quarantine_reason("hu"))
+            self.assertEqual(list(ledger.quarantined()), ["hu"])
+            self.assertTrue(ledger.release("hu"))
+            self.assertIsNone(ledger.quarantine_reason("hu"))
+
+    def test_quarantined_device_not_available(self):
+        from xts_agent.device.device_manager import DeviceInfo, DeviceManager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dm = DeviceManager(lease_dir=str(Path(tmp) / "leases"))
+            dm.quarantine_threshold = 1
+            dm.record_device_outcomes({"bad": False, "good": True}, "went offline during a suite")
+            devs = [DeviceInfo(s, "", "", "fp", 34, 100, "device", "aaos") for s in ("bad", "good")]
+            with patch.object(DeviceManager, "discover_devices", return_value=devs):
+                self.assertEqual([d.serial for d in dm.get_available_devices()], ["good"])
+            self.assertTrue((Path(tmp) / "device_ledger.json").exists())
+
+    def test_device_lost_during_suite_is_recorded(self):
+        executor = TestPlanExecutor.__new__(TestPlanExecutor)
+        executor.device_manager = MagicMock()
+        with patch("xts_agent.execution.test_plan_executor.AdbWrapper.devices", return_value=["a"]):
+            _SURVIVAL_PATCH.temp_original(executor, ["a", "b"])
+        executor.device_manager.record_device_outcomes.assert_called_once_with(
+            {"a": True, "b": False}, "went offline during a suite"
+        )
+
+    def test_ledger_is_safe_across_processes(self):
+        import subprocess
+        import sys
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ledger.json"
+            code = (
+                "import sys\nfrom xts_agent.device.device_ledger import DeviceLedger\n"
+                "l = DeviceLedger(sys.argv[1], threshold=1000)\n"
+                "[l.record_failure(sys.argv[2], 'x') for _ in range(50)]\n"
+            )
+            procs = [subprocess.Popen([sys.executable, "-c", code, str(path), "hu"]) for _ in range(4)]
+            for p in procs:
+                p.wait()
+            import json
+
+            self.assertEqual(json.loads(path.read_text())["hu"]["consecutive_failures"], 200)
 
 
 class LoadLatestPlanResultTests(unittest.TestCase):

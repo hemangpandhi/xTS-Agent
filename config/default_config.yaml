@@ -24,6 +24,11 @@ device:
   # Host-wide device lock files shared by every agent process on this host
   # (also settable via XTS_LEASE_DIR). Must be the same for all CI runners.
   lease_dir: "/var/tmp/xts-agent/leases"
+  # Devices failing this many times in a row (reboot not coming back, going
+  # offline mid-suite) are skipped for quarantine_hours. Ledger lives next to
+  # lease_dir; inspect/release with `xts-agent quarantine`.
+  quarantine_after_failures: 3
+  quarantine_hours: 24
   # Host-side reset used by FULLY_ISOLATED retries on virtual devices only
   # (physical devices are never wiped). {serial} is substituted, e.g.
   #   "cvd powerwash --instance_num 1"  or a wrapper script mapping serial -> instance

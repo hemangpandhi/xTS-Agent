@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -53,9 +54,13 @@ class Orchestrator:
         self.plan = self.config_loader.load_plan()
         self._results_dir = Path(self.plan.agent.results_dir or "results")
         self._results_dir.mkdir(parents=True, exist_ok=True)
-        lease_dir = (self.plan.raw_defaults.get("device") or {}).get("lease_dir")
-        if lease_dir:
-            self.device_manager.lease_dir = Path(lease_dir)
+        device_defaults = self.plan.raw_defaults.get("device") or {}
+        if device_defaults.get("lease_dir") and not os.environ.get("XTS_LEASE_DIR"):
+            self.device_manager.lease_dir = Path(device_defaults["lease_dir"])
+        self.device_manager.quarantine_threshold = int(
+            device_defaults.get("quarantine_after_failures", 3)
+        )
+        self.device_manager.quarantine_hours = float(device_defaults.get("quarantine_hours", 24))
         (self._results_dir / "logs").mkdir(parents=True, exist_ok=True)
         (self._results_dir / "reports").mkdir(parents=True, exist_ok=True)
 

@@ -184,6 +184,29 @@ def health_check(plan: str, config_path: Optional[str], reboot_unhealthy: bool):
 @main.command()
 @click.option("--plan", default="config/test_plans/smoke_test.yaml")
 @click.option("--config", "config_path", default=None)
+@click.option("--release", "release_serial", default=None, help="Release this serial from quarantine")
+def quarantine(plan: str, config_path: Optional[str], release_serial: Optional[str]):
+    """List quarantined devices, or release one."""
+    orchestrator = _build_orchestrator(plan, config_path)
+    orchestrator._initialize()
+    ledger = orchestrator.device_manager.ledger
+    if release_serial:
+        if ledger.release(release_serial):
+            click.echo(f"Released {release_serial}")
+        else:
+            click.echo(f"{release_serial} is not quarantined", err=True)
+            sys.exit(1)
+        return
+    entries = ledger.quarantined()
+    if not entries:
+        click.echo("No devices in quarantine.")
+    for serial, reason in entries.items():
+        click.echo(f"{serial}: {reason}")
+
+
+@main.command()
+@click.option("--plan", default="config/test_plans/smoke_test.yaml")
+@click.option("--config", "config_path", default=None)
 @click.option(
     "--kill-tradefed",
     is_flag=True,

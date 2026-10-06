@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from xts_agent.config_loader import SuiteConfig, TestPlanConfig
+from xts_agent.device.adb_wrapper import AdbWrapper
 from xts_agent.device.device_prep import DevicePreparer
 from xts_agent.results.result_parser import (
     ResultParser,
@@ -411,8 +412,24 @@ class TestPlanExecutor:
             return self._failed_result(name, serials, str(exc))
         finally:
             if serials:
+                if not dry_run:
+                    self._record_device_survival(serials)
                 self.device_manager.release_devices(serials)
                 logger.info("Released devices: %s", serials)
+
+    def _record_device_survival(self, serials: List[str]) -> None:
+        """Devices that dropped offline during the suite count toward quarantine."""
+        try:
+            online = set(AdbWrapper.devices())
+        except Exception as exc:
+            logger.warning("Could not check device states after suite: %s", exc)
+            return
+        lost = [s for s in serials if s not in online]
+        if lost:
+            logger.warning("Devices offline after suite: %s", lost)
+        self.device_manager.record_device_outcomes(
+            {s: s in online for s in serials}, "went offline during a suite"
+        )
 
     def _prepare_devices(self, serials: List[str]) -> None:
         if not getattr(self.config.devices, "prepare", True):

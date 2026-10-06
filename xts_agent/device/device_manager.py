@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .adb_wrapper import AdbError, AdbWrapper
+from .device_ledger import DeviceLedger
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ class DeviceManager:
         # when its holder dies, so stale lock files are harmless.
         self.lease_dir = Path(lease_dir or os.environ.get("XTS_LEASE_DIR") or DEFAULT_LEASE_DIR)
         self._leases: Dict[str, int] = {}
+        self.quarantine_threshold = 3
+        self.quarantine_hours = 24.0
         self.adb_timeout = adb_timeout
         self._type_cache: Dict[Tuple[str, str], str] = {}
         # Suites may allocate/release concurrently
@@ -344,6 +347,27 @@ class DeviceManager:
         finally:
             os.close(fd)
 
+    @property
+    def ledger(self) -> DeviceLedger:
+        """Host-wide reliability ledger, stored next to the lease files."""
+        return DeviceLedger(
+            self.lease_dir.parent / "device_ledger.json",
+            threshold=self.quarantine_threshold,
+            hours=self.quarantine_hours,
+        )
+
+    def record_device_outcomes(self, outcomes: Dict[str, bool], context: str) -> None:
+        """Feed per-device success/failure into the quarantine ledger."""
+        ledger = self.ledger
+        for serial, ok in outcomes.items():
+            try:
+                if ok:
+                    ledger.record_success(serial)
+                else:
+                    ledger.record_failure(serial, context)
+            except OSError as exc:
+                logger.warning("Could not update device ledger for %s: %s", serial, exc)
+
     def lease_fds(self, serials: List[str]) -> List[int]:
         """Lease fds to hand to TradeFed so the lock outlives a crashed agent."""
         return [self._leases[s] for s in serials if s in self._leases]
@@ -357,6 +381,10 @@ class DeviceManager:
             holder = self.leased_elsewhere(d.serial)
             if holder:
                 logger.info("Skipping %s: leased by %s", d.serial, holder)
+                continue
+            quarantine = self.ledger.quarantine_reason(d.serial)
+            if quarantine:
+                logger.warning("Skipping quarantined device %s: %s", d.serial, quarantine)
                 continue
             if not d.battery_present or d.battery_level >= min_battery:
                 available.append(d)
@@ -461,6 +489,7 @@ class DeviceManager:
         failed = [s for s, ok in results.items() if not ok]
         if failed:
             logger.warning("Devices did not come back after reboot: %s", failed)
+        self.record_device_outcomes(results, "did not come back after reboot")
         return results
 
     def health_check_all(self, reboot_unhealthy: bool = False) -> Dict[str, HealthReport]:

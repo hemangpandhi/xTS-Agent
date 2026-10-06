@@ -201,6 +201,11 @@ a busy device's error names the holder (pid, user, CI job). TradeFed inherits
 the lease, so devices stay locked while it runs even if the agent is killed.
 All agents on a host must use the same lease directory.
 
+**Flaky devices are quarantined.** A device that fails 3 times in a row
+(reboot never comes back, or it drops offline during a suite) is skipped for
+24 h (`device.quarantine_after_failures` / `quarantine_hours`). List or
+release with `xts-agent quarantine [--release SERIAL]`.
+
 **Running suites in parallel.** Set `max_concurrent_suites: N` in a plan (or
 `execution.max_concurrent_suites` in defaults). The agent picks one
 same-build device pool and splits it across the first N suites in proportion
