@@ -28,11 +28,16 @@ device:
   # (physical devices are never wiped). {serial} is substituted, e.g.
   #   "cvd powerwash --instance_num 1"  or a wrapper script mapping serial -> instance
   virtual_reset_command: ""
+  # Device preparation applied to every allocated device before each suite
+  # (disable per plan with `devices: {prepare: false}`)
   screen_timeout: 2147483647            # Keep screen always on during tests
   disable_screen_lock: true
+  enable_location: true
+  disable_adb_install_verifier: true    # "Verify apps over USB" off
   connect_wifi: true
   wifi_ssid: ""                         # Test WiFi SSID (configure per environment)
-  wifi_password: ""
+  wifi_password: ""                     # Use "${XTS_WIFI_PASSWORD}" or the env var, never plaintext
+  extra_commands: []                    # Additional `adb shell` commands, e.g. OEM demo-mode off
 
 execution:
   default_timeout_hours: 48             # Overall plan timeout

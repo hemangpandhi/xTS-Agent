@@ -24,9 +24,11 @@ class IsolationHandler:
     ``{serial}`` in it is replaced with the device serial.
     """
 
-    def __init__(self, device_manager: Any, virtual_reset_command: str = ""):
+    def __init__(self, device_manager: Any, virtual_reset_command: str = "", preparer: Any = None):
         self.device_manager = device_manager
         self.virtual_reset_command = virtual_reset_command or ""
+        # DevicePreparer re-applies the full prep profile after a reset
+        self.preparer = preparer
 
     def _grade_name(self, grade: Any) -> str:
         if grade is None:
@@ -75,7 +77,10 @@ class IsolationHandler:
         return self.device_manager.wait_for_device(serial)
 
     def rerun_preparers(self, serial: str) -> None:
-        logger.info("Re-running basic preparers for %s", serial)
+        logger.info("Re-running preparers for %s", serial)
+        if self.preparer is not None:
+            self.preparer.prepare(serial)
+            return
         try:
             AdbWrapper.shell(serial, "settings put global stay_on_while_plugged_in 3", timeout=15)
             AdbWrapper.shell(serial, "svc power stayon true", timeout=15)

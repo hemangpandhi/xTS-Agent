@@ -42,6 +42,7 @@ at org.junit.Assume.assumeTrue(Assume.java:50)</StackTrace>
 
 
 _LEASE_TMP = None
+_PREP_PATCH = None
 
 
 def setUpModule():
@@ -51,6 +52,10 @@ def setUpModule():
     global _LEASE_TMP
     _LEASE_TMP = tempfile.TemporaryDirectory()
     os.environ["XTS_LEASE_DIR"] = _LEASE_TMP.name
+    # Executor tests use fake serials: never send prep commands to real adb
+    global _PREP_PATCH
+    _PREP_PATCH = patch("xts_agent.execution.test_plan_executor.DevicePreparer")
+    _PREP_PATCH.start()
 
 
 def tearDownModule():
@@ -58,6 +63,7 @@ def tearDownModule():
 
     os.environ.pop("XTS_LEASE_DIR", None)
     _LEASE_TMP.cleanup()
+    _PREP_PATCH.stop()
 
 
 PASSING_XML = """<?xml version='1.0' encoding='UTF-8' standalone='no' ?>
@@ -1313,6 +1319,49 @@ time.sleep(30)
                     break
                 _time.sleep(0.1)
             self.assertIsNone(DeviceManager(lease_dir=leases).leased_elsewhere("s1"))
+
+
+class DevicePrepTests(unittest.TestCase):
+    def _cfg(self, **kw):
+        from xts_agent.config_loader import DevicePrepConfig
+
+        return DevicePrepConfig(**kw)
+
+    def test_profile_steps(self):
+        from xts_agent.device.device_prep import DevicePreparer
+
+        cmds = [s["cmd"] for s in DevicePreparer(self._cfg(wifi_ssid="lab net", wifi_password="p w")).steps()]
+        self.assertIn("locksettings set-disabled true", cmds)
+        self.assertIn("cmd location set-location-enabled true", cmds)
+        self.assertIn("cmd wifi connect-network 'lab net' wpa2 'p w'", cmds)
+        no_wifi = [s["cmd"] for s in DevicePreparer(self._cfg()).steps()]
+        self.assertFalse(any("wifi" in c for c in no_wifi))  # no SSID => skip wifi
+
+    def test_wifi_password_never_logged(self):
+        from xts_agent.device.adb_wrapper import AdbError
+        from xts_agent.device.device_prep import DevicePreparer
+
+        prep = DevicePreparer(self._cfg(wifi_ssid="lab", wifi_password="TopSecret!"))
+        with patch("xts_agent.device.device_prep.AdbWrapper.shell",
+                   side_effect=AdbError("Command failed: cmd wifi connect-network lab wpa2 TopSecret!")), \
+                self.assertLogs("xts_agent.device", "INFO") as logs:
+            failed = prep.prepare("hu")
+        self.assertIn("join wifi lab", failed)
+        self.assertNotIn("TopSecret!", "\n".join(logs.output))
+
+    def test_wifi_password_from_env_and_defaults_section(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"XTS_WIFI_PASSWORD": "envpw"}):
+            d = Path(tmp) / "d.yaml"
+            d.write_text("device:\n  wifi_ssid: lab\n  extra_commands: ['cmd car_service x']\n")
+            p = Path(tmp) / "p.yaml"
+            p.write_text("name: t\nsuites: []\ndevices:\n  prepare: false\n")
+            plan = ConfigLoader(p, defaults_path=d).load_plan()
+        self.assertEqual(plan.device_prep.wifi_ssid, "lab")
+        self.assertEqual(plan.device_prep.wifi_password, "envpw")
+        self.assertEqual(plan.device_prep.extra_commands, ["cmd car_service x"])
+        self.assertFalse(plan.devices.prepare)
 
 
 class LoadLatestPlanResultTests(unittest.TestCase):

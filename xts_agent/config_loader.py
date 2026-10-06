@@ -67,6 +67,7 @@ SECRET_ENV_OVERRIDES = {
     "XTS_GEMINI_API_KEY": "ai_rca.gemini_api_key",
     "XTS_ATS2_API_KEY": "ats2.api_key",
     "XTS_SLACK_WEBHOOK": "post_execution.reporting.notifications.slack_webhook",
+    "XTS_WIFI_PASSWORD": "device_prep.wifi_password",
 }
 
 
@@ -157,6 +158,22 @@ class DeviceRequirements:
     reboot_between_suites: bool = False
     min_battery_level: int = 20
     properties: Dict[str, str] = field(default_factory=dict)
+    # Apply the device_prep profile to allocated devices before each suite
+    prepare: bool = True
+
+
+@dataclass
+class DevicePrepConfig:
+    """CTS device-setup profile, from the defaults ``device:`` section."""
+
+    screen_timeout: int = 2147483647
+    disable_screen_lock: bool = True
+    enable_location: bool = True
+    disable_adb_install_verifier: bool = True
+    connect_wifi: bool = True
+    wifi_ssid: str = ""
+    wifi_password: str = ""
+    extra_commands: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -284,6 +301,7 @@ class TestPlanConfig:
     agent: AgentSettings = field(default_factory=AgentSettings)
     ats2: ATS2Config = field(default_factory=ATS2Config)
     ai_rca: AiRcaConfig = field(default_factory=AiRcaConfig)
+    device_prep: DevicePrepConfig = field(default_factory=DevicePrepConfig)
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -392,6 +410,9 @@ class ConfigLoader:
             agent=agent,
             ats2=ats2,
             ai_rca=ai_rca,
+            device_prep=DevicePrepConfig(
+                **_filter_dataclass_kwargs(DevicePrepConfig, defaults.get("device") or {})
+            ),
             raw_defaults=defaults,
         )
         self._apply_secret_env_overrides(plan)
@@ -401,6 +422,8 @@ class ConfigLoader:
     def _apply_secret_env_overrides(plan: "TestPlanConfig") -> None:
         if os.environ.get("XTS_GEMINI_API_KEY"):
             plan.ai_rca.gemini_api_key = os.environ["XTS_GEMINI_API_KEY"]
+        if os.environ.get("XTS_WIFI_PASSWORD"):
+            plan.device_prep.wifi_password = os.environ["XTS_WIFI_PASSWORD"]
         if os.environ.get("XTS_ATS2_API_KEY"):
             plan.ats2.api_key = os.environ["XTS_ATS2_API_KEY"]
         if os.environ.get("XTS_SLACK_WEBHOOK"):

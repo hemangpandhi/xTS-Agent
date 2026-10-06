@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from xts_agent.config_loader import SuiteConfig, TestPlanConfig
+from xts_agent.device.device_prep import DevicePreparer
 from xts_agent.results.result_parser import (
     ResultParser,
     TestResults,
@@ -365,6 +366,7 @@ class TestPlanExecutor:
 
             fingerprint = devices[0].build_fingerprint if devices else ""
             runner.lease_fds = list(self.device_manager.lease_fds(serials))
+            self._prepare_devices(serials)
             suite_res = self._resume_suite(name, entry, runner, suite_config, serials) if entry else None
             if suite_res is None:
                 if self.run_state is not None:
@@ -411,6 +413,14 @@ class TestPlanExecutor:
             if serials:
                 self.device_manager.release_devices(serials)
                 logger.info("Released devices: %s", serials)
+
+    def _prepare_devices(self, serials: List[str]) -> None:
+        if not getattr(self.config.devices, "prepare", True):
+            return
+        prep_config = getattr(self.config, "device_prep", None)
+        if prep_config is None:
+            return
+        DevicePreparer(prep_config).prepare_all(list(serials))
 
     def _checkpoint(self, suite_res: SuiteResult) -> None:
         if self.run_state is not None:

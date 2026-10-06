@@ -11,6 +11,7 @@ from typing import List, Optional
 from xts_agent.config_loader import ConfigLoader, TestPlanConfig
 from xts_agent.device.adb_wrapper import AdbWrapper
 from xts_agent.device.device_manager import DeviceManager
+from xts_agent.device.device_prep import DevicePreparer
 from xts_agent.execution.ats2_client import ATS2Client
 from xts_agent.execution.run_state import RunState
 from xts_agent.execution.shard_manager import ShardManager
@@ -75,6 +76,7 @@ class Orchestrator:
             virtual_reset_command=(self.plan.raw_defaults.get("device") or {}).get(
                 "virtual_reset_command", ""
             ),
+            preparer=DevicePreparer(self.plan.device_prep) if self.plan.devices.prepare else None,
         )
         self.retry_manager = RetryManager(self.plan, isolation_handler=isolation)
 
