@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -47,43 +48,51 @@ class EnvironmentValidator:
         return None
 
     @staticmethod
-    def validate_aapt2(tradefed_script_path: Path, repair: bool = True) -> bool:
-        """Ensures TradeFed can resolve a working aapt2 binary.
+    def ensure_aapt2_on_path() -> Optional[Path]:
+        """Make aapt2 resolvable for TradeFed via PATH, without touching xTS files.
 
-        When ``repair`` is True and ANDROID_HOME/SDK is discoverable, rewrites
-        broken aapt2 mappings in the TradeFed launcher script in place.
+        Stock ``*-tradefed`` launchers resolve aapt2 with ``type -P aapt2``, so
+        prepending the SDK build-tools dir to this process's PATH (inherited by
+        the TradeFed subprocess) is enough. Certification packages must stay
+        unmodified, so the launcher script is never rewritten.
         """
+        # Prefer SDK build-tools: distro aapt2 (/usr/bin) is often too old for
+        # current xTS APKs.
+        aapt2 = EnvironmentValidator.find_aapt2()
+        if not aapt2:
+            existing = shutil.which("aapt2")
+            if existing:
+                logger.warning("Using aapt2 from PATH (no SDK build-tools found): %s", existing)
+                return Path(existing)
+            logger.error(
+                "Could not find aapt2. Set ANDROID_HOME or ANDROID_SDK_ROOT to your SDK "
+                "or put build-tools on PATH."
+            )
+            return None
+        os.environ["PATH"] = f"{aapt2.parent}{os.pathsep}{os.environ.get('PATH', '')}"
+        sdk = EnvironmentValidator.resolve_android_sdk()
+        if sdk:
+            os.environ.setdefault("ANDROID_HOME", str(sdk))
+            os.environ.setdefault("ANDROID_SDK_ROOT", str(sdk))
+        logger.info("Prepended %s to PATH for TradeFed", aapt2.parent)
+        return aapt2
+
+    @staticmethod
+    def check_tradefed_script(tradefed_script_path: Path) -> bool:
+        """Read-only check: warn if the launcher was modified with a stale aapt path."""
         tradefed_script_path = Path(tradefed_script_path)
         if not tradefed_script_path.exists():
             logger.warning("TradeFed script not found: %s", tradefed_script_path)
             return False
-
-        logger.info("Running pre-flight check on AAPT2 parser...")
         content = tradefed_script_path.read_text(encoding="utf-8", errors="replace")
-
-        broken = "$(type -P aapt2" in content or "/usr/bin/aapt2" in content
-        if not broken:
-            logger.info("AAPT2 environment mapping looks healthy.")
-            return True
-
-        logger.warning("Detected fragile/system AAPT2 mapping in TradeFed script")
-        aapt2 = EnvironmentValidator.find_aapt2()
-        if not aapt2:
-            logger.error(
-                "Could not find aapt2. Set ANDROID_HOME or ANDROID_SDK_ROOT to your SDK."
+        ok = True
+        for match in re.finditer(r"--aapt='([^'$]+)'", content):
+            ok = False
+            logger.warning(
+                "%s has a hard-coded --aapt=%s (stock launchers use `type -P aapt2`). "
+                "Restore the unmodified script before certification runs.%s",
+                tradefed_script_path,
+                match.group(1),
+                "" if Path(match.group(1)).exists() else " That path does not exist.",
             )
-            return False
-
-        if not repair:
-            logger.info("Valid aapt2 found at %s (repair disabled)", aapt2)
-            return True
-
-        logger.info("Auto-repairing TradeFed script with aapt2: %s", aapt2)
-        new_content = re.sub(r"--aapt=.*?\\", f"--aapt={aapt2} \\\\", content)
-        # Also replace bare /usr/bin/aapt2 if present
-        new_content = new_content.replace("/usr/bin/aapt2", str(aapt2))
-        backup = tradefed_script_path.with_suffix(tradefed_script_path.suffix + ".bak")
-        if not backup.exists():
-            backup.write_text(content, encoding="utf-8")
-        tradefed_script_path.write_text(new_content, encoding="utf-8")
-        return True
+        return ok

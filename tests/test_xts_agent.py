@@ -643,6 +643,41 @@ class IsolationTests(unittest.TestCase):
                 self.assertEqual(dm.is_virtual_device("x"), expected)
 
 
+class Aapt2Tests(unittest.TestCase):
+    def test_check_never_modifies_launcher(self):
+        from xts_agent.utils.env_validator import EnvironmentValidator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "cts-tradefed"
+            body = "--aapt='/home/someone/Android/Sdk/build-tools/34.0.0/aapt2' \\\n"
+            script.write_text(body, encoding="utf-8")
+            self.assertFalse(EnvironmentValidator.check_tradefed_script(script))
+            self.assertEqual(script.read_text(encoding="utf-8"), body)
+            self.assertEqual(list(Path(tmp).iterdir()), [script])
+
+            stock = "--aapt='$(type -P aapt2 2>/dev/null)' \\\n"
+            script.write_text(stock, encoding="utf-8")
+            self.assertTrue(EnvironmentValidator.check_tradefed_script(script))
+
+    def test_ensure_aapt2_prepends_build_tools_to_path(self):
+        import os
+
+        from xts_agent.utils.env_validator import EnvironmentValidator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tools = Path(tmp) / "build-tools" / "34.0.0"
+            tools.mkdir(parents=True)
+            (tools / "aapt2").write_text("", encoding="utf-8")
+            env = {"PATH": "/usr/bin", "ANDROID_HOME": tmp}
+            # SDK build-tools must win over a distro /usr/bin/aapt2 on PATH
+            with patch.dict(os.environ, env, clear=True), patch(
+                "shutil.which", return_value="/usr/bin/aapt2"
+            ):
+                found = EnvironmentValidator.ensure_aapt2_on_path()
+                self.assertEqual(found, tools / "aapt2")
+                self.assertTrue(os.environ["PATH"].startswith(str(tools)))
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

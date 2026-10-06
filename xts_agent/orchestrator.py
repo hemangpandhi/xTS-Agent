@@ -74,7 +74,7 @@ class Orchestrator:
         )
         self.retry_manager = RetryManager(self.plan, isolation_handler=isolation)
 
-        # Validate aapt2 for first available suite script when present
+        EnvironmentValidator.ensure_aapt2_on_path()
         for suite in self.plan.suites:
             if not suite.enabled:
                 continue
@@ -82,8 +82,7 @@ class Orchestrator:
             if not script.exists():
                 script = Path(suite.package_path) / suite.command
             if script.exists():
-                EnvironmentValidator.validate_aapt2(script)
-                break
+                EnvironmentValidator.check_tradefed_script(script)
 
         return self.plan
 
