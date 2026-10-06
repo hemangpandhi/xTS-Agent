@@ -591,6 +591,58 @@ class RetryManagerTests(unittest.TestCase):
         self.assertEqual(res.status, "FAILED")
 
 
+class IsolationTests(unittest.TestCase):
+    def _handler(self, virtual: bool, command: str = "cvd powerwash --serial {serial}"):
+        from xts_agent.retry.isolation import IsolationHandler
+
+        dm = MagicMock()
+        dm.is_virtual_device.return_value = virtual
+        dm.reboot_device.return_value = True
+        dm.wait_for_device.return_value = True
+        return IsolationHandler(dm, virtual_reset_command=command), dm
+
+    def test_physical_device_is_never_wiped(self):
+        handler, dm = self._handler(virtual=False)
+        with patch("subprocess.run") as run, patch(
+            "xts_agent.retry.isolation.AdbWrapper"
+        ) as adb:
+            handler.apply_isolation("HU123", "FULLY_ISOLATED")
+        run.assert_not_called()
+        dm.reboot_device.assert_called_once_with("HU123")
+        shell_cmds = " ".join(c[0][1] for c in adb.shell.call_args_list)
+        self.assertNotIn("wipe", shell_cmds)
+        self.assertNotIn("MASTER_CLEAR", shell_cmds)
+
+    def test_virtual_device_uses_host_reset(self):
+        handler, dm = self._handler(virtual=True)
+        with patch("subprocess.run") as run, patch("xts_agent.retry.isolation.AdbWrapper"):
+            handler.apply_isolation("0.0.0.0:6520", "FULLY_ISOLATED")
+        self.assertEqual(run.call_args[0][0], ["cvd", "powerwash", "--serial", "0.0.0.0:6520"])
+        dm.reboot_device.assert_not_called()
+
+    def test_virtual_without_command_just_reboots(self):
+        handler, dm = self._handler(virtual=True, command="")
+        with patch("subprocess.run") as run, patch("xts_agent.retry.isolation.AdbWrapper"):
+            handler.apply_isolation("0.0.0.0:6520", "FULLY_ISOLATED")
+        run.assert_not_called()
+        dm.reboot_device.assert_called_once()
+
+    def test_is_virtual_device_reads_props(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        dm = DeviceManager()
+        for props, expected in (
+            ({"ro.hardware": "cutf_cvm"}, True),
+            ({"ro.kernel.qemu": "1"}, True),
+            ({"ro.hardware": "qcom"}, False),
+            ({}, False),
+        ):
+            with self.subTest(props=props), patch.object(
+                DeviceManager, "get_device_properties", return_value=props
+            ):
+                self.assertEqual(dm.is_virtual_device("x"), expected)
+
+
 class LoadLatestPlanResultTests(unittest.TestCase):
     def test_picks_newest_report_for_this_plan_from_results_dir(self):
         import json

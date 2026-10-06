@@ -192,6 +192,19 @@ class DeviceManager:
         except AdbError:
             return False
 
+    # Hardware names reported by Cuttlefish and the goldfish/ranchu emulators
+    VIRTUAL_HARDWARE = ("cutf_cvm", "ranchu", "goldfish")
+
+    def is_virtual_device(self, serial: str) -> bool:
+        """True for Cuttlefish/emulator, judged by device props rather than serial."""
+        props = self.get_device_properties(serial)
+        if not props:
+            return False
+        if props.get("ro.kernel.qemu") == "1" or props.get("ro.boot.qemu") == "1":
+            return True
+        hardware = props.get("ro.hardware", "") or props.get("ro.boot.hardware", "")
+        return hardware in self.VIRTUAL_HARDWARE
+
     def is_aaos_device(self, serial: str) -> bool:
         try:
             pm_features = AdbWrapper.shell(

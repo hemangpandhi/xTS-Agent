@@ -66,7 +66,12 @@ class Orchestrator:
         installed = self.suite_registry.discover_installed_suites(packages_dir)
         logger.info("Installed suites under %s: %s", packages_dir, installed)
 
-        isolation = IsolationHandler(self.device_manager)
+        isolation = IsolationHandler(
+            self.device_manager,
+            virtual_reset_command=(self.plan.raw_defaults.get("device") or {}).get(
+                "virtual_reset_command", ""
+            ),
+        )
         self.retry_manager = RetryManager(self.plan, isolation_handler=isolation)
 
         # Validate aapt2 for first available suite script when present

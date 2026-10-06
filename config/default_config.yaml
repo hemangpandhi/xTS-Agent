@@ -21,6 +21,10 @@ device:
   min_battery_level: 20                 # Minimum battery percentage
   adb_timeout_secs: 30                  # ADB command timeout
   reboot_timeout_secs: 120              # Device reboot timeout
+  # Host-side reset used by FULLY_ISOLATED retries on virtual devices only
+  # (physical devices are never wiped). {serial} is substituted, e.g.
+  #   "cvd powerwash --instance_num 1"  or a wrapper script mapping serial -> instance
+  virtual_reset_command: ""
   screen_timeout: 2147483647            # Keep screen always on during tests
   disable_screen_lock: true
   connect_wifi: true
