@@ -3,6 +3,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        XTS_UID: ${XTS_UID:-1000}
+        XTS_GID: ${XTS_GID:-1000}
     container_name: xts-agent-runner
     # Host networking is typically required to reach host-side ADB/Cuttlefish.
     network_mode: "host"
@@ -11,10 +14,18 @@ services:
     volumes:
       - ${XTS_PACKAGES_DIR:-/opt/xts}:/opt/xts:ro
       - ${XTS_RESULTS_DIR:-../results}:/app/results
-      - ${ANDROID_HOST_KEYS:-${HOME}/.android}:/root/.android:ro
+      # ADB keys, read-only, into the unprivileged user's home
+      - ${ANDROID_HOST_KEYS:-${HOME}/.android}:/home/xts/.android:ro
+      # Must be the platform-tools whose adb runs the host adb server
+      # (`which adb` on the host), or the container client restarts it.
+      - ${HOST_PLATFORM_TOOLS:-/opt/xts/platform-tools}:/host-platform-tools:ro
     environment:
       - XTS_PACKAGES_DIR=/opt/xts
       - ANDROID_HOME=/opt/android-sdk
       - ANDROID_SDK_ROOT=/opt/android-sdk
+      # Secrets come from the host environment / secret store, never the image
+      - XTS_ATS2_API_KEY
+      - XTS_SLACK_WEBHOOK
+      - XTS_GEMINI_API_KEY
     working_dir: /app
     restart: "no"

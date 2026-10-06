@@ -120,6 +120,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
 pip install -e .
+# Optional, for on-prem AI RCA (pulls torch, compiles llama.cpp):
+# pip install -e ".[ai]"
 ```
 
 ### A4. Place xTS packages
@@ -210,8 +212,13 @@ NUM_DEVICES=10 SPAWN_CLUSTER=1 \
 ### Facts
 
 - **No published image** — build from this repo.
-- Image includes Ubuntu 24.04, JDK 17, Python agent, Android cmdline-tools + build-tools 34.
+- Image includes Ubuntu 24.04, JDK 17, Python agent, checksum-verified Android cmdline-tools + build-tools 34.
+- Runs as unprivileged user `xts` (UID/GID 1000; override with `--build-arg XTS_UID=… XTS_GID=…` to match host file ownership).
 - Mount host `/opt/xts` and ADB keys; use **`network_mode: host`** so container ADB sees host devices.
+- Mount the host `platform-tools` whose adb runs the host adb server at `/host-platform-tools`
+  (check with `which adb` on the host). A different adb version in the container restarts the
+  host adb server and can break running tests.
+- Secrets are passed from the host environment (`XTS_ATS2_API_KEY`, …), never baked into the image.
 
 ### Build + run
 
@@ -222,7 +229,9 @@ mkdir -p results
 docker run --rm --network host \
   -v /opt/xts:/opt/xts:ro \
   -v "$PWD/results":/app/results \
-  -v "$HOME/.android":/root/.android:ro \
+  -v "$HOME/.android":/home/xts/.android:ro \
+  -v "$(dirname "$(which adb)")":/host-platform-tools:ro \
+  -e XTS_ATS2_API_KEY -e XTS_SLACK_WEBHOOK \
   xts-agent:local \
   python3 -m xts_agent.cli run \
     --plan config/test_plans/cts_only.yaml \
@@ -235,6 +244,7 @@ Or Compose (from repo root):
 ```bash
 export XTS_PACKAGES_DIR=/opt/xts
 export XTS_RESULTS_DIR="$PWD/results"
+export HOST_PLATFORM_TOOLS="$(dirname "$(which adb)")"
 docker compose -f docker/docker-compose.yml build
 docker compose -f docker/docker-compose.yml run --rm xts-agent \
   python3 -m xts_agent.cli run \

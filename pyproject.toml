@@ -14,7 +14,13 @@ dependencies = [
     "jinja2>=3.1",
     "rich>=13.0",
     "requests>=2.31",
-    "xmltodict>=0.13",
+    "xmltodict>=0.13"
+]
+
+[project.optional-dependencies]
+# AI RCA (on-prem llama.cpp + code RAG). Heavy: pulls torch and builds
+# llama.cpp natively, so it is opt-in: pip install ".[ai]"
+ai = [
     "chromadb>=0.4.0",
     "sentence-transformers>=2.2.0",
     "llama-cpp-python>=0.2.50"
