@@ -8,7 +8,12 @@ is running, and how long the log has been quiet. A log that stays quiet past
 stuck host-side test) instead of burning the rest of the suite timeout.
 
 Passing tests are not logged by TradeFed at INFO, so progress is counted in
-modules, which is also what ``modules_done`` in test_result.xml counts.
+modules, which is also what ``modules_done`` in test_result.xml counts. A
+module counts as finished once the next module starts on the same device.
+``ShardListener: Sharded test completed`` is not used: it is printed per
+test run (thousands of times for dEQP, and for modules that never started
+on a device) and never in unsharded runs. The final numbers come from
+test_result.xml when the invocation ends.
 """
 
 from __future__ import annotations
@@ -20,36 +25,62 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Set
 
 logger = logging.getLogger(__name__)
 
 # 10-04 16:20:03 I/ITestSuite: 0.0.0.0:6527 running 1 modules: [x86_64 CtsFooTestCases]
-_MODULE_START = re.compile(r"I/ITestSuite: (\S+) running \d+ modules?: \[(\S+) (.+)\]\s*$")
-# 10-05 01:26:27 I/ShardListener: Sharded test completed: x86_64 CtsStorageAccessTestCases
-_MODULE_DONE = re.compile(r"I/ShardListener: Sharded test completed: (\S+) (\S+)")
+_SUITE_START = re.compile(r"I/ITestSuite: (\S+) running (\d+) modules?(?:: \[(.*)\])?\s*$")
+# 10-06 01:04:29 D/ModuleDefinition: Running module x86_64 CtsBionicTestCases
+# (one per module also when a single invocation runs many modules unsharded)
+_MODULE_RUNNING = re.compile(r"D/ModuleDefinition: Running module (\S+ \S+)\s*$")
 # 10-04 16:20:17 I/ModuleListener: [1/1] <serial> <class>#<test> FAILURE: ...
 _TEST_FAILURE = re.compile(r"I/ModuleListener: \[\d+/\d+\] (?:\S+ ){2,3}FAILURE:")
 
 
 @dataclass
 class TradefedProgress:
-    modules_started: int = 0
-    modules_completed: int = 0
+    started: Set[str] = field(default_factory=set)  # "abi module"
+    finished: Set[str] = field(default_factory=set)
     failures: int = 0
-    current: Dict[str, str] = field(default_factory=dict)  # serial -> module
+    current: Dict[str, str] = field(default_factory=dict)  # serial -> "abi module"
     started_at: float = field(default_factory=time.time)
     last_output_at: float = field(default_factory=time.time)
+    _serial: str = ""  # device of the latest ITestSuite line (unsharded: the only one)
+
+    @property
+    def modules_started(self) -> int:
+        return len(self.started)
+
+    @property
+    def modules_completed(self) -> int:
+        # A retried module is running again, not finished
+        return len(self.finished - set(self.current.values()))
+
+    def _start(self, serial: str, module: str) -> None:
+        previous = self.current.get(serial)
+        if previous == module:
+            return
+        if previous:
+            self.finished.add(previous)
+        self.started.add(module)
+        self.current[serial] = module
 
     def feed(self, text: str) -> None:
         for line in text.splitlines():
-            m = _MODULE_START.search(line)
+            m = _SUITE_START.search(line)
             if m:
-                self.modules_started += 1
-                self.current[m.group(1)] = m.group(3)
+                self._serial = m.group(1)
+                if m.group(2) == "1" and m.group(3):
+                    self._start(self._serial, m.group(3))
                 continue
-            if _MODULE_DONE.search(line):
-                self.modules_completed += 1
+            m = _MODULE_RUNNING.search(line)
+            if m:
+                # Has no serial: only needed when ITestSuite listed several
+                # modules at once (unsharded); otherwise it echoes a start
+                # already seen, possibly from another shard's device
+                if m.group(1) not in self.current.values():
+                    self._start(self._serial or "?", m.group(1))
             elif _TEST_FAILURE.search(line):
                 self.failures += 1
 
@@ -61,7 +92,7 @@ class TradefedProgress:
             "modules_started": self.modules_started,
             "modules_completed": self.modules_completed,
             "failures": self.failures,
-            "current": dict(self.current),
+            "current": {serial: module.split(" ", 1)[-1] for serial, module in self.current.items()},
             "elapsed_secs": round(time.time() - self.started_at),
             "quiet_secs": round(self.quiet_secs()),
             "heartbeat_at": time.time(),
@@ -114,7 +145,7 @@ class ProgressMonitor(threading.Thread):
 
     def report(self) -> None:
         p = self.poll()
-        running = ", ".join(f"{s}:{m}" for s, m in sorted(p.current.items())[:8])
+        running = ", ".join(f"{s}:{m.split(' ', 1)[-1]}" for s, m in sorted(p.current.items())[:8])
         logger.info(
             "TradeFed progress: %s modules finished, %s started, %s test failures, elapsed %s%s",
             p.modules_completed,

@@ -175,7 +175,11 @@ TF_LOG_LINES = [
     "10-04 16:20:17 I/ModuleListener: [1/1] 0.0.0.0:6529 android.sig.blocklist android.sig.DebugTest#testA FAILURE: j",
     "10-04 16:20:18 I/ModuleListener: [1/6] 0.0.0.0:6533 android.cc.Test#testB ASSUMPTION_FAILURE: org.junit.Assume",
     "10-04 16:20:19 I/ModuleListener: [2/6] 0.0.0.0:6533 android.cc.Test#testC FAILURE: java.lang.AssertionError",
+    "10-04 16:20:03 D/ModuleDefinition: Running module x86_64 CtsFooTestCases",  # same start, not a new module
+    # Printed per test run (dEQP: thousands) and never unsharded: must not count
     "10-05 01:26:27 I/ShardListener: Sharded test completed: x86_64 CtsFooTestCases",
+    "10-05 01:26:27 I/ShardListener: Sharded test completed: x86_64 CtsFooTestCases",
+    "10-05 01:26:28 I/ITestSuite: 0.0.0.0:6527 running 1 modules: [x86_64 CtsBazTestCases]",
 ]
 
 
@@ -194,10 +198,27 @@ class ProgressTests(unittest.TestCase):
             with open(log, "a", encoding="utf-8") as fh:
                 fh.write(text[cut:])
             p = monitor.poll()
-        self.assertEqual(p.modules_started, 2)
-        self.assertEqual(p.modules_completed, 1)
+        self.assertEqual(p.modules_started, 3)
+        self.assertEqual(p.modules_completed, 1)  # Foo: the next module started on its device
         self.assertEqual(p.failures, 2)  # ASSUMPTION_FAILURE is not a failure
-        self.assertEqual(p.current, {"0.0.0.0:6527": "CtsFooTestCases", "0.0.0.0:6524": "CtsBarTestCases[instant]"})
+        self.assertEqual(p.as_dict()["current"], {"0.0.0.0:6527": "CtsBazTestCases", "0.0.0.0:6524": "CtsBarTestCases[instant]"})
+
+    def test_retried_module_is_running_not_finished(self):
+        from xts_agent.execution.progress import TradefedProgress
+
+        p = TradefedProgress()
+        p.feed("I/ITestSuite: s1 running 1 modules: [x86_64 A]\nI/ITestSuite: s1 running 1 modules: [x86_64 B]\n"
+               "I/ITestSuite: s2 running 1 modules: [x86_64 A]\n")
+        self.assertEqual((p.modules_started, p.modules_completed), (2, 0))
+
+    def test_unsharded_multi_module_invocation(self):
+        from xts_agent.execution.progress import TradefedProgress
+
+        p = TradefedProgress()
+        p.feed("I/ITestSuite: s1 running 3 modules: [x86_64 A, x86_64 B, x86_64 C]\n"
+               "D/ModuleDefinition: Running module x86_64 A\nD/ModuleDefinition: Running module x86_64 B\n")
+        self.assertEqual((p.modules_started, p.modules_completed), (2, 1))
+        self.assertEqual(p.as_dict()["current"], {"s1": "B"})
 
     def test_warns_once_when_log_goes_quiet(self):
         import time as _time
