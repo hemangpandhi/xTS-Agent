@@ -73,6 +73,7 @@ class TestPlanExecutor:
         results_dir: str | Path = "./results",
         run_state: Optional[RunState] = None,
         history_estimate: Optional[Callable[[str], Optional[float]]] = None,
+        metrics: Any = None,
     ):
         self.config = config
         self.device_manager = device_manager
@@ -85,6 +86,7 @@ class TestPlanExecutor:
         self.run_state = run_state
         self.history_estimate = history_estimate
         self._resuming = False
+        self.metrics = metrics
 
     def execute_plan(
         self,
@@ -309,6 +311,11 @@ class TestPlanExecutor:
             command_name = suite_config.command or f"{name.lower()}-tradefed"
             runner = TradefedRunner(package_path, command_name)
             self._last_runners[name] = runner
+            ops = getattr(self.config, "ops", None)
+            if ops is not None:
+                runner.progress_interval_secs = ops.progress_interval_secs
+                runner.stall_warning_secs = ops.stall_warning_mins * 60
+            runner.on_progress = lambda progress, suite=name: self._on_progress(suite, progress)
 
             if dry_run:
                 # Resolve shard intent without requiring live ADB
@@ -458,6 +465,13 @@ class TestPlanExecutor:
                     self._record_device_survival(serials)
                 self.device_manager.release_devices(serials)
                 logger.info("Released devices: %s", serials)
+
+    def _on_progress(self, name: str, progress: Any) -> None:
+        data = progress.as_dict()
+        if self.run_state is not None:
+            self.run_state.suite_progress(name, data)
+        if self.metrics is not None:
+            self.metrics.suite_progress(name, data)
 
     def _record_device_survival(self, serials: List[str]) -> None:
         """Devices that dropped offline during the suite count toward quarantine."""

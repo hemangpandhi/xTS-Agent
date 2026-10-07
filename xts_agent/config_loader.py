@@ -306,6 +306,18 @@ class TriageConfig:
 
 
 @dataclass
+class OpsConfig:
+    """Run-time operations: heartbeat, metrics, disk guard, retention."""
+
+    progress_interval_secs: int = 600  # TradeFed progress line in the job log; 0 = off
+    stall_warning_mins: int = 60  # warn when the TradeFed log is silent this long; 0 = off
+    metrics_textfile_dir: str = ""  # node_exporter textfile collector dir; "" = off
+    pushgateway_url: str = ""  # Prometheus Pushgateway; "" = off
+    min_free_disk_gb: float = 20.0  # refuse to start a run below this; 0 = off
+    keep_results_days: int = 0  # `cleanup --prune-results` default; 0 = keep forever
+
+
+@dataclass
 class TestPlanConfig:
 
     name: str
@@ -326,6 +338,7 @@ class TestPlanConfig:
     triage: TriageConfig = field(default_factory=TriageConfig)
     jira: Any = None  # xts_agent.triage.jira_filer.JiraConfig
     artifacts: Any = None  # xts_agent.storage.artifacts.ArtifactConfig
+    ops: OpsConfig = field(default_factory=OpsConfig)
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -373,6 +386,7 @@ def _defaults_schema() -> Dict[str, Any]:
         "artifacts": _names(ArtifactConfig),
         "ats2": _names(ATS2Config),
         "ai_rca": _names(AiRcaConfig),
+        "ops": _names(OpsConfig),
     }
 
 
@@ -411,6 +425,7 @@ def _plan_schema() -> Dict[str, Any]:
         "triage": defaults["triage"],
         "jira": defaults["jira"],
         "artifacts": defaults["artifacts"],
+        "ops": defaults["ops"],
     }
 
 
@@ -558,6 +573,9 @@ class ConfigLoader:
             ),
             jira=self._parse_jira(defaults, plan_data),
             artifacts=self._parse_artifacts(defaults, plan_data),
+            ops=OpsConfig(**_filter_dataclass_kwargs(
+                OpsConfig, _deep_merge(defaults.get("ops") or {}, plan_data.get("ops") or {})
+            )),
             raw_defaults=defaults,
         )
         self._apply_secret_env_overrides(plan)

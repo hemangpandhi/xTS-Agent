@@ -91,6 +91,14 @@ class RunState:
             )
             self._write()
 
+    def suite_progress(self, name: str, progress: Dict[str, Any]) -> None:
+        """Heartbeat of a running suite (also a status file for dashboards/ops)."""
+        with self._lock:
+            entry = self.data.setdefault("suites", {}).setdefault(name, {})
+            entry["progress"] = progress
+            self.data["heartbeat_at"] = time.time()
+            self._write()
+
     def mark_complete(self, overall_status: str) -> None:
         with self._lock:
             self.data["complete"] = True

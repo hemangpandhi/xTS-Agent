@@ -10,9 +10,10 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Set
+from typing import Callable, List, Optional, Sequence, Set
 
 from xts_agent.execution import cancel
+from xts_agent.execution.progress import ProgressMonitor, TradefedProgress
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,10 @@ class TradefedRunner:
         self.suite_path = Path(suite_path)
         self.command_name = command_name
         self._process: Optional[subprocess.Popen] = None
+        # Heartbeat: progress line every N secs, warning after M quiet secs
+        self.progress_interval_secs: float = 600
+        self.stall_warning_secs: float = 3600
+        self.on_progress: Optional[Callable[[TradefedProgress], None]] = None
         # Device lease fds inherited by TradeFed, so devices stay locked while
         # it runs even if the agent process dies
         self.lease_fds: Sequence[int] = ()
@@ -254,9 +259,17 @@ class TradefedRunner:
                 if cancel.cancelled():
                     # Signal arrived between check() and register()
                     os.killpg(self._process.pid, signal.SIGTERM)
+                monitor = None
+                if self.progress_interval_secs > 0:
+                    monitor = ProgressMonitor(
+                        log_path, self.progress_interval_secs, self.stall_warning_secs, self.on_progress
+                    )
+                    monitor.start()
                 try:
                     self._process.wait(timeout=timeout_seconds)
                 finally:
+                    if monitor is not None:
+                        monitor.stop()
                     cancel.unregister(self._process)
                     if self._process.poll() is not None:
                         pidfile.unlink(missing_ok=True)

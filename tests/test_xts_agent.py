@@ -1298,6 +1298,127 @@ class LoggingTests(unittest.TestCase):
         self.assertNotIn("suite", outside)
 
 
+TF_LOG_LINES = [
+    "10-04 16:20:03 I/ITestSuite: 0.0.0.0:6527 running 1 modules: [x86_64 CtsFooTestCases]",
+    "10-04 16:20:04 I/ITestSuite: 0.0.0.0:6524 running 1 modules: [x86_64 CtsBarTestCases[instant]]",
+    "10-04 16:20:17 I/ModuleListener: [1/1] 0.0.0.0:6529 android.sig.blocklist android.sig.DebugTest#testA FAILURE: j",
+    "10-04 16:20:18 I/ModuleListener: [1/6] 0.0.0.0:6533 android.cc.Test#testB ASSUMPTION_FAILURE: org.junit.Assume",
+    "10-04 16:20:19 I/ModuleListener: [2/6] 0.0.0.0:6533 android.cc.Test#testC FAILURE: java.lang.AssertionError",
+    "10-05 01:26:27 I/ShardListener: Sharded test completed: x86_64 CtsFooTestCases",
+]
+
+
+class ProgressTests(unittest.TestCase):
+    def test_counts_modules_failures_and_handles_partial_lines(self):
+        from xts_agent.execution.progress import ProgressMonitor
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "tf.log"
+            text = "\n".join(TF_LOG_LINES) + "\n"
+            cut = text.index("FAILURE: java")  # split the last failure line mid-way
+            log.write_text(text[:cut], encoding="utf-8")
+            monitor = ProgressMonitor(log, interval_secs=60, stall_after_secs=0)
+            p = monitor.poll()
+            self.assertEqual((p.modules_started, p.failures), (2, 1))
+            with open(log, "a", encoding="utf-8") as fh:
+                fh.write(text[cut:])
+            p = monitor.poll()
+        self.assertEqual(p.modules_started, 2)
+        self.assertEqual(p.modules_completed, 1)
+        self.assertEqual(p.failures, 2)  # ASSUMPTION_FAILURE is not a failure
+        self.assertEqual(p.current, {"0.0.0.0:6527": "CtsFooTestCases", "0.0.0.0:6524": "CtsBarTestCases[instant]"})
+
+    def test_warns_once_when_log_goes_quiet(self):
+        import time as _time
+
+        from xts_agent.execution.progress import ProgressMonitor
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "tf.log"
+            log.write_text(TF_LOG_LINES[0] + "\n", encoding="utf-8")
+            monitor = ProgressMonitor(log, interval_secs=60, stall_after_secs=0.2)
+            monitor.report()
+            monitor.progress.last_output_at = _time.time() - 1
+            with self.assertLogs("xts_agent.execution.progress", "WARNING") as logs:
+                monitor.report()
+                monitor.report()
+        self.assertEqual(len([m for m in logs.output if "silent" in m]), 1)
+
+    def test_runner_reports_progress_while_tradefed_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tools = Path(tmp) / "android-cts" / "tools"
+            tools.mkdir(parents=True)
+            script = tools / "cts-tradefed"
+            body = "".join(f"echo '{line}'\nsleep 0.15\n" for line in TF_LOG_LINES)
+            script.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+            script.chmod(0o755)
+            runner = TradefedRunner(tools.parent, "cts-tradefed")
+            runner.progress_interval_secs = 0.2
+            updates = []
+            runner.on_progress = lambda p: updates.append(p.as_dict())
+            res = runner.execute([str(script)], timeout_hours=0.01, log_dir=Path(tmp) / "logs")
+        self.assertEqual(res.return_code, 0)
+        self.assertGreaterEqual(len(updates), 2)
+        self.assertLessEqual(updates[0]["modules_started"], updates[-1]["modules_started"])
+        self.assertGreater(updates[-1]["modules_started"], 0)
+
+
+class MetricsTests(unittest.TestCase):
+    def _plan_result(self):
+        cts = SuiteResult("CTS", "FAILED", 90, 7, 3, 3600.0, 2, "/r", 1)
+        return PlanResult("Full Cert", {"CTS": cts}, 90, 7, 3, 3700.0, "FAILED")
+
+    def test_textfile_written_atomically_with_expected_samples(self):
+        from xts_agent.reporting.metrics import MetricsPublisher
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pub = MetricsPublisher("Full Cert", textfile_dir=tmp)
+            pub.suite_progress("CTS", {"modules_completed": 5, "failures": 2, "quiet_secs": 30})
+            prom = Path(tmp) / "xts_full_cert.prom"
+            running = prom.read_text()
+            triage = MagicMock(summary={"by_label": {"NEW": 2, "PERSISTENT": 5}, "actionable_groups": 2})
+            pub.run_finished(self._plan_result(), triage, quarantined=1)
+            final = prom.read_text()
+            leftovers = [p.name for p in Path(tmp).iterdir() if p.name != prom.name]
+        self.assertIn('xts_suite_modules_completed{plan="Full Cert",suite="CTS"} 5', running)
+        self.assertIn('xts_run_in_progress{plan="Full Cert"} 1', running)
+        self.assertIn('xts_run_in_progress{plan="Full Cert"} 0', final)
+        self.assertIn('xts_suite_tests{plan="Full Cert",result="fail",suite="CTS"} 7', final)
+        self.assertIn('xts_run_status{plan="Full Cert",status="FAILED"} 1', final)
+        self.assertIn('xts_triage_groups{label="NEW",plan="Full Cert"} 2', final)
+        self.assertIn('xts_devices_quarantined{plan="Full Cert"} 1', final)
+        self.assertIn("# TYPE xts_suite_tests gauge", final)
+        self.assertEqual(leftovers, [])
+
+    def test_pushgateway_put(self):
+        import http.server
+        import threading
+
+        received = {}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_PUT(self):
+                received["path"] = self.path
+                received["body"] = self.rfile.read(int(self.headers["Content-Length"])).decode()
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+        from xts_agent.reporting.metrics import MetricsPublisher
+
+        pub = MetricsPublisher("Full Cert", pushgateway_url=f"http://127.0.0.1:{server.server_port}/")
+        pub.run_finished(self._plan_result())
+        thread.join(5)
+        server.server_close()
+        self.assertEqual(received["path"], "/metrics/job/xts_agent/plan/full_cert")
+        self.assertIn('xts_suite_retries{plan="Full Cert",suite="CTS"} 1', received["body"])
+
+
 class ParallelSuiteTests(unittest.TestCase):
     def test_split_is_proportional_with_min_one_and_caps(self):
         split = ShardManager.split_devices(list(range(11)), {"CTS": 40, "VTS": 20, "STS": 8})

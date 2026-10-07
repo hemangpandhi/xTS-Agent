@@ -22,6 +22,7 @@ from xts_agent.rca.diagnostic_collector import DiagnosticCollector
 from xts_agent.rca.failure_classifier import FailureClassifier
 from xts_agent.rca.pattern_matcher import PatternMatcher
 from xts_agent.rca.rca_engine import RCAEngine
+from xts_agent.reporting.metrics import MetricsPublisher, publisher_for
 from xts_agent.reporting.report_generator import ReportGenerator
 from xts_agent.reporting.slack_notifier import SlackNotifier
 from xts_agent.results.result_parser import overall_status
@@ -54,6 +55,7 @@ class Orchestrator:
         self._last_report_files: List[Path] = []
         self._last_triage_path: Optional[Path] = None
         self._results_dir = Path("results")
+        self._metrics: Optional[MetricsPublisher] = None
 
     def _initialize(self) -> TestPlanConfig:
         self.plan = self.config_loader.load_plan()
@@ -77,6 +79,7 @@ class Orchestrator:
             log_file=str(Path(self.plan.agent.log_dir) / "xts_agent.log"),
         )
         logger.info("Loaded plan: %s (run id %s)", self.plan.name, run_id())
+        self._metrics = publisher_for(self.plan)
 
         packages_dir = Path(self.plan.paths.xts_packages_dir)
         installed = self.suite_registry.discover_installed_suites(packages_dir)
@@ -103,6 +106,16 @@ class Orchestrator:
                 EnvironmentValidator.check_tradefed_script(script)
 
         return self.plan
+
+    def _publish_metrics(self, result: PlanResult) -> None:
+        metrics = getattr(self, "_metrics", None)
+        if metrics is None:
+            return
+        try:
+            quarantined = len(self.device_manager.ledger.quarantined())
+        except Exception:
+            quarantined = 0
+        metrics.run_finished(result, getattr(self, "last_triage", None), quarantined)
 
     def _apply_tool_paths(self) -> None:
         """Honour paths.java_home / android_sdk / adb_path for this process and TradeFed."""
@@ -152,6 +165,7 @@ class Orchestrator:
             results_dir=self._results_dir,
             run_state=RunState.for_plan(self._results_dir, plan.name),
             history_estimate=self._history_estimate,
+            metrics=self._metrics,
         )
 
         results = executor.execute_plan(
@@ -171,6 +185,7 @@ class Orchestrator:
             # Be quick: CI gives a short grace period after SIGTERM. Skip RCA,
             # triage, uploads and history (a partial run would skew trends).
             self.generate_reports(results)
+            self._publish_metrics(results)
             notifier.notify_plan_complete(results)
             return results
 
@@ -189,6 +204,7 @@ class Orchestrator:
         if not dry_run:
             self._persist_results(results)
             self.write_dashboard()
+            self._publish_metrics(results)
         notifier.notify_plan_complete(results)
         return results
 
@@ -244,6 +260,7 @@ class Orchestrator:
         self.last_plan_result = result
         if was_cancelled:
             self.generate_reports(result)
+            self._publish_metrics(result)
             return result
         rca = self._run_rca(result) if plan.post_execution.rca.enabled else None
         self._run_triage(result, rca)
@@ -253,6 +270,7 @@ class Orchestrator:
         self._upload_artifacts(result)
         self._persist_results(result)
         self.write_dashboard()
+        self._publish_metrics(result)
         return result
 
     def _load_latest_plan_result(self) -> Optional[PlanResult]:
