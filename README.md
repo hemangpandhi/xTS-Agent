@@ -86,7 +86,7 @@ The `check` stage runs before anything touches a device, and the pipeline stops 
 pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
 ruff check xts_agent tests      # pyflakes, import order, bugbear, a few correctness rules
 mypy                            # config in pyproject.toml
-python -m unittest discover -s tests
+python -m unittest discover -s tests -t .   # or one area: python -m unittest tests.test_triage
 ```
 
 ### Optional

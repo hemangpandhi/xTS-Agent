@@ -73,7 +73,7 @@ check:
     - .venv-check/bin/pip install --no-deps -e .
     - .venv-check/bin/ruff check xts_agent tests
     - .venv-check/bin/mypy
-    - .venv-check/bin/python -m unittest discover -s tests -v
+    - .venv-check/bin/python -m unittest discover -s tests -t . -v
 
 # ═════════════════════════════════════════════════════════════
 # Stage 1: Environment Setup
