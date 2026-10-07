@@ -128,7 +128,8 @@ export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install -e .
+pip install --require-hashes -r requirements.lock   # exact pinned versions
+pip install --no-deps -e .
 # Optional, for on-prem AI RCA (pulls torch, compiles llama.cpp):
 # pip install -e ".[ai]"
 ```
@@ -420,6 +421,7 @@ python3 -m xts_agent.cli analyze --plan config/test_plans/cts_only.yaml \
 python3 -m xts_agent.cli device-check --min-devices 4
 python3 -m xts_agent.cli health-check
 python3 -m xts_agent.cli cleanup --kill-tradefed
+python3 -m xts_agent.cli cleanup --prune-results --keep-days 14 --dry-run
 ```
 
 Live helpers:
@@ -429,6 +431,23 @@ Live helpers:
 ./scripts/monitor_resources.sh
 ./monitor_web/start_web_monitor.sh   # http://127.0.0.1:8585
 ```
+
+## Operations
+
+All under `ops:` in `config/default_config.yaml` (overridable per plan).
+
+| Concern | Behaviour |
+|---------|-----------|
+| **Cancel / stop** | SIGTERM or Ctrl-C (CI cancel, `docker stop`, systemd) stops TradeFed so it flushes partial results, skips retries/RCA/uploads, writes the checkpoint and reports, exits 143/130. Continue later with `run --resume`. A second signal force-kills. `cleanup --kill-tradefed` in `after_script` remains the fallback if the agent is SIGKILLed. |
+| **Heartbeat** | Every `progress_interval_secs` (600) the job log shows modules finished/started, failures so far and the module on each device; a TradeFed log silent for `stall_warning_mins` (60) is flagged as a likely hang. The same data is written to `results/run_state/<plan>.json`. |
+| **Metrics** | `metrics_textfile_dir` (node_exporter textfile collector) and/or `pushgateway_url`. Heartbeat and end-of-run gauges: `xts_run_in_progress`, `xts_run_heartbeat_timestamp_seconds`, `xts_suite_quiet_seconds`, `xts_suite_tests{result}`, `xts_suite_status`, `xts_triage_groups{label}`, `xts_devices_quarantined`, ... |
+| **Disk guard** | `run`/`retry` exit 3 if a filesystem they write to (suite packages, results, temp dir) has less than `min_free_disk_gb` (20). |
+| **Retention** | TradeFed never deletes results or logs (GBs per CTS session). `cleanup --prune-results --keep-days N [--dry-run]` deletes older sessions, always keeping the newest 3 per suite and sessions an unfinished run can resume from. In CI set `XTS_PRUNE_DAYS`. |
+| **Logs** | One console stream (plain timestamped lines in CI, Rich on a terminal) and `logs/xts_agent.log` as JSON, rotated at 50 MB x 5. Every line carries the run id (`XTS_RUN_ID`, in CI the pipeline id) and the suite. |
+
+Suggested alerts: heartbeat older than 2x the interval while `xts_run_in_progress == 1`
+(agent or host died); `xts_suite_quiet_seconds > 3600` (TradeFed hung);
+`xts_devices_quarantined > 0`.
 
 ---
 
