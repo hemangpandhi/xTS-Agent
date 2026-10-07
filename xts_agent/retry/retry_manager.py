@@ -95,6 +95,16 @@ class RetryManager:
             if cooldown > 0 and cancel.wait(min(cooldown, 300)):
                 break
 
+            # Older result dirs may have been pruned since the session was
+            # recorded, which renumbers sessions: trust the dir, not the number
+            if current.results_dir and hasattr(runner, "session_index_from_dir"):
+                index = runner.session_index_from_dir(current.results_dir)
+                if index is not None and index != current.session_id:
+                    logger.warning(
+                        "Session for %s is now %s (was %s; older results pruned?)",
+                        Path(current.results_dir).name, index, current.session_id,
+                    )
+                    current.session_id = index
             # Runs with unexecuted modules must also re-run NOT_EXECUTED ones,
             # even when they are FAILED (failures outrank INCOMPLETE)
             attempt_retry_type = retry_type

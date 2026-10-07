@@ -9,7 +9,8 @@ from typing import List, Optional
 import click
 
 from xts_agent.execution import cancel
-from xts_agent.orchestrator import Orchestrator
+from xts_agent.config_loader import ConfigError
+from xts_agent.orchestrator import Orchestrator, PreflightError
 from xts_agent.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,11 @@ def run(plan: str, config_path: Optional[str], auto_retry: bool, dry_run: bool, 
     """Run test plan."""
     orchestrator = _build_orchestrator(plan, config_path)
     cancel.install_signal_handlers()
-    result = orchestrator.run_plan(auto_retry=auto_retry, dry_run=dry_run, resume=resume)
+    try:
+        result = orchestrator.run_plan(auto_retry=auto_retry, dry_run=dry_run, resume=resume)
+    except (ConfigError, PreflightError) as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        sys.exit(3)
     if result.cancelled:
         sys.exit(cancel.exit_code())
     if result.overall_status not in ("PASSED", "DRY_RUN"):
@@ -305,14 +310,35 @@ def quarantine(plan: str, config_path: Optional[str], release_serial: Optional[s
     is_flag=True,
     help="Kill TradeFed processes started by this agent (recorded pid files only)",
 )
-def cleanup(plan: str, config_path: Optional[str], kill_tradefed: bool):
-    """Cleanup agent allocations and optional TradeFed processes."""
+@click.option(
+    "--prune-results",
+    is_flag=True,
+    help="Delete TradeFed results/logs and agent TradeFed logs older than --keep-days",
+)
+@click.option("--keep-days", type=float, default=None, help="Default: ops.keep_results_days")
+@click.option("--keep-latest", type=int, default=3, show_default=True, help="Sessions per suite always kept")
+@click.option("--dry-run", is_flag=True, help="With --prune-results: only list what would be deleted")
+def cleanup(plan: str, config_path: Optional[str], kill_tradefed: bool, prune_results: bool,
+            keep_days: Optional[float], keep_latest: int, dry_run: bool):
+    """Cleanup agent allocations, TradeFed processes and old results."""
     orchestrator = _build_orchestrator(plan, config_path)
     try:
         orchestrator._initialize()
     except Exception:
-        pass
+        if prune_results:
+            raise
     orchestrator.cleanup(kill_tradefed=kill_tradefed)
+    if prune_results:
+        days = keep_days if keep_days is not None else orchestrator.plan.ops.keep_results_days
+        if not days or days <= 0:
+            raise click.UsageError("--prune-results needs --keep-days N (or ops.keep_results_days)")
+        pruned = orchestrator.prune_results(days, keep_latest=keep_latest, dry_run=dry_run)
+        for path in pruned.paths:
+            click.echo(f"{'would delete' if dry_run else 'deleted'}: {path}")
+        click.echo(
+            f"{'Would free' if dry_run else 'Freed'} {(pruned.bytes if dry_run else pruned.freed) / 1024**3:.1f} GB "
+            f"({len(pruned.paths)} path(s); {pruned.kept_sessions} session(s) kept)"
+        )
     click.echo("Cleanup complete.")
 
 

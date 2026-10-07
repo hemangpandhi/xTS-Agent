@@ -37,6 +37,10 @@ from xts_agent.utils.logger import run_id, setup_logging
 logger = logging.getLogger(__name__)
 
 
+class PreflightError(RuntimeError):
+    """The host is not fit to start a run (e.g. low disk)."""
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -141,6 +145,8 @@ class Orchestrator:
         self, auto_retry: bool = False, dry_run: bool = False, resume: bool = False
     ) -> PlanResult:
         plan = self._initialize()
+        if not dry_run:
+            self.check_disk_space()
         notifier = self._slack()
         notifier.notify_start(plan.name)
 
@@ -210,6 +216,7 @@ class Orchestrator:
 
     def retry_plan(self, max_retries: int = 1) -> Optional[PlanResult]:
         plan = self._initialize()
+        self.check_disk_space()
         logger.info("Retrying plan %s with max_retries=%s", plan.name, max_retries)
 
         if not self.last_plan_result:
@@ -640,6 +647,42 @@ class Orchestrator:
             serials = list(self.device_manager._allocated)
             self.device_manager.release_devices(serials)
             logger.info("Released allocated devices: %s", serials)
+
+    def suite_package_roots(self) -> List[Path]:
+        """Every installed suite package (android-*) under paths.xts_packages_dir."""
+        base = Path(self.plan.paths.xts_packages_dir)
+        roots = {Path(s.package_path) for s in self.plan.suites if s.package_path}
+        if base.is_dir():
+            roots.update(p for p in base.glob("android-*") if (p / "tools").is_dir())
+        return sorted(r for r in roots if r.is_dir())
+
+    def check_disk_space(self) -> None:
+        from xts_agent.utils.retention import check_free_space
+
+        paths = [Path(s.package_path) for s in self.plan.suites if s.enabled and s.package_path]
+        problems = check_free_space([*paths, self._results_dir], self.plan.ops.min_free_disk_gb)
+        if problems:
+            raise PreflightError(
+                "Not enough disk space to start: " + "; ".join(problems)
+                + ". Free space with `xts-agent cleanup --prune-results --keep-days N` "
+                "or lower ops.min_free_disk_gb."
+            )
+
+    def prune_results(self, keep_days: float, keep_latest: int = 3, dry_run: bool = False):
+        from xts_agent.utils.retention import plan_prune, protected_sessions, prune
+
+        plan = plan_prune(
+            self.suite_package_roots(),
+            keep_days=keep_days,
+            keep_latest=keep_latest,
+            protect=protected_sessions(self._results_dir / "run_state"),
+            agent_log_dir=self._results_dir / "logs",
+        )
+        if plan.protected:
+            logger.info("Keeping sessions an unfinished run may resume from: %s", plan.protected)
+        if not dry_run:
+            prune(plan)
+        return plan
 
     def download_packages(self) -> None:
         from xts_agent.suites.suite_downloader import SuiteDownloader

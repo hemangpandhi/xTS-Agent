@@ -743,10 +743,15 @@ class RetryManagerTests(unittest.TestCase):
         suite.retry.max_retries = 2
         runner = TradefedRunner("/opt/xts/android-cts", "cts-tradefed")
         with tempfile.TemporaryDirectory() as tmp:
-            first = Path(tmp) / "first"
+            # TradeFed numbers sessions by result-dir order: 0-4 exist already
+            for i in range(5):
+                old = Path(tmp) / f"2026.10.0{i + 1}_00.00.00.000_1"
+                old.mkdir()
+                (old / "test_result.xml").write_text(PASSING_XML, encoding="utf-8")
+            first = Path(tmp) / "2026.10.07_01.00.00.000_1"
             first.mkdir()
             (first / "test_result.xml").write_text(INCOMPLETE_XML, encoding="utf-8")
-            second = Path(tmp) / "second"
+            second = Path(tmp) / "2026.10.07_02.00.00.000_1"
             second.mkdir()
             (second / "test_result.xml").write_text(PASSING_XML, encoding="utf-8")
             runs = [
@@ -765,6 +770,26 @@ class RetryManagerTests(unittest.TestCase):
         self.assertEqual(second_cmd[second_cmd.index("--retry") + 1], "5")
         self.assertEqual(res.status, "PASSED")
         self.assertEqual(res.session_id, 6)
+
+    def test_retry_follows_session_renumbered_by_pruning(self):
+        from xts_agent.execution.tradefed_runner import ExecutionResult
+
+        suite = SuiteConfig(name="cts", plan="cts")
+        suite.retry.max_retries = 1
+        runner = TradefedRunner("/opt/xts/android-cts", "cts-tradefed")
+        with tempfile.TemporaryDirectory() as tmp:
+            # Recorded as session 7, but older sessions were pruned since
+            mine = Path(tmp) / "2026.10.07_01.00.00.000_1"
+            mine.mkdir()
+            (mine / "test_result.xml").write_text(INCOMPLETE_XML, encoding="utf-8")
+            current = self._suite_result("INCOMPLETE", 7)
+            current.results_dir = str(mine)
+            with patch("xts_agent.execution.cancel.wait", return_value=False), patch.object(
+                TradefedRunner, "execute", return_value=ExecutionResult(True, None, 0, 1.0, None, "log")
+            ) as exec_mock:
+                self._manager().retry_suite_until_done(runner, current, suite, ["s1"], tmp)
+        cmd = exec_mock.call_args[0][0]
+        self.assertEqual(cmd[cmd.index("--retry") + 1], "0")
 
     def test_failed_but_incomplete_still_retries_not_executed(self):
         from xts_agent.execution.tradefed_runner import ExecutionResult
@@ -1417,6 +1442,61 @@ class MetricsTests(unittest.TestCase):
         server.server_close()
         self.assertEqual(received["path"], "/metrics/job/xts_agent/plan/full_cert")
         self.assertIn('xts_suite_retries{plan="Full Cert",suite="CTS"} 1', received["body"])
+
+
+class RetentionTests(unittest.TestCase):
+    def _session(self, root: Path, name: str, results: bool = True) -> None:
+        (root / "logs" / name).mkdir(parents=True)
+        (root / "logs" / name / "host_log.txt").write_text("x" * 100)
+        if results:
+            (root / "results" / name).mkdir(parents=True)
+            (root / "results" / name / "test_result.xml").write_text(PASSING_XML)
+            (root / "results" / f"{name}.zip").write_text("zip")
+
+    def test_prunes_old_sessions_but_keeps_newest_and_resumable(self):
+        import json
+        import time as _time
+
+        from xts_agent.utils.retention import plan_prune, protected_sessions, prune
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cts = Path(tmp) / "android-cts"
+            old, resumable = "2026.09.01_10.00.00.000_1", "2026.09.02_10.00.00.000_2"
+            aborted = "2026.09.03_10.00.00.000_3"
+            newest = ["2026.09.04_10.00.00.000_4", "2026.09.05_10.00.00.000_5"]
+            for name in (old, resumable, *newest):
+                self._session(cts, name)
+            self._session(cts, aborted, results=False)  # logs-only session
+            (cts / "results" / "latest").symlink_to(cts / "results" / newest[-1])
+            state_dir = Path(tmp) / "run_state"
+            state_dir.mkdir()
+            (state_dir / "cert.json").write_text(json.dumps({
+                "complete": False,
+                "suites": {"cts": {"results_dir": str(cts / "results" / resumable)}},
+            }))
+            now = _time.mktime((2026, 10, 7, 0, 0, 0, 0, 0, -1))
+            plan = plan_prune([cts], keep_days=7, keep_latest=2,
+                              protect=protected_sessions(state_dir), now=now)
+            names = sorted(p.name for p in plan.paths)
+            self.assertEqual(names, sorted([old, old, f"{old}.zip", aborted]))
+            self.assertEqual(plan.protected, [resumable])
+            self.assertTrue(cts.joinpath("results", old).exists())  # planning deletes nothing
+            freed = prune(plan)
+            self.assertGreater(freed, 0)
+            self.assertFalse(cts.joinpath("results", old).exists())
+            self.assertFalse(cts.joinpath("logs", aborted).exists())
+            for name in (resumable, *newest):
+                self.assertTrue(cts.joinpath("results", name, "test_result.xml").exists())
+            self.assertTrue((cts / "results" / "latest").is_symlink())
+
+    def test_free_space_check(self):
+        from xts_agent.utils.retention import check_free_space
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(check_free_space([Path(tmp)], 0), [])
+            problems = check_free_space([Path(tmp) / "not" / "created"], 10**9)
+        self.assertTrue(problems)
+        self.assertIn("GB free", problems[0])
 
 
 class ParallelSuiteTests(unittest.TestCase):

@@ -410,6 +410,12 @@ class TradefedRunner:
             return names.index(dir_name)
         return None
 
+    def session_index_from_dir(self, results_dir: str | Path) -> Optional[int]:
+        """Session index TradeFed assigns this dir now (result dirs in name order)."""
+        path = Path(results_dir)
+        names = [d.name for d in self._session_dirs(path.parent)]
+        return names.index(path.name) if path.name in names else None
+
     @staticmethod
     def parse_session_table(output: str, dir_name: str) -> Optional[int]:
         """Parse the session index for ``dir_name`` from ``list results`` output."""
