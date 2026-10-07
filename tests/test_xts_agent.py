@@ -1265,6 +1265,39 @@ class CancelTests(unittest.TestCase):
         runner.execute.assert_not_called()
 
 
+class LoggingTests(unittest.TestCase):
+    def tearDown(self):
+        import logging
+
+        logger = logging.getLogger("xts_agent")
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
+        logger.propagate = True
+
+    def test_single_console_handler_with_run_id_and_suite_in_json_file(self):
+        import json
+        import logging
+
+        from xts_agent.utils.logger import run_id, setup_logging, suite_context
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_file = Path(tmp) / "agent.log"
+            setup_logging(logging.INFO)
+            logger = setup_logging(logging.INFO, log_file=str(log_file))  # re-init is idempotent
+            self.assertEqual(len(logger.handlers), 2)
+            self.assertFalse(logger.propagate)
+            with suite_context("cts"):
+                logging.getLogger("xts_agent.x").info("inside")
+            logging.getLogger("xts_agent.x").info("outside")
+            for handler in logger.handlers:
+                handler.flush()
+            inside, outside = (json.loads(line) for line in log_file.read_text().splitlines())
+        self.assertEqual(inside["run_id"], run_id())
+        self.assertEqual(inside["suite"], "cts")
+        self.assertNotIn("suite", outside)
+
+
 class ParallelSuiteTests(unittest.TestCase):
     def test_split_is_proportional_with_min_one_and_caps(self):
         split = ShardManager.split_devices(list(range(11)), {"CTS": 40, "VTS": 20, "STS": 8})

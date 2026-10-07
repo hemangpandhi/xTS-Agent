@@ -10,8 +10,8 @@ import click
 
 from xts_agent.execution import cancel
 from xts_agent.orchestrator import Orchestrator
+from xts_agent.utils.logger import setup_logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +34,8 @@ def _build_orchestrator(plan: Optional[str], config: Optional[str]) -> Orchestra
 @click.group()
 def main():
     """xTS Agent for AAOS test automation."""
+    # Console only until a plan is loaded (the orchestrator adds the log file)
+    setup_logging(logging.INFO)
 
 
 @main.command()

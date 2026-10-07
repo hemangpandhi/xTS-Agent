@@ -31,7 +31,7 @@ from xts_agent.retry.isolation import IsolationHandler
 from xts_agent.retry.retry_manager import RetryManager
 from xts_agent.suites.suite_registry import SuiteRegistry
 from xts_agent.utils.env_validator import EnvironmentValidator
-from xts_agent.utils.logger import setup_logger
+from xts_agent.utils.logger import run_id, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +72,11 @@ class Orchestrator:
         (self._results_dir / "reports").mkdir(parents=True, exist_ok=True)
 
         log_level = getattr(logging, str(self.plan.agent.log_level).upper(), logging.INFO)
-        setup_logger(
-            "xts_agent",
-            log_file=str(Path(self.plan.agent.log_dir) / "xts_agent.log"),
+        setup_logging(
             level=log_level,
+            log_file=str(Path(self.plan.agent.log_dir) / "xts_agent.log"),
         )
-        logger.info("Loaded plan: %s", self.plan.name)
+        logger.info("Loaded plan: %s (run id %s)", self.plan.name, run_id())
 
         packages_dir = Path(self.plan.paths.xts_packages_dir)
         installed = self.suite_registry.discover_installed_suites(packages_dir)

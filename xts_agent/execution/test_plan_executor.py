@@ -20,6 +20,7 @@ from xts_agent.results.result_parser import (
     has_unexecuted_modules,
     overall_status,
 )
+from xts_agent.utils.logger import suite_context
 
 from . import cancel
 from .run_state import RunState
@@ -286,6 +287,16 @@ class TestPlanExecutor:
         dry_run: bool = False,
         auto_retry: bool = False,
         assigned_devices: Optional[List[Any]] = None,
+    ) -> SuiteResult:
+        with suite_context(suite_config.name):
+            return self._execute_suite(suite_config, dry_run, auto_retry, assigned_devices)
+
+    def _execute_suite(
+        self,
+        suite_config: SuiteConfig,
+        dry_run: bool,
+        auto_retry: bool,
+        assigned_devices: Optional[List[Any]],
     ) -> SuiteResult:
         name = suite_config.name
         plan_name = suite_config.plan
