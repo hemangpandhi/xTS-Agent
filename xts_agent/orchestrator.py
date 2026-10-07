@@ -459,6 +459,10 @@ class Orchestrator:
             exec_res = ExecutionResult(True, None, 0, 0.0, str(rdir), "")
             name = suite if len(results_dirs) == 1 else f"{suite}#{i + 1}"
             res = TestPlanExecutor._to_suite_result(name, exec_res, [], 0)
+            if res.details is not None:  # the agent did not run it: take timing/devices from the XML
+                if res.details.end_ms > res.details.start_ms > 0:
+                    res.duration = (res.details.end_ms - res.details.start_ms) / 1000
+                res.device_serials = list(res.details.devices)
             suites[name] = res
         return PlanResult(
             plan_name=self.plan.name,
@@ -466,8 +470,9 @@ class Orchestrator:
             total_pass=sum(s.pass_count for s in suites.values()),
             total_fail=sum(s.fail_count for s in suites.values()),
             total_skip=sum(s.skip_count for s in suites.values()),
-            duration=0.0,
+            duration=sum(s.duration for s in suites.values()),
             overall_status=overall_status(s.status for s in suites.values()),
+            device_serials=sorted({d for s in suites.values() for d in s.device_serials}),
             profile=self.plan.profile,
         )
 

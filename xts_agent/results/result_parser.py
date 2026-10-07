@@ -59,6 +59,8 @@ class TestResults:
     modules_total: int = 0
     # Invocation start (epoch ms) from <Result start=...>; orders runs in history
     start_ms: int = 0
+    end_ms: int = 0
+    devices: List[str] = field(default_factory=list)  # <Result devices=...>
 
     @property
     def is_complete(self) -> bool:
@@ -138,8 +140,10 @@ class ResultParser:
         )
         try:
             results.start_ms = int(root.attrib.get("start", 0) or 0)
+            results.end_ms = int(root.attrib.get("end", 0) or 0)
         except ValueError:
-            results.start_ms = 0
+            pass
+        results.devices = [d for d in root.attrib.get("devices", "").split(",") if d]
 
         build_info = root.find("Build")
         if build_info is not None:

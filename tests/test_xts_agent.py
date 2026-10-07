@@ -2527,6 +2527,39 @@ class ReportGeneratorTests(unittest.TestCase):
             self.assertTrue(Path(written["junit"]).exists())
             xml_text = Path(written["junit"]).read_text(encoding="utf-8")
             self.assertIn("testcase", xml_text)
+            html = Path(written["html"]).read_text(encoding="utf-8")
+        # Must render with no network: no external scripts, styles or fonts
+        self.assertNotRegex(html, r"(?:src|href)=[\"']?(?:https?:)?//")
+        self.assertNotIn("<script", html)
+        self.assertIn("50.0%", html)  # pass rate = pass / (pass + fail)
+        self.assertIn("boom", html)  # why the suite failed is visible, not only a tooltip
+
+    def test_html_report_escapes_test_output(self):
+        from xts_agent.reporting.html_report import HTMLReportGenerator
+
+        evil = SuiteResult("cts", "FAILED", 0, 1, 0, 1.0, None, "", 0, error_message="<script>x()</script>")
+        plan_result = PlanResult("p", {"cts": evil}, 0, 1, 0, 1.0, "FAILED")
+        with tempfile.TemporaryDirectory() as tmp:
+            html = HTMLReportGenerator().generate(plan_result, None, None, Path(tmp) / "r.html").read_text()
+        self.assertNotIn("<script>x()", html)
+        self.assertIn("&lt;script&gt;x()", html)
+
+    def test_imported_results_take_duration_and_devices_from_xml(self):
+        from xts_agent.orchestrator import Orchestrator
+
+        xml_text = SAMPLE_XML.replace(
+            'suite_name="CTS"', 'suite_name="CTS" start="1000000" end="4600000" devices="s1,s2"'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            rdir = Path(tmp) / "2026.10.05_21.11.12.345_5909"
+            rdir.mkdir()
+            (rdir / "test_result.xml").write_text(xml_text, encoding="utf-8")
+            orch = Orchestrator("config/test_plans/smoke_test.yaml")
+            orch.plan = ConfigLoader("config/test_plans/smoke_test.yaml").load_plan()
+            result = orch.plan_result_from_results_dirs("CTS", [str(rdir)])
+        self.assertEqual(result.duration, 3600.0)
+        self.assertEqual(result.device_serials, ["s1", "s2"])
+        self.assertEqual(result.suites_results["CTS"].device_serials, ["s1", "s2"])
 
 
 if __name__ == "__main__":

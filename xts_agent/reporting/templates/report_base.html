@@ -1,237 +1,145 @@
 <!DOCTYPE html>
+{#- Self-contained: no CDN scripts, fonts or icons, so the report renders the
+    same from a CI artifact, an air-gapped lab or an email attachment. -#}
+{%- set total = plan.total_pass + plan.total_fail + plan.total_skip -%}
+{%- set executed = plan.total_pass + plan.total_fail -%}
+{%- macro pct(n) -%}{{ ((n * 100.0 / total) if total else 0)|round(2) }}{%- endmacro -%}
+{%- macro hours(secs) -%}{{ ((secs or 0) / 3600)|round(2) }}{%- endmacro -%}
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>xTS Analytics Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f3f4f6; }
-        .dashboard-card { transition: transform 0.2s ease-in-out; }
-        .dashboard-card:hover { transform: translateY(-2px); }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>xTS report &ndash; {{ plan.plan_name }}</title>
+<style>
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:#f6f7f9;color:#1f2937}
+main{max-width:1100px;margin:0 auto;padding:24px 16px}
+header{background:#1e3a8a;color:#fff}
+header main{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding-top:20px;padding-bottom:20px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 10px}
+.sub{color:#bfdbfe;font-size:13px}.muted{color:#6b7280}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin:12px 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.cards .card{margin:0;border-left:4px solid #9ca3af}
+.cards .pass{border-left-color:#16a34a}.cards .fail{border-left-color:#dc2626}.cards .dev{border-left-color:#2563eb}
+.k{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.03em}.v{font-size:24px;font-weight:700}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#e5e7eb;margin:8px 0}
+.bar span{display:block;height:100%}.b-pass{background:#16a34a}.b-fail{background:#dc2626}.b-skip{background:#9ca3af}
+.legend span{margin-right:14px;font-size:13px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #eef0f3;vertical-align:top}
+th{color:#6b7280;font-weight:600}td.n,th.n{text-align:right}.wrap{overflow-x:auto}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:#f3f4f6;color:#374151;white-space:nowrap}
+.PASSED,.cert{background:#dcfce7;color:#166534}.FAILED,.NEW{background:#fee2e2;color:#991b1b}
+.INCOMPLETE,.FLAKY,.devprof{background:#fef3c7;color:#92400e}.status{background:#fff;color:#1e3a8a}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
+.small{font-size:12px}.reason{color:#92400e;font-size:12px;margin-top:2px}.red{color:#b91c1c;font-weight:600}
+pre{white-space:pre-wrap;background:#f9fafb;border:1px solid #eef0f3;border-radius:6px;padding:8px;font-size:12px;margin:6px 0}
+pre.ai{background:#eff6ff}summary{cursor:pointer;color:#4338ca;font-size:12px}
+footer{color:#9ca3af;font-size:12px;text-align:center;padding:24px}
+</style>
 </head>
-<body class="text-gray-800">
+<body>
+<header><main>
+  <div>
+    <h1>{{ plan.plan_name }}</h1>
+    <div class="sub">xTS Agent report &middot; {{ hours(plan.duration) }} h &middot; {{ plan.device_serials|length }} device(s)</div>
+  </div>
+  <div>
+    <span class="pill status">{{ plan.overall_status }}</span>
+    {% if plan.profile == 'certification' %}
+    <span class="pill cert">Certification profile</span>
+    {% else %}
+    <span class="pill devprof" title="Filtered or partial runs are not valid for certification">Development profile &mdash; not for certification</span>
+    {% endif %}
+    {% if plan.cancelled %}<span class="pill INCOMPLETE">Cancelled</span>{% endif %}
+  </div>
+</main></header>
 
-<div class="min-h-screen flex flex-col">
-    <!-- Header -->
-    <header class="bg-gradient-to-r from-blue-700 to-indigo-900 text-white shadow-lg py-6 px-8">
-        <div class="flex justify-between items-center max-w-7xl mx-auto">
-            <div>
-                <h1 class="text-3xl font-extrabold tracking-tight"><i class="fa-solid fa-flask-vial mr-3"></i>xTS Agent Analytics</h1>
-                <p class="text-blue-200 mt-1 text-sm font-medium tracking-wide">Automated CI/CD Triage Dashboard</p>
-            </div>
-            <div class="text-right">
-                <span class="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold bg-white text-indigo-900 shadow">
-                    Status: {{ plan.overall_status }}
-                </span>
-                {% if plan.profile == 'certification' %}
-                <span class="ml-2 inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900">Certification profile</span>
-                {% else %}
-                <span class="ml-2 inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900" title="Filtered or partial runs are not valid for certification">Development profile &mdash; not for certification</span>
-                {% endif %}
-                <p class="text-xs text-blue-200 mt-2 font-mono">Execution Time: {{ (plan.duration / 3600)|round(2) }} hrs</p>
-            </div>
-        </div>
-    </header>
+<main>
+  <div class="cards">
+    <div class="card pass"><div class="k">Passed</div><div class="v">{{ plan.total_pass }}</div></div>
+    <div class="card fail"><div class="k">Failed</div><div class="v">{{ plan.total_fail }}</div></div>
+    <div class="card"><div class="k">Skipped</div><div class="v">{{ plan.total_skip }}</div></div>
+    <div class="card dev" title="passed / (passed + failed), as on the trends dashboard"><div class="k">Pass rate</div><div class="v">{{ ((plan.total_pass * 100.0 / executed) if executed else 0)|round(2) }}%</div></div>
+  </div>
 
-    <!-- Main Content -->
-    <main class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-        
-        <!-- Top Metrics Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 dashboard-card">
-                <div class="flex items-center">
-                    <div class="p-3 rounded-full bg-green-100 text-green-600 mr-4">
-                        <i class="fa-solid fa-check-circle fa-lg"></i>
-                    </div>
-                    <div>
-                        <p class="text-sm font-medium text-gray-500 uppercase">Total Passed</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ plan.total_pass }}</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500 dashboard-card">
-                <div class="flex items-center">
-                    <div class="p-3 rounded-full bg-red-100 text-red-600 mr-4">
-                        <i class="fa-solid fa-times-circle fa-lg"></i>
-                    </div>
-                    <div>
-                        <p class="text-sm font-medium text-gray-500 uppercase">Total Failed</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ plan.total_fail }}</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-gray-400 dashboard-card">
-                <div class="flex items-center">
-                    <div class="p-3 rounded-full bg-gray-100 text-gray-600 mr-4">
-                        <i class="fa-solid fa-forward fa-lg"></i>
-                    </div>
-                    <div>
-                        <p class="text-sm font-medium text-gray-500 uppercase">Total Skipped</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ plan.total_skip }}</p>
-                    </div>
-                </div>
-            </div>
+  <div class="card">
+    <div class="bar" role="img" aria-label="{{ plan.total_pass }} passed, {{ plan.total_fail }} failed, {{ plan.total_skip }} skipped">
+      {% if total %}
+      <span class="b-pass" style="width:{{ pct(plan.total_pass) }}%"></span>
+      <span class="b-fail" style="width:{{ pct(plan.total_fail) }}%"></span>
+      <span class="b-skip" style="width:{{ pct(plan.total_skip) }}%"></span>
+      {% endif %}
+    </div>
+    <div class="legend">
+      <span><i class="dot b-pass"></i>Passed {{ pct(plan.total_pass) }}%</span>
+      <span><i class="dot b-fail"></i>Failed {{ pct(plan.total_fail) }}%</span>
+      <span><i class="dot b-skip"></i>Skipped {{ pct(plan.total_skip) }}%</span>
+    </div>
+  </div>
 
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 dashboard-card">
-                <div class="flex items-center">
-                    <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
-                        <i class="fa-solid fa-microchip fa-lg"></i>
-                    </div>
-                    <div>
-                        <p class="text-sm font-medium text-gray-500 uppercase">Cluster Size</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ plan.device_serials|length }} Devices</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <h2>Suites</h2>
+  <div class="card wrap">
+    <table>
+      <tr><th>Suite</th><th>Status</th><th class="n">Pass</th><th class="n">Fail</th><th class="n">Skip</th>
+          <th class="n">Hours</th><th class="n">Retries</th><th>Devices</th></tr>
+      {% for suite_name, s in plan.suites_results.items() %}
+      <tr>
+        <td><b>{{ s.name }}</b></td>
+        <td><span class="pill {{ s.status }}">{{ s.status|replace('_', ' ')|title }}</span>
+            {% if s.error_message and s.status != 'PASSED' %}<div class="reason">{{ s.error_message }}</div>{% endif %}</td>
+        <td class="n">{{ s.pass_count }}</td>
+        <td class="n{% if s.fail_count %} red{% endif %}">{{ s.fail_count }}</td>
+        <td class="n">{{ s.skip_count }}</td>
+        <td class="n">{{ hours(s.duration) }}</td>
+        <td class="n">{{ s.retry_count }}</td>
+        <td class="mono">{{ (s.device_serials or [])|join(', ') }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
 
-        <!-- Charts Row -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <div class="bg-white rounded-xl shadow-md p-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Execution Success Rate</h3>
-                <div class="relative h-64 w-full flex justify-center">
-                    <canvas id="passFailChart"></canvas>
-                </div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-md p-6 overflow-hidden">
-                <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Suite Breakdown</h3>
-                <div class="overflow-y-auto max-h-64 pr-2">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50 sticky top-0">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Suite</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pass</th>
-                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Fail</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            {% for suite_name, s in plan.suites_results.items() %}
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ s.name }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                    {% if s.status == 'PASSED' %}
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Passed</span>
-                                    {% elif s.status == 'INCOMPLETE' %}
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800" title="{{ s.error_message }}">Incomplete</span>
-                                    {% elif s.status == 'DRY_RUN' %}
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Dry run</span>
-                                    {% else %}
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800" title="{{ s.error_message }}">Failed</span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 font-bold">{{ s.pass_count }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-red-600 font-bold">{{ s.fail_count }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        {% if triage %}
-        <!-- Failure triage: groups, history, known issues, owners -->
-        <div class="bg-white rounded-xl shadow-md p-6 mb-8 border-t-4 border-indigo-500">
-            <h3 class="text-xl font-bold text-gray-800 mb-2">Failure triage</h3>
-            <p class="text-sm text-gray-600 mb-4">
-                {{ triage.summary.failures }} failures in {{ triage.summary.groups }} root-cause groups &middot;
-                {{ triage.summary.actionable_groups }} actionable &middot;
-                {{ triage.summary.known_groups }} known ({{ triage.summary.waived_groups }} waived)
-                {% for label, n in triage.summary.by_label.items() %} &middot; {{ label }}: {{ n }}{% endfor %}
-            </p>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-3 py-2 text-right">Tests</th>
-                            <th class="px-3 py-2 text-left">History</th>
-                            <th class="px-3 py-2 text-left">Root cause</th>
-                            <th class="px-3 py-2 text-left">Owner</th>
-                            <th class="px-3 py-2 text-left">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100">
-                        {% for g in triage.groups[:100] %}
-                        <tr class="align-top">
-                            <td class="px-3 py-2 text-right font-bold">{{ g.count }}</td>
-                            <td class="px-3 py-2">
-                                <span class="px-2 rounded text-xs font-semibold
-                                    {% if g.label == 'NEW' %}bg-red-100 text-red-800{% elif g.label == 'FLAKY' %}bg-amber-100 text-amber-800{% else %}bg-gray-100 text-gray-700{% endif %}">{{ g.label }}</span>
-                                {% if g.last_pass_build %}<div class="text-xs text-gray-500 mt-1" title="{{ g.last_pass_build }}">last pass: {{ g.last_pass_build.split('/')[-2] if g.last_pass_build.count('/') > 1 else g.last_pass_build }}</div>{% endif %}
-                            </td>
-                            <td class="px-3 py-2">
-                                <div class="font-mono text-xs break-all">{{ g.title }}</div>
-                                <div class="text-xs text-gray-500 mt-1">{{ g.classification }} &middot; {{ g.modules[:4]|join(', ') }}{% if g.modules|length > 4 %} +{{ g.modules|length - 4 }}{% endif %} &middot; sig {{ g.signature }}</div>
-                                <details class="mt-1"><summary class="text-xs text-indigo-700 cursor-pointer">tests &amp; stack</summary>
-                                    <pre class="text-xs whitespace-pre-wrap bg-gray-50 p-2 mt-1">{{ g.tests|join('\n') }}{% if g.tests_truncated %}
+  {% if triage %}
+  <h2>Failure triage</h2>
+  <div class="card">
+    <p class="muted small">
+      {{ triage.summary.failures }} failures in {{ triage.summary.groups }} root-cause groups &middot;
+      {{ triage.summary.actionable_groups }} actionable &middot;
+      {{ triage.summary.known_groups }} known ({{ triage.summary.waived_groups }} waived)
+      {% for label, n in triage.summary.by_label.items() %} &middot; {{ label }}: {{ n }}{% endfor %}
+    </p>
+    <div class="wrap">
+      <table>
+        <tr><th class="n">Tests</th><th>History</th><th>Root cause</th><th>Owner</th><th>Status</th></tr>
+        {% for g in triage.groups[:100] %}
+        <tr>
+          <td class="n"><b>{{ g.count }}</b></td>
+          <td><span class="pill {{ g.label }}">{{ g.label }}</span>
+              {% if g.last_pass_build %}<div class="muted small" title="{{ g.last_pass_build }}">last pass: {{ g.last_pass_build.split('/')[-2] if g.last_pass_build.count('/') > 1 else g.last_pass_build }}</div>{% endif %}</td>
+          <td>
+            <div class="mono">{{ g.title }}</div>
+            <div class="muted small">{{ g.classification }} &middot; {{ g.modules[:4]|join(', ') }}{% if g.modules|length > 4 %} +{{ g.modules|length - 4 }}{% endif %} &middot; sig {{ g.signature }}</div>
+            <details><summary>tests &amp; stack</summary>
+<pre>{{ g.tests|join('\n') }}{% if g.tests_truncated %}
 ... and {{ g.tests_truncated }} more{% endif %}
 
 {{ g.sample_stack }}</pre>
-                                    {% if g.ai %}<pre class="text-xs whitespace-pre-wrap bg-blue-50 p-2 mt-1">AI ({{ g.ai.get('confidence', '') }}): {{ g.ai.get('root_cause', '') }}
+              {% if g.ai %}<pre class="ai">AI ({{ g.ai.get('confidence', '') }}): {{ g.ai.get('root_cause', '') }}
 {{ g.ai.get('suggested_fix', '') }}</pre>{% endif %}
-                                </details>
-                            </td>
-                            <td class="px-3 py-2">{{ g.owner.team }}{% if g.owner.jira_component %}<div class="text-xs text-gray-500">{{ g.owner.jira_component }}</div>{% endif %}</td>
-                            <td class="px-3 py-2 text-xs">
-                                {% if g.known_issue %}{{ g.known_issue.id }}{% if g.known_issue.waived %} (waived){% elif g.known_issue.waiver_expired %} (waiver expired){% endif %}<br>{% endif %}
-                                {% if g.jira_key %}<span class="font-semibold">{{ g.jira_key }}</span>{% if g.jira_action %} ({{ g.jira_action }}){% endif %}{% elif g.actionable %}<span class="text-red-700">needs triage</span>{% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% if triage.groups|length > 100 %}<p class="text-xs text-gray-500 mt-2">Showing 100 of {{ triage.groups|length }} groups; see the triage JSON for all.</p>{% endif %}
-            </div>
-        </div>
-        {% endif %}
-
-    </main>
-
-    <!-- Footer -->
-    <footer class="bg-gray-800 text-white py-6 mt-auto">
-        <div class="max-w-7xl mx-auto px-4 text-center">
-            <p class="text-sm text-gray-400">Generated automatically by xTS Agent</p>
-        </div>
-    </footer>
-</div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const pass = {{ plan.total_pass }};
-        const fail = {{ plan.total_fail }};
-        const skip = {{ plan.total_skip }};
-        
-        const ctx = document.getElementById('passFailChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Passed', 'Failed', 'Skipped'],
-                datasets: [{
-                    data: [pass, fail, skip],
-                    backgroundColor: ['#10B981', '#EF4444', '#9CA3AF'],
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom', labels: { font: { family: "'Segoe UI', sans-serif", size: 13 } } }
-                },
-                cutout: '70%'
-            }
-        });
-    });
-</script>
-
+            </details>
+          </td>
+          <td>{{ g.owner.team }}{% if g.owner.jira_component %}<div class="muted small">{{ g.owner.jira_component }}</div>{% endif %}</td>
+          <td class="small">
+            {% if g.known_issue %}{{ g.known_issue.id }}{% if g.known_issue.waived %} (waived){% elif g.known_issue.waiver_expired %} (waiver expired){% endif %}<br>{% endif %}
+            {% if g.jira_key %}<b>{{ g.jira_key }}</b>{% if g.jira_action %} ({{ g.jira_action }}){% endif %}{% elif g.actionable %}<span class="red">needs triage</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% if triage.groups|length > 100 %}<p class="muted small">Showing 100 of {{ triage.groups|length }} groups; see the triage JSON for all.</p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</main>
+<footer>Generated by xTS Agent</footer>
 </body>
 </html>
