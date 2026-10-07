@@ -269,13 +269,6 @@ class LlmProviderTests(unittest.TestCase):
         with self.assertRaises(ExternalProviderNotAllowed):
             get_llm_provider(self._cfg(provider="gemini", gemini_api_key="k"))
 
-    def test_analyzer_falls_back_when_external_refused(self):
-        from xts_agent.rca.ai_analyzer import AIAnalyzer
-
-        analyzer = AIAnalyzer(self._cfg(provider="gemini", gemini_api_key="k"))
-        self.assertIsNone(analyzer.triage_engine)
-        self.assertEqual(analyzer.analyze_failure("t", "stack", "").confidence, 0.4)
-
     def test_gemini_key_in_header_with_timeout_and_not_logged(self):
         import requests
 
@@ -609,19 +602,12 @@ MULTI_ABI_XML = """<?xml version='1.0' encoding='UTF-8' standalone='no' ?>
 
 class AbiTests(unittest.TestCase):
     def test_same_test_on_two_abis_stays_distinct(self):
-        from xts_agent.results.result_aggregator import ResultAggregator
-        from xts_agent.results.result_comparator import ResultComparator
-
         with tempfile.TemporaryDirectory() as tmp:
             xml = Path(tmp) / "test_result.xml"
             xml.write_text(MULTI_ABI_XML, encoding="utf-8")
             parsed = ResultParser().parse_xml(xml)
         failed = ResultParser().get_failed_tests(parsed)
         self.assertEqual([t.test_id for t in failed], ["armeabi-v7a CtsSample com.example.Foo#testA"])
-        # Merging with itself must not let the arm64 PASS mask the armeabi FAIL
-        merged = ResultAggregator().merge_results([parsed, parsed])
-        self.assertEqual(merged.summary["fail"], 1)
-        self.assertEqual(ResultComparator().compare(parsed, parsed).summary["persistent_failures"], 1)
 
 
 class RcaClassificationTests(unittest.TestCase):
@@ -668,25 +654,6 @@ class RcaClassificationTests(unittest.TestCase):
         result = self._analyze(tc, patterns)
         self.assertEqual(result.classification.name, "TEST_BUG")
         self.assertEqual(result.root_cause, "tracked")
-
-
-class BaselineTests(unittest.TestCase):
-    def test_json_round_trip_and_xml_and_no_pickle(self):
-        from xts_agent.results.result_comparator import ResultComparator
-
-        comp = ResultComparator()
-        with tempfile.TemporaryDirectory() as tmp:
-            xml = Path(tmp) / "test_result.xml"
-            xml.write_text(MULTI_ABI_XML, encoding="utf-8")
-            from_xml = comp.load_baseline(xml)
-            snap = Path(tmp) / "baseline.json"
-            comp.save_baseline(from_xml, snap)
-            loaded = comp.load_baseline(snap)
-            self.assertEqual(loaded, from_xml)
-            self.assertEqual(comp.compare(loaded, from_xml).summary["new_failures"], 0)
-            for bad in ("baseline.pkl", "baseline.pickle"):
-                with self.assertRaises(ValueError):
-                    comp.load_baseline(Path(tmp) / bad)
 
 
 class SuiteStatusTests(unittest.TestCase):

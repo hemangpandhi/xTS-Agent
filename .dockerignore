@@ -6,4 +6,3 @@ logs
 *.pyc
 *.egg-info
 .pytest_cache
-monitor_web

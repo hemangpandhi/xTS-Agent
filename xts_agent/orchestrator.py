@@ -694,13 +694,3 @@ class Orchestrator:
         if not dry_run:
             prune(plan)
         return plan
-
-    def download_packages(self) -> None:
-        from xts_agent.suites.suite_downloader import SuiteDownloader
-
-        logger.info("Delegating package download to SuiteDownloader / scripts")
-        SuiteDownloader()  # ensure importable; actual URLs come from ops scripts
-        logger.info(
-            "Use scripts/download_xts_packages.sh for full package fetch into %s",
-            self.plan.paths.xts_packages_dir if self.plan else "/opt/xts",
-        )

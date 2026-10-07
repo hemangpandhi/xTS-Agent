@@ -44,16 +44,12 @@ class RCAEngine:
         config: Any,
         diagnostic_collector: Any = None,
         failure_classifier: Any = None,
-        log_analyzer: Any = None,
         pattern_matcher: Any = None,
-        ai_analyzer: Any = None,
     ):
         self.config = config
         self.diagnostic_collector = diagnostic_collector
         self.failure_classifier = failure_classifier
-        self.log_analyzer = log_analyzer
         self.pattern_matcher = pattern_matcher
-        self.ai_analyzer = ai_analyzer
 
     def analyze_failures(
         self,
@@ -100,20 +96,6 @@ class RCAEngine:
                         confidence = 0.6
                 except Exception as exc:
                     logger.debug("Classifier failed: %s", exc)
-
-            # The orchestrator only builds an analyzer when ai_rca is enabled
-            if self.ai_analyzer:
-                try:
-                    ai = self.ai_analyzer.analyze_failure(
-                        test_id, tc.stack_trace or "", logcat
-                    )
-                    if ai and ai.confidence >= confidence:
-                        classification = ai.classification
-                        confidence = ai.confidence
-                        root_cause = ai.root_cause
-                        suggested = ai.suggested_action
-                except Exception as exc:
-                    logger.debug("AI analyzer skipped: %s", exc)
 
             report.failures.append(
                 FailureAnalysis(

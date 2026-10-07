@@ -342,15 +342,5 @@ def cleanup(plan: str, config_path: Optional[str], kill_tradefed: bool, prune_re
     click.echo("Cleanup complete.")
 
 
-@main.command()
-@click.option("--plan", default="config/test_plans/smoke_test.yaml")
-@click.option("--config", "config_path", default=None)
-def download(plan: str, config_path: Optional[str]):
-    """Download xTS packages (delegates to ops script guidance)."""
-    orchestrator = _build_orchestrator(plan, config_path)
-    orchestrator._initialize()
-    orchestrator.download_packages()
-
-
 if __name__ == "__main__":
     main()

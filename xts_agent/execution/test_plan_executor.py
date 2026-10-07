@@ -560,18 +560,11 @@ class TestPlanExecutor:
                 return path
             logger.warning("Configured package_path missing: %s", path)
 
-        # Prefer registry discovery under xts packages dir
+        # Prefer the package discovered under the xts packages dir
         if self.suite_registry:
-            registered = self.suite_registry.get_suite(suite_config.name)
-            if registered is not None:
-                candidate = Path(registered.package_path) / f"android-{suite_config.name.lower()}"
-                if candidate.exists():
-                    return candidate
-                if Path(registered.package_path).exists():
-                    # Registry stores base_path; suite dir may be base itself
-                    base = Path(registered.package_path)
-                    nested = base / f"android-{suite_config.name.lower()}"
-                    return nested if nested.exists() else base
+            discovered = self.suite_registry.suite_dir(suite_config.name)
+            if discovered is not None:
+                return discovered
 
         fallback = Path(self.config.paths.xts_packages_dir) / f"android-{suite_config.name.lower()}"
         return fallback

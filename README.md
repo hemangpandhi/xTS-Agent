@@ -29,7 +29,6 @@ xTS-Agent/
 │   └── test_plans/            # Runnable plans (smoke, hardware CTS, cert, …)
 ├── scripts/                   # All supported host scripts (setup, run, monitor)
 ├── docker/                    # Dockerfile + compose (build locally)
-├── monitor_web/               # Optional localhost resource UI
 ├── results/                   # Generated at runtime (gitignored)
 └── tests/                     # Unit tests
 ```
@@ -43,10 +42,7 @@ xTS-Agent/
 | `preflight.sh` | Host pre-flight (aapt2, packages, devices, agent import) |
 | `check_ready.sh` | Go/no-go gate before a production run |
 | `start_cluster.sh` | Spawn N Cuttlefish instances |
-| `run_when_devices_ready.sh` | Wait for N ADB devices, then run a plan |
 | `run_nightly.sh` | Optional cluster spawn + multi-device plan run |
-| `check_progress.sh` | Live TradeFed progress summary |
-| `monitor_resources.sh` | CPU/RAM CSV sampler |
 | `setup_gitlab_runner.sh` | Optional GitLab shell-runner install |
 
 ---
@@ -241,8 +237,8 @@ python3 -m xts_agent.cli run \
 Helpers:
 
 ```bash
-MIN_DEVICES=4 TEST_PLAN=config/test_plans/cts_only.yaml \
-  ./scripts/run_when_devices_ready.sh
+NUM_DEVICES=4 SPAWN_CLUSTER=0 TEST_PLAN=config/test_plans/cts_only.yaml \
+  ./scripts/run_nightly.sh   # wait for 4 ADB devices, then run
 
 NUM_DEVICES=10 SPAWN_CLUSTER=1 \
   TEST_PLAN=config/test_plans/dev_cts_hardware_triage.yaml \
@@ -424,13 +420,8 @@ python3 -m xts_agent.cli cleanup --kill-tradefed
 python3 -m xts_agent.cli cleanup --prune-results --keep-days 14 --dry-run
 ```
 
-Live helpers:
-
-```bash
-./scripts/check_progress.sh
-./scripts/monitor_resources.sh
-./monitor_web/start_web_monitor.sh   # http://127.0.0.1:8585
-```
+Live progress is in the job log (TradeFed heartbeat every `ops.progress_interval_secs`)
+and, when enabled, in Prometheus; see Operations below.
 
 ## Operations
 
