@@ -21,6 +21,7 @@ from xts_agent.results.result_parser import (
     overall_status,
 )
 
+from . import cancel
 from .run_state import RunState
 from .tradefed_runner import ExecutionResult, TradefedRunner
 
@@ -35,7 +36,7 @@ class SuiteResult:
     fail_count: int
     skip_count: int
     duration: float
-    session_id: int
+    session_id: Optional[int]  # TradeFed session index; 0 is valid, None = unknown
     results_dir: str
     retry_count: int
     details: Any = None
@@ -55,6 +56,7 @@ class PlanResult:
     overall_status: str
     device_serials: List[str] = field(default_factory=list)
     profile: str = "development"
+    cancelled: bool = False
 
 
 class TestPlanExecutor:
@@ -118,10 +120,13 @@ class TestPlanExecutor:
             for index, suite_config in enumerate(suites):
                 if index and cooldown > 0 and not dry_run:
                     logger.info("Cooling down %ss before %s", cooldown, suite_config.name)
-                    time.sleep(cooldown)
+                    cancel.wait(cooldown)
+                if cancel.cancelled():
+                    by_name[suite_config.name] = self._cancelled_result(suite_config.name)
+                    continue
                 suite_res = self.execute_suite(suite_config, dry_run=dry_run, auto_retry=auto_retry)
                 by_name[suite_config.name] = suite_res
-                if plan.devices.reboot_between_suites and not dry_run:
+                if plan.devices.reboot_between_suites and not dry_run and not cancel.cancelled():
                     self._reboot_between_suites(suite_res.device_serials)
 
         # Report in priority order regardless of completion order
@@ -137,7 +142,10 @@ class TestPlanExecutor:
 
         duration = time.time() - start_time
         final_status = overall_status(s.status for s in suites_results.values())
-        if self.run_state is not None and not dry_run:
+        was_cancelled = cancel.cancelled()
+        if was_cancelled:
+            logger.warning("Run cancelled; resume with `xts-agent run --resume`")
+        elif self.run_state is not None and not dry_run:
             self.run_state.mark_complete(final_status)
         # Preserve order while uniquifying
         seen = set()
@@ -157,6 +165,7 @@ class TestPlanExecutor:
             overall_status=final_status,
             device_serials=unique_devices,
             profile=getattr(plan, "profile", "development"),
+            cancelled=was_cancelled,
         )
 
     def _reboot_between_suites(self, serials: List[str]) -> None:
@@ -233,9 +242,13 @@ class TestPlanExecutor:
                         results[suite.name] = future.result()
                     except Exception as exc:  # execute_suite normally catches its own errors
                         results[suite.name] = self._failed_result(suite.name, [], str(exc))
-                    if plan.devices.reboot_between_suites:
+                    if plan.devices.reboot_between_suites and not cancel.cancelled():
                         self._reboot_between_suites([d.serial for d in devs])
                     free.extend(devs)
+                if cancel.cancelled():
+                    for suite in pending:
+                        results[suite.name] = self._cancelled_result(suite.name)
+                    pending = []
                 # Never exceed the concurrency limit, even with idle devices
                 while pending and free and len(futures) < concurrency:
                     nxt = pending.pop(0)
@@ -254,12 +267,18 @@ class TestPlanExecutor:
             fail_count=0,
             skip_count=0,
             duration=0.0,
-            session_id=0,
+            session_id=None,
             results_dir="",
             retry_count=0,
             device_serials=list(serials),
             error_message=message,
         )
+
+    @staticmethod
+    def _cancelled_result(name: str, serials: Optional[List[str]] = None) -> SuiteResult:
+        result = TestPlanExecutor._failed_result(name, serials or [], "run cancelled before this suite finished")
+        result.status = "INCOMPLETE"
+        return result
 
     def execute_suite(
         self,
@@ -312,12 +331,13 @@ class TestPlanExecutor:
                     fail_count=0,
                     skip_count=0,
                     duration=0.0,
-                    session_id=0,
+                    session_id=None,
                     results_dir="",
                     retry_count=0,
                     device_serials=serials,
                 )
 
+            cancel.check()
             entry = self.run_state.suite(name) if (self._resuming and self.run_state) else None
             if entry and entry.get("status") == "PASSED":
                 logger.info("Resume: %s already PASSED in session %s; skipping", name, entry.get("session_id"))
@@ -403,7 +423,7 @@ class TestPlanExecutor:
                 suite_res = self._to_suite_result(name, exec_res, serials, retry_count=0)
             self._checkpoint(suite_res)
 
-            if auto_retry and self.retry_manager and suite_res.status != "PASSED":
+            if auto_retry and self.retry_manager and suite_res.status != "PASSED" and not cancel.cancelled():
                 suite_res = self.retry_manager.retry_suite_until_done(
                     runner=runner,
                     suite_result=suite_res,
@@ -415,6 +435,9 @@ class TestPlanExecutor:
 
             return suite_res
 
+        except cancel.RunCancelled:
+            logger.warning("Suite %s not started: run cancelled", name)
+            return self._cancelled_result(name, serials)
         except Exception as exc:
             logger.error("Suite %s failed before/during execution: %s", name, exc)
             return self._failed_result(name, serials, str(exc))
@@ -557,6 +580,10 @@ class TestPlanExecutor:
                     logger.error("Failed to parse results: %s", exc)
 
         status, reason = derive_suite_status(parsed, exec_res.success)
+        if cancel.cancelled() and status != "PASSED":
+            if parsed is None:
+                status = "INCOMPLETE"
+            reason = f"run cancelled; {reason}"
         if status != "PASSED":
             logger.warning("Suite %s %s: %s", name, status, reason)
 
@@ -567,7 +594,7 @@ class TestPlanExecutor:
             fail_count=fail_c,
             skip_count=skip_c,
             duration=exec_res.duration,
-            session_id=exec_res.session_id or 0,
+            session_id=exec_res.session_id,
             results_dir=results_dir,
             retry_count=retry_count,
             details=parsed,

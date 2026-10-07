@@ -8,6 +8,7 @@ from typing import List, Optional
 
 import click
 
+from xts_agent.execution import cancel
 from xts_agent.orchestrator import Orchestrator
 
 logging.basicConfig(level=logging.INFO)
@@ -72,7 +73,10 @@ def setup(config_path: Optional[str]):
 def run(plan: str, config_path: Optional[str], auto_retry: bool, dry_run: bool, resume: bool):
     """Run test plan."""
     orchestrator = _build_orchestrator(plan, config_path)
+    cancel.install_signal_handlers()
     result = orchestrator.run_plan(auto_retry=auto_retry, dry_run=dry_run, resume=resume)
+    if result.cancelled:
+        sys.exit(cancel.exit_code())
     if result.overall_status not in ("PASSED", "DRY_RUN"):
         sys.exit(1)
 
@@ -84,6 +88,7 @@ def run(plan: str, config_path: Optional[str], auto_retry: bool, dry_run: bool, 
 def retry(plan: str, config_path: Optional[str], max_retries: int):
     """Suite-level retry for the last run in this process (or re-init from plan)."""
     orchestrator = _build_orchestrator(plan, config_path)
+    cancel.install_signal_handlers()
     # Warm-load plan; if no prior results, instruct user
     result = orchestrator.retry_plan(max_retries)
     if result is None:
@@ -92,6 +97,8 @@ def retry(plan: str, config_path: Optional[str], max_retries: int):
             err=True,
         )
         sys.exit(2)
+    if result.cancelled:
+        sys.exit(cancel.exit_code())
     if result.overall_status != "PASSED":
         sys.exit(1)
 

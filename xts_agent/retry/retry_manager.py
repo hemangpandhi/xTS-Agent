@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from xts_agent.config_loader import SuiteConfig
+from xts_agent.execution import cancel
 from xts_agent.results.result_parser import (
     ResultParser,
     derive_suite_status,
@@ -31,10 +31,13 @@ class RetryManager:
     def should_retry(self, suite_result: Any, attempt: int, max_retries: int) -> bool:
         if suite_result.status in ("PASSED", "DRY_RUN"):
             return False
-        if not suite_result.session_id:
+        if suite_result.session_id is None:
             logger.warning("Cannot suite-retry without session_id")
             return False
         if attempt >= max_retries:
+            return False
+        if cancel.cancelled():
+            logger.warning("Run cancelled; no further retries for %s", suite_result.name)
             return False
         return True
 
@@ -89,8 +92,8 @@ class RetryManager:
                 with ThreadPoolExecutor(max_workers=min(16, len(device_serials))) as pool:
                     list(pool.map(lambda s: self.isolation_handler.apply_isolation(s, grade), device_serials))
 
-            if cooldown > 0:
-                time.sleep(min(cooldown, 300))
+            if cooldown > 0 and cancel.wait(min(cooldown, 300)):
+                break
 
             # Runs with unexecuted modules must also re-run NOT_EXECUTED ones,
             # even when they are FAILED (failures outrank INCOMPLETE)
@@ -102,11 +105,14 @@ class RetryManager:
                 retry_type=attempt_retry_type,
                 device_serials=list(device_serials),
             )
-            exec_res = runner.execute(
-                cmd,
-                timeout_hours=suite_config.timeout_hours,
-                log_dir=log_dir,
-            )
+            try:
+                exec_res = runner.execute(
+                    cmd,
+                    timeout_hours=suite_config.timeout_hours,
+                    log_dir=log_dir,
+                )
+            except cancel.RunCancelled:
+                break
 
             from xts_agent.execution.test_plan_executor import SuiteResult
 
@@ -118,7 +124,7 @@ class RetryManager:
                 except Exception as exc:
                     logger.error("Retry result parse failed: %s", exc)
 
-            if details is None or not exec_res.session_id:
+            if details is None or exec_res.session_id is None:
                 logger.error(
                     "Retry %s/%s for %s produced no usable session; stopping retries",
                     attempt,

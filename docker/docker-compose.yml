@@ -19,6 +19,10 @@ services:
       # Must be the platform-tools whose adb runs the host adb server
       # (`which adb` on the host), or the container client restarts it.
       - ${HOST_PLATFORM_TOOLS:-/opt/xts/platform-tools}:/host-platform-tools:ro
+      # Device leases + quarantine ledger must be shared with every other
+      # agent on this host (native or containerised), or two runs can grab
+      # the same device
+      - /var/tmp/xts-agent:/var/tmp/xts-agent
     environment:
       - XTS_PACKAGES_DIR=/opt/xts
       - ANDROID_HOME=/opt/android-sdk
@@ -27,5 +31,14 @@ services:
       - XTS_ATS2_API_KEY
       - XTS_SLACK_WEBHOOK
       - XTS_GEMINI_API_KEY
+      - XTS_JIRA_TOKEN
+      - XTS_DATABASE_URL
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
     working_dir: /app
     restart: "no"
+    # tini as PID 1 reaps TradeFed's forked children and forwards signals
+    init: true
+    # On `docker stop` the agent stops TradeFed (which flushes partial
+    # results) and writes its checkpoint; give it time before SIGKILL
+    stop_grace_period: 3m

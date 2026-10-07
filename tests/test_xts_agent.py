@@ -753,7 +753,7 @@ class RetryManagerTests(unittest.TestCase):
                 ExecutionResult(True, 5, 0, 1.0, str(first), "log1"),
                 ExecutionResult(True, 6, 0, 1.0, str(second), "log2"),
             ]
-            with patch("time.sleep"), patch.object(
+            with patch("xts_agent.execution.cancel.wait", return_value=False), patch.object(
                 TradefedRunner, "execute", side_effect=runs
             ) as exec_mock:
                 res = self._manager().retry_suite_until_done(
@@ -779,11 +779,17 @@ class RetryManagerTests(unittest.TestCase):
             xml.write_text(failed_incomplete, encoding="utf-8")
             current = self._suite_result("FAILED", 7)
             current.details = ResultParser().parse_xml(xml)
-            with patch("time.sleep"), patch.object(
+            with patch("xts_agent.execution.cancel.wait", return_value=False), patch.object(
                 TradefedRunner, "execute", return_value=ExecutionResult(True, None, 0, 1.0, None, "log")
             ) as exec_mock:
                 self._manager().retry_suite_until_done(runner, current, suite, ["s1"], tmp)
         self.assertNotIn("--retry-type", exec_mock.call_args[0][0])
+
+    def test_session_zero_is_retryable(self):
+        # First run on a fresh TradeFed install is session 0
+        manager = self._manager()
+        self.assertTrue(manager.should_retry(self._suite_result("FAILED", 0), 0, 1))
+        self.assertFalse(manager.should_retry(self._suite_result("FAILED", None), 0, 1))
 
     def test_retry_without_results_stops_and_keeps_status(self):
         from xts_agent.execution.tradefed_runner import ExecutionResult
@@ -791,7 +797,7 @@ class RetryManagerTests(unittest.TestCase):
         suite = SuiteConfig(name="cts", plan="cts")
         suite.retry.max_retries = 3
         runner = TradefedRunner("/opt/xts/android-cts", "cts-tradefed")
-        with patch("time.sleep"), patch.object(
+        with patch("xts_agent.execution.cancel.wait", return_value=False), patch.object(
             TradefedRunner, "execute", return_value=ExecutionResult(True, None, 0, 1.0, None, "log")
         ) as exec_mock:
             res = self._manager().retry_suite_until_done(
@@ -1138,6 +1144,125 @@ class ResumeTests(unittest.TestCase):
                 executor.execute_plan(plan, resume=True)
             self.assertEqual(exe.call_count, 2)
             self.assertTrue(all(c[0][0][1:3] == ["run", "commandAndExit"] for c in exe.call_args_list))
+
+
+CANCEL_DRIVER = r"""
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock
+
+from xts_agent.config_loader import DeviceRequirements, PathsConfig, SuiteConfig, TestPlanConfig
+from xts_agent.execution import cancel
+from xts_agent.execution.run_state import RunState
+from xts_agent.execution.shard_manager import ShardManager
+from xts_agent.execution.test_plan_executor import TestPlanExecutor
+
+tmp = Path(sys.argv[1])
+suites = [
+    SuiteConfig(name=n, plan=n, priority=i, package_path=str(tmp / f"android-{n}"))
+    for i, n in enumerate(("cts", "vts"))
+]
+plan = TestPlanConfig(name="cert", suites=suites, devices=DeviceRequirements(min_devices=1),
+                      paths=PathsConfig())
+device = MagicMock(serial="hu-1", device_type="aaos", build_fingerprint="fp")
+dm = MagicMock()
+dm.get_available_devices.return_value = [device]
+dm.select_shard_pool.return_value = [device]
+dm.allocate_devices.return_value = [device]
+dm.lease_fds.return_value = []
+state = RunState.for_plan(tmp / "results", "cert")
+executor = TestPlanExecutor(plan, dm, ShardManager(dm), MagicMock(), MagicMock(),
+                            results_dir=tmp / "results", run_state=state)
+cancel.install_signal_handlers()
+result = executor.execute_plan(plan, auto_retry=True)
+print({n: s.status for n, s in result.suites_results.items()}, result.cancelled)
+sys.exit(cancel.exit_code() if result.cancelled else 0)
+"""
+
+# Fake TradeFed: on SIGTERM flushes a partial result (as TradeFed does) and exits
+CANCEL_TRADEFED = """#!/bin/sh
+[ "$1" = list ] && exit 0
+here=$(cd "$(dirname "$0")/.." && pwd)
+flush() {
+  mkdir -p "$here/results/2026.10.07_05.00.00.000_1"
+  cp "$here/partial.xml" "$here/results/2026.10.07_05.00.00.000_1/test_result.xml"
+  exit 143
+}
+trap flush TERM
+echo $$ > "$here/started"
+while true; do sleep 1; done
+"""
+
+
+class CancelTests(unittest.TestCase):
+    def tearDown(self):
+        from xts_agent.execution import cancel
+
+        cancel.reset()
+
+    def test_sigterm_stops_tradefed_and_keeps_run_resumable(self):
+        import json
+        import os
+        import signal
+        import subprocess
+        import sys
+        import time
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            for name in ("cts", "vts"):
+                tools = tmp / f"android-{name}" / "tools"
+                tools.mkdir(parents=True)
+                script = tools / f"{name}-tradefed"
+                script.write_text(CANCEL_TRADEFED, encoding="utf-8")
+                script.chmod(0o755)
+                (tmp / f"android-{name}" / "partial.xml").write_text(INCOMPLETE_XML, encoding="utf-8")
+            driver = tmp / "driver.py"
+            driver.write_text(CANCEL_DRIVER, encoding="utf-8")
+            env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+            agent = subprocess.Popen(
+                [sys.executable, str(driver), str(tmp)], env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            )
+            started = tmp / "android-cts" / "started"
+            try:
+                deadline = time.time() + 30
+                while not started.exists() and time.time() < deadline:
+                    time.sleep(0.1)
+                self.assertTrue(started.exists(), "fake TradeFed never started")
+                tf_pid = int(started.read_text())
+
+                agent.send_signal(signal.SIGTERM)
+                out, _ = agent.communicate(timeout=60)
+            finally:
+                if agent.poll() is None:
+                    agent.kill()
+
+            self.assertEqual(agent.returncode, 143, out)
+            self.assertIn("{'cts': 'INCOMPLETE', 'vts': 'INCOMPLETE'} True", out)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(tf_pid, 0)  # TradeFed did not outlive the agent
+            self.assertFalse((tmp / "android-vts" / "started").exists())  # VTS never started
+            state = json.loads((tmp / "results" / "run_state" / "cert.json").read_text())
+            self.assertFalse(state["complete"])
+            cts = state["suites"]["cts"]
+            self.assertEqual(cts["status"], "INCOMPLETE")
+            self.assertTrue(cts["results_dir"].endswith("2026.10.07_05.00.00.000_1"))
+            self.assertEqual(cts["session_id"], 0)
+
+    def test_cancelled_retry_loop_returns_last_result(self):
+        from xts_agent.execution import cancel
+        from xts_agent.retry.retry_manager import RetryManager
+
+        cfg = MagicMock(post_execution=None)
+        suite_cfg = SuiteConfig(name="cts", plan="cts")
+        suite_cfg.retry.max_retries = 3
+        current = SuiteResult("cts", "FAILED", 1, 1, 0, 1.0, 4, "/r", 0)
+        runner = MagicMock()
+        cancel.request_cancel()
+        result = RetryManager(cfg).retry_suite_until_done(runner, current, suite_cfg, ["hu-1"], "/tmp")
+        self.assertIs(result, current)
+        runner.execute.assert_not_called()
 
 
 class ParallelSuiteTests(unittest.TestCase):

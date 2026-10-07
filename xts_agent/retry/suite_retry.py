@@ -45,6 +45,6 @@ class SuiteRetryHandler:
             )
             if last.success:
                 break
-            if last.session_id:
+            if last.session_id is not None:
                 session_id = last.session_id
         return last

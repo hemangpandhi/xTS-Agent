@@ -122,7 +122,7 @@ class BaseSuite(ABC):
             fail_count=fail_c,
             skip_count=skip_c,
             duration=exec_res.duration,
-            session_id=exec_res.session_id or 0,
+            session_id=exec_res.session_id,
             results_dir=results_dir,
             retry_count=0,
             details=details,

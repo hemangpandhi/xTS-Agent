@@ -13,6 +13,7 @@ from xts_agent.config_loader import ConfigLoader, TestPlanConfig
 from xts_agent.device.adb_wrapper import AdbWrapper
 from xts_agent.device.device_manager import DeviceManager
 from xts_agent.device.device_prep import DevicePreparer
+from xts_agent.execution import cancel
 from xts_agent.execution.ats2_client import ATS2Client
 from xts_agent.execution.run_state import RunState
 from xts_agent.execution.shard_manager import ShardManager
@@ -167,6 +168,13 @@ class Orchestrator:
             results.total_skip,
         )
 
+        if results.cancelled:
+            # Be quick: CI gives a short grace period after SIGTERM. Skip RCA,
+            # triage, uploads and history (a partial run would skew trends).
+            self.generate_reports(results)
+            notifier.notify_plan_complete(results)
+            return results
+
         rca_report = None
         if plan.post_execution.rca.enabled and not dry_run:
             rca_report = self._run_rca(results)
@@ -202,7 +210,7 @@ class Orchestrator:
         from xts_agent.execution.tradefed_runner import TradefedRunner
 
         for name, suite_res in list(updated.items()):
-            if suite_res.status in ("PASSED", "DRY_RUN") or not suite_res.session_id:
+            if suite_res.status in ("PASSED", "DRY_RUN") or suite_res.session_id is None:
                 continue
             suite_cfg = next((s for s in plan.suites if s.name == name), None)
             if not suite_cfg:
@@ -221,6 +229,7 @@ class Orchestrator:
         total_fail = sum(s.fail_count for s in updated.values())
         total_skip = sum(s.skip_count for s in updated.values())
         overall = overall_status(s.status for s in updated.values())
+        was_cancelled = cancel.cancelled()
         result = PlanResult(
             plan_name=plan.name,
             suites_results=updated,
@@ -231,8 +240,12 @@ class Orchestrator:
             overall_status=overall,
             device_serials=self.last_plan_result.device_serials,
             profile=self.last_plan_result.profile,
+            cancelled=was_cancelled,
         )
         self.last_plan_result = result
+        if was_cancelled:
+            self.generate_reports(result)
+            return result
         rca = self._run_rca(result) if plan.post_execution.rca.enabled else None
         self._run_triage(result, rca)
         self.generate_reports(result, rca_report=rca)
@@ -284,7 +297,7 @@ class Orchestrator:
                 fail_count=raw.get("fail_count", 0),
                 skip_count=raw.get("skip_count", 0),
                 duration=raw.get("duration", 0.0),
-                session_id=raw.get("session_id", 0),
+                session_id=raw.get("session_id"),
                 results_dir=raw.get("results_dir", ""),
                 retry_count=raw.get("retry_count", 0),
                 device_serials=raw.get("device_serials") or [],

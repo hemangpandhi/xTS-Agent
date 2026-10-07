@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, Set
 
+from xts_agent.execution import cancel
+
 logger = logging.getLogger(__name__)
 
 PIDFILE_GLOB = "tradefed_*.pid"
@@ -225,6 +227,8 @@ class TradefedRunner:
         if env:
             run_env.update(env)
 
+        # Never start TradeFed once the run is being cancelled
+        cancel.check()
         # Result dirs that existed before this invocation; the new one is ours.
         before = self.snapshot_result_dirs()
 
@@ -246,14 +250,21 @@ class TradefedRunner:
                 # start_new_session => pgid == pid; recorded for scoped cleanup
                 pidfile = log_path.parent / f"tradefed_{self._process.pid}.pid"
                 pidfile.write_text(str(self._process.pid), encoding="utf-8")
+                cancel.register(self._process)
+                if cancel.cancelled():
+                    # Signal arrived between check() and register()
+                    os.killpg(self._process.pid, signal.SIGTERM)
                 try:
                     self._process.wait(timeout=timeout_seconds)
                 finally:
+                    cancel.unregister(self._process)
                     if self._process.poll() is not None:
                         pidfile.unlink(missing_ok=True)
 
             return_code = self._process.returncode if self._process else -1
-            if return_code in self.TF_EXIT_CODES:
+            if cancel.cancelled():
+                logger.warning("TradeFed stopped by cancel (exit %s)", return_code)
+            elif return_code in self.TF_EXIT_CODES:
                 logger.info(
                     "TradeFed exited %s (%s)",
                     return_code,

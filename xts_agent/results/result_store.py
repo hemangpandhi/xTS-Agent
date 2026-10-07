@@ -74,7 +74,7 @@ class ResultStore:
                 len(devices),
                 json.dumps(devices),
                 (getattr(details, "device_info", None) or {}).get("build_fingerprint", ""),
-                int(suite_result.session_id or 0),
+                suite_result.session_id,
                 suite_result.results_dir or "",
                 int(suite_result.retry_count or 0),
                 int(getattr(details, "start_ms", 0) or 0),

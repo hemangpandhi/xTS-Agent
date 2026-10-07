@@ -83,7 +83,7 @@ class RunState:
             entry.update(
                 {
                     "status": suite_result.status,
-                    "session_id": suite_result.session_id or None,
+                    "session_id": suite_result.session_id,
                     "results_dir": suite_result.results_dir or "",
                     "retry_count": suite_result.retry_count,
                     "updated_at": time.time(),
