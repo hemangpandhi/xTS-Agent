@@ -473,6 +473,27 @@ class DeviceManager:
                 self._allocated.add(d.serial)
             return allocated
 
+    def lease_serials(self, serials: List[str]) -> Dict[str, str]:
+        """Lease exactly these devices, all or nothing; returns {serial: holder} if busy.
+
+        For work that must continue on specific devices (a TradeFed retry
+        session has to run on the shards it started on).
+        """
+        with self._alloc_lock:
+            busy: Dict[str, str] = {}
+            taken: List[str] = []
+            for serial in serials:
+                if serial in self._allocated or not self._try_lease(serial):
+                    busy[serial] = self.leased_elsewhere(serial) or "this process"
+                else:
+                    taken.append(serial)
+            if busy:
+                for serial in taken:
+                    self._release_lease(serial)
+                return busy
+            self._allocated.update(serials)
+            return {}
+
     def release_devices(self, serials: List[str]) -> None:
         with self._alloc_lock:
             for s in serials:

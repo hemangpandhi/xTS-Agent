@@ -1689,6 +1689,25 @@ time.sleep(30)
         )
         return proc, proc.stdout.readline().strip()
 
+    def test_lease_serials_is_all_or_nothing(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            proc, _ = self._spawn(tmp, "hold")  # another job holds s1
+            try:
+                dm = DeviceManager(lease_dir=tmp)
+                busy = dm.lease_serials(["s2", "s1"])
+                self.assertEqual(list(busy), ["s1"])
+                self.assertIn("pid=", busy["s1"])
+                self.assertIsNone(dm.leased_elsewhere("s2"))  # s2 was given back
+                self.assertEqual(dm.lease_fds(["s2"]), [])
+            finally:
+                proc.kill()
+                proc.wait()
+            self.assertEqual(dm.lease_serials(["s1", "s2"]), {})
+            self.assertEqual(len(dm.lease_fds(["s1", "s2"])), 2)
+            dm.release_devices(["s1", "s2"])
+
     def test_other_process_cannot_take_leased_device(self):
         from xts_agent.device.device_manager import DeviceManager
 

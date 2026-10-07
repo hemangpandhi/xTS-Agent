@@ -239,13 +239,24 @@ class Orchestrator:
                 continue
             suite_cfg.retry.max_retries = max_retries
             runner = TradefedRunner(suite_cfg.package_path, suite_cfg.command)
-            updated[name] = self.retry_manager.retry_suite_until_done(
-                runner=runner,
-                suite_result=suite_res,
-                suite_config=suite_cfg,
-                device_serials=suite_res.device_serials or self.last_plan_result.device_serials,
-                log_dir=self._results_dir / "logs",
-            )
+            serials = list(suite_res.device_serials or self.last_plan_result.device_serials)
+            # Same host-wide leases as `run`, or another job could take these
+            # devices in the middle of the retry
+            busy = self.device_manager.lease_serials(serials)
+            if busy:
+                logger.error("Not retrying %s: devices in use: %s", name, busy)
+                continue
+            try:
+                runner.lease_fds = list(self.device_manager.lease_fds(serials))
+                updated[name] = self.retry_manager.retry_suite_until_done(
+                    runner=runner,
+                    suite_result=suite_res,
+                    suite_config=suite_cfg,
+                    device_serials=serials,
+                    log_dir=self._results_dir / "logs",
+                )
+            finally:
+                self.device_manager.release_devices(serials)
 
         total_pass = sum(s.pass_count for s in updated.values())
         total_fail = sum(s.fail_count for s in updated.values())
