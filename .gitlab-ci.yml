@@ -17,6 +17,7 @@
 #   - Devices connected via USB or TCP/IP ADB
 
 stages:
+  - check
   - setup
   - health-check
   - execute-xts
@@ -56,6 +57,23 @@ default:
       fi
     - export PATH="${XTS_PACKAGES_DIR}/platform-tools:${PATH}"
     - export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
+
+# ═════════════════════════════════════════════════════════════
+# Stage 0: Lint, type-check and unit tests (blocking)
+# ═════════════════════════════════════════════════════════════
+# Fails in a couple of minutes instead of hours into a device run. Uses its
+# own venv so the dev tools never end up in the runtime .venv.
+check:
+  stage: check
+  before_script: []
+  script:
+    - ${PYTHON} -m venv .venv-check
+    - .venv-check/bin/pip install --upgrade pip
+    - .venv-check/bin/pip install --require-hashes -r requirements-dev.lock
+    - .venv-check/bin/pip install --no-deps -e .
+    - .venv-check/bin/ruff check xts_agent tests
+    - .venv-check/bin/mypy
+    - .venv-check/bin/python -m unittest discover -s tests -v
 
 # ═════════════════════════════════════════════════════════════
 # Stage 1: Environment Setup

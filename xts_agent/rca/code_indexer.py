@@ -14,7 +14,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def _ensure_modern_sqlite() -> None:
     if tuple(int(p) for p in sqlite3.sqlite_version.split(".")[:2]) >= (3, 35):
         return
     try:
-        import pysqlite3  # type: ignore
+        import pysqlite3
 
         sys.modules["sqlite3"] = pysqlite3
     except ImportError:
@@ -50,7 +50,7 @@ class OEMCodeIndexer:
         self.db_path = db_path
         self.source_paths = source_paths
         self.embedding_model = embedding_model
-        self.collection = None
+        self.collection: Any = None  # chromadb collection, created on first use
 
     def _lazy_init(self):
         if self.collection is not None:

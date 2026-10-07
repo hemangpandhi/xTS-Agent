@@ -13,7 +13,6 @@ from xts_agent.execution.test_plan_executor import PlanResult, SuiteResult, Test
 from xts_agent.execution.tradefed_runner import TradefedRunner
 from xts_agent.results.result_parser import ResultParser, derive_suite_status, overall_status
 
-
 SAMPLE_XML = """<?xml version='1.0' encoding='UTF-8' standalone='no' ?>
 <Result start_display="now" end_display="later" suite_name="CTS">
   <Build device_serial="emulator-5554" />

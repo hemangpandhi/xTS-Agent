@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any, Dict
 
 import requests
 
@@ -43,7 +44,7 @@ class GeminiProvider(LLMProvider):
         if not self.api_key:
             return "Error: Gemini API key not configured."
 
-        generation = {"temperature": 0.2}
+        generation: Dict[str, Any] = {"temperature": 0.2}
         if json_mode:
             generation["responseMimeType"] = "application/json"
         payload = {
@@ -73,7 +74,7 @@ class LlamaCppProvider(LLMProvider):
         self.model_path = model_path
         self.n_ctx = n_ctx
         self.n_gpu_layers = n_gpu_layers
-        self.llm = None
+        self.llm: Any = None  # llama_cpp.Llama, loaded on first use
         self.model_id = f"llama_cpp:{Path(model_path).name}" if model_path else "llama_cpp"
 
     def _lazy_load(self):

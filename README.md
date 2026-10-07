@@ -71,8 +71,23 @@ Declared in `pyproject.toml` (`click`, `pyyaml`, `jinja2`, `rich`, `requests`, `
 pip install --require-hashes -r requirements.lock && pip install --no-deps -e .
 ```
 
-After changing dependencies, regenerate it with
-`uv pip compile pyproject.toml --universal --extra postgres --extra s3 --generate-hashes --python-version 3.8 -o requirements.lock`.
+After changing dependencies, regenerate both locks (the dev lock is the same set plus the `dev` tools):
+
+```bash
+uv pip compile pyproject.toml --universal --extra postgres --extra s3 --generate-hashes --python-version 3.8 -o requirements.lock
+uv pip compile pyproject.toml --universal --extra postgres --extra s3 --extra dev --generate-hashes --python-version 3.8 -o requirements-dev.lock
+```
+
+### Checks (blocking in CI)
+
+The `check` stage runs before anything touches a device, and the pipeline stops if it fails:
+
+```bash
+pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+ruff check xts_agent tests      # pyflakes, import order, bugbear, a few correctness rules
+mypy                            # config in pyproject.toml
+python -m unittest discover -s tests
+```
 
 ### Optional
 

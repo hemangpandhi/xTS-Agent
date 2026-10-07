@@ -163,7 +163,7 @@ class JiraFiler:
                 existing = None
                 if self.client is not None:
                     existing = self.client.find_open_by_label(self.cfg.project, sig_label)
-                if existing:
+                if existing and self.client is not None:
                     tg.jira_key, tg.jira_action = existing, "seen again"
                     if self.cfg.comment_on_existing:
                         self.client.comment(existing, self._recurrence_comment(tg, report))
@@ -200,6 +200,8 @@ class JiraFiler:
         return stats
 
     def _create(self, fields: Dict[str, Any]) -> str:
+        if self.client is None:
+            raise RuntimeError("Jira client not configured")
         try:
             return self.client.create(fields)
         except JiraError as exc:

@@ -192,8 +192,8 @@ class DeviceManager:
                     if len(parts) >= 4:
                         # df Available column is typically in 1K blocks
                         free_mb = int(parts[3]) // 1024
-            except Exception:
-                pass
+            except ValueError:
+                logger.debug("%s: unparsable df output: %r", serial, storage_out[-200:])
 
             has_internet = self.has_validated_network(serial)
 
@@ -452,8 +452,8 @@ class DeviceManager:
                 if d.serial not in self._allocated
                 and (device_type == "any" or d.device_type == device_type)
             ]
-            allocated = []
-            busy = []
+            allocated: List[DeviceInfo] = []
+            busy: List[str] = []
             for d in matching:
                 if len(allocated) == count:
                     break

@@ -157,7 +157,7 @@ class TriageEngine:
         record_history: bool = True,
     ) -> TriageReport:
         parser = ResultParser()
-        failures = []
+        failures: List[Any] = []
         labels: Dict[str, Any] = {}
         fingerprint = ""
         for suite_name, suite_res in (plan_result.suites_results or {}).items():

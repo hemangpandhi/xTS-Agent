@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import functools
 import logging
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from xts_agent.config_loader import SuiteConfig, TestPlanConfig
 from xts_agent.device.adb_wrapper import AdbWrapper
@@ -25,6 +26,9 @@ from xts_agent.utils.logger import suite_context
 from . import cancel
 from .run_state import RunState
 from .tradefed_runner import ExecutionResult, TradefedRunner
+
+if TYPE_CHECKING:
+    from xts_agent.retry.retry_manager import RetryManager
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +72,7 @@ class TestPlanExecutor:
         config: TestPlanConfig,
         device_manager: Any,
         shard_manager: Any,
-        retry_manager: Any,
+        retry_manager: Optional[RetryManager],
         suite_registry: Any,
         results_dir: str | Path = "./results",
         run_state: Optional[RunState] = None,
@@ -315,7 +319,7 @@ class TestPlanExecutor:
             if ops is not None:
                 runner.progress_interval_secs = ops.progress_interval_secs
                 runner.stall_warning_secs = ops.stall_warning_mins * 60
-            runner.on_progress = lambda progress, suite=name: self._on_progress(suite, progress)
+            runner.on_progress = functools.partial(self._on_progress, name)
 
             if dry_run:
                 # Resolve shard intent without requiring live ADB

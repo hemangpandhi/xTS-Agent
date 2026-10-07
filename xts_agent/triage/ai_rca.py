@@ -12,9 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from xts_agent.storage.db import Database
 
@@ -110,7 +109,7 @@ class _Cache:
 
 
 class GroupAIAnalyzer:
-    def __init__(self, provider: Any, indexer: Any = None, cache_db: Optional[str] = None, max_groups: int = 20):
+    def __init__(self, provider: Any, indexer: Any = None, cache_db: Union[str, Database, None] = None, max_groups: int = 20):
         self.provider = provider
         self.indexer = indexer
         self.cache = _Cache(cache_db) if cache_db else None

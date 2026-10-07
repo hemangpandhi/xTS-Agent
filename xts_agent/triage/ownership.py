@@ -7,7 +7,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import yaml
 
@@ -63,7 +63,7 @@ class OwnershipMap:
         name = module.split(" ")[-1]  # drop the ABI prefix
         return next((r.owner for r in self.rules if r.pattern.search(name)), self.default)
 
-    def owner_for_group(self, group: FailureGroup) -> Optional[Owner]:
+    def owner_for_group(self, group: FailureGroup) -> Owner:
         """Owner of the module contributing most of the group's failures."""
         counts = Counter(t.module.split(" ")[-1] for t in group.tests if t.module)
         if not counts:

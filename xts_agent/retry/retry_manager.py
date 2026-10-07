@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence
 
 from xts_agent.config_loader import SuiteConfig
 from xts_agent.execution import cancel
@@ -15,6 +15,9 @@ from xts_agent.results.result_parser import (
     derive_suite_status,
     has_unexecuted_modules,
 )
+
+if TYPE_CHECKING:  # runtime import would be circular
+    from xts_agent.execution.test_plan_executor import SuiteResult
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,7 @@ class RetryManager:
         device_serials: Sequence[str],
         log_dir: str | Path,
         on_attempt: Optional[Callable[[Any], None]] = None,
-    ) -> Any:
+    ) -> SuiteResult:
         """Run TradeFed `run retry` up to suite max_retries.
 
         Each retry session's test_result.xml is cumulative (TradeFed carries the
@@ -87,10 +90,12 @@ class RetryManager:
             )
 
             if self.isolation_handler and device_serials:
-                grade = suite_config.retry.isolation_grade
+                isolate = functools.partial(
+                    self.isolation_handler.apply_isolation, grade=suite_config.retry.isolation_grade
+                )
                 # Isolate all shards concurrently (each reboot can take minutes)
                 with ThreadPoolExecutor(max_workers=min(16, len(device_serials))) as pool:
-                    list(pool.map(lambda s: self.isolation_handler.apply_isolation(s, grade), device_serials))
+                    list(pool.map(isolate, device_serials))
 
             if cooldown > 0 and cancel.wait(min(cooldown, 300)):
                 break
@@ -107,7 +112,7 @@ class RetryManager:
                     current.session_id = index
             # Runs with unexecuted modules must also re-run NOT_EXECUTED ones,
             # even when they are FAILED (failures outrank INCOMPLETE)
-            attempt_retry_type = retry_type
+            attempt_retry_type: Optional[str] = retry_type
             if has_unexecuted_modules(current) and str(retry_type).upper() == "FAILED":
                 attempt_retry_type = None
             cmd = runner.build_retry_command(

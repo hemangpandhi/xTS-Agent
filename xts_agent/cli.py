@@ -8,8 +8,9 @@ from typing import List, Optional
 
 import click
 
-from xts_agent.execution import cancel
 from xts_agent.config_loader import ConfigError
+from xts_agent.execution import cancel
+from xts_agent.execution.test_plan_executor import PlanResult
 from xts_agent.orchestrator import Orchestrator, PreflightError
 from xts_agent.utils.logger import setup_logging
 
@@ -194,6 +195,7 @@ def triage(plan, config_path, results_dirs, history_dirs, suite, top):
             click.echo(f"{'recorded' if run_id else 'already recorded'}: {d}")
         return
 
+    result: Optional[PlanResult]
     if results_dirs:
         result = orchestrator.plan_result_from_results_dirs(suite, list(results_dirs))
     else:

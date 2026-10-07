@@ -15,3 +15,6 @@ build/
 
 # Local TradeFed backups from env validator
 *.bak
+.venv-check/
+.mypy_cache/
+.ruff_cache/

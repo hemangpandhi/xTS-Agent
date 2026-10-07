@@ -70,8 +70,9 @@ class JSONFormatter(logging.Formatter):
             "run_id": getattr(record, "run_id", ""),
             "message": record.getMessage(),
         }
-        if getattr(record, "suite", ""):
-            data["suite"] = record.suite
+        suite = getattr(record, "suite", "")
+        if suite:
+            data["suite"] = suite
         if record.exc_info:
             data["exception"] = self.formatException(record.exc_info)
         return json.dumps(data)

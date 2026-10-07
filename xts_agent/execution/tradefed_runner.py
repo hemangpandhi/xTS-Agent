@@ -10,7 +10,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Set
+from typing import Callable, ClassVar, Dict, List, Optional, Sequence, Set
 
 from xts_agent.execution import cancel
 from xts_agent.execution.progress import ProgressMonitor, TradefedProgress
@@ -74,7 +74,7 @@ class ExecutionResult:
 class TradefedRunner:
     """Wrapper for the TradeFed CLI."""
 
-    TF_EXIT_CODES = {
+    TF_EXIT_CODES: ClassVar[Dict[int, str]] = {
         0: "Success",
         1: "Configuration Error",
         2: "Device Not Available",
@@ -393,6 +393,7 @@ class TradefedRunner:
                 self.build_list_results_command(),
                 cwd=str(self.tools_dir),
                 stdin=subprocess.DEVNULL,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=timeout_secs,

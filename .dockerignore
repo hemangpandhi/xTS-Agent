@@ -6,3 +6,6 @@ logs
 *.pyc
 *.egg-info
 .pytest_cache
+.venv-check
+.mypy_cache
+.ruff_cache

@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """ADB command wrapper with timeouts and safe shell helpers."""
+
+from __future__ import annotations
 
 import logging
 import shlex

@@ -27,9 +27,9 @@ from xts_agent.reporting.report_generator import ReportGenerator
 from xts_agent.reporting.slack_notifier import SlackNotifier
 from xts_agent.results.result_parser import overall_status
 from xts_agent.results.result_store import ResultStore
-from xts_agent.storage.db import Database
 from xts_agent.retry.isolation import IsolationHandler
 from xts_agent.retry.retry_manager import RetryManager
+from xts_agent.storage.db import Database
 from xts_agent.suites.suite_registry import SuiteRegistry
 from xts_agent.utils.env_validator import EnvironmentValidator
 from xts_agent.utils.logger import run_id, setup_logging
@@ -48,7 +48,7 @@ class Orchestrator:
         defaults_path: str | Path | None = None,
     ):
         self.config_loader = ConfigLoader(plan_path, defaults_path=defaults_path)
-        self.plan: Optional[TestPlanConfig] = None
+        self._plan: Optional[TestPlanConfig] = None
         self.device_manager = DeviceManager()
         self.shard_manager = ShardManager(self.device_manager)
         self.suite_registry = SuiteRegistry()
@@ -60,6 +60,17 @@ class Orchestrator:
         self._last_triage_path: Optional[Path] = None
         self._results_dir = Path("results")
         self._metrics: Optional[MetricsPublisher] = None
+
+    @property
+    def plan(self) -> TestPlanConfig:
+        """The loaded plan; only valid after :meth:`_initialize`."""
+        if self._plan is None:
+            raise RuntimeError("Orchestrator not initialized")
+        return self._plan
+
+    @plan.setter
+    def plan(self, value: TestPlanConfig) -> None:
+        self._plan = value
 
     def _initialize(self) -> TestPlanConfig:
         self.plan = self.config_loader.load_plan()
@@ -228,6 +239,9 @@ class Orchestrator:
             )
             return None
 
+        retry_manager = self.retry_manager
+        if retry_manager is None:
+            raise RuntimeError("Orchestrator not initialized")
         updated = dict(self.last_plan_result.suites_results)
         from xts_agent.execution.tradefed_runner import TradefedRunner
 
@@ -248,7 +262,7 @@ class Orchestrator:
                 continue
             try:
                 runner.lease_fds = list(self.device_manager.lease_fds(serials))
-                updated[name] = self.retry_manager.retry_suite_until_done(
+                updated[name] = retry_manager.retry_suite_until_done(
                     runner=runner,
                     suite_result=suite_res,
                     suite_config=suite_cfg,
@@ -314,7 +328,7 @@ class Orchestrator:
             except (OSError, ValueError) as exc:
                 logger.warning("Skipping unreadable report %s: %s", report, exc)
                 continue
-            if self.plan and candidate.get("plan_name") != self.plan.name:
+            if self._plan and candidate.get("plan_name") != self._plan.name:
                 continue
             if candidate.get("status") == "DRY_RUN":
                 continue
@@ -464,7 +478,7 @@ class Orchestrator:
             report = self.triage_engine().triage(results, rca_report)
         except Exception as exc:
             # Triage must never take down the run that produced the results
-            logger.error("Triage failed: %s", exc, exc_info=True)
+            logger.exception("Triage failed: %s", exc)
             return None
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._run_group_ai(report)
@@ -476,9 +490,6 @@ class Orchestrator:
         return report
 
     def generate_reports(self, results: PlanResult, rca_report=None, formats: Optional[List[str]] = None):
-        if self.plan is None:
-            raise RuntimeError("Orchestrator not initialized")
-
         formats = formats or list(self.plan.post_execution.reporting.formats)
         output_dir = self._results_dir / "reports"
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -624,7 +635,7 @@ class Orchestrator:
 
     def _slack(self) -> SlackNotifier:
         webhook = ""
-        if self.plan and self.plan.post_execution.reporting.notifications:
+        if self._plan and self._plan.post_execution.reporting.notifications:
             webhook = self.plan.post_execution.reporting.notifications.get(
                 "slack_webhook", ""
             ) or ""

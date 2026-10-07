@@ -14,7 +14,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 import yaml
 
@@ -134,9 +134,10 @@ class KnownIssueDB:
         for issue in self.issues:
             if not issue.matches(group):
                 continue
-            waived = bool(issue.waiver and issue.waiver.applies(profile, fingerprint, today))
-            expired = bool(issue.waiver and today > issue.waiver.expires)
-            if expired:
-                logger.warning("Waiver for %s expired on %s", issue.id, issue.waiver.expires)
+            waiver = issue.waiver
+            waived = bool(waiver and waiver.applies(profile, fingerprint, today))
+            expired = bool(waiver and today > waiver.expires)
+            if waiver and expired:
+                logger.warning("Waiver for %s expired on %s", issue.id, waiver.expires)
             return KnownIssueMatch(issue, waived=waived, waiver_expired=expired)
         return None

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Sequence, Union
 
 from xts_agent.config_loader import SuiteConfig
 
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class ShardManager:
     """Manages sharding across available devices."""
 
-    SUITE_ESTIMATES = {
+    SUITE_ESTIMATES: ClassVar[Dict[str, float]] = {
         "CTS": 40.0,
         "VTS": 20.0,
         "STS": 8.0,
