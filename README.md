@@ -58,7 +58,7 @@ xTS-Agent/
 | Dependency | Why |
 |------------|-----|
 | Ubuntu 20.04+ / Debian 11+ | Supported host OS |
-| Python **3.10+** | Agent runtime |
+| Python **3.8+** (3.10+ recommended; 3.8 is end-of-life) | Agent runtime |
 | JDK **17+** | TradeFed |
 | **ADB** (platform-tools) | Device discovery / control |
 | Android SDK **build-tools** (`aapt2`) | TradeFed APK parsing |
@@ -67,7 +67,16 @@ xTS-Agent/
 
 ### Python packages
 
-From `pyproject.toml` / `requirements.txt`: `click`, `pyyaml`, `jinja2`, `rich`, `requests`, `xmltodict`
+Declared in `pyproject.toml` (`click`, `pyyaml`, `jinja2`, `rich`, `requests`, `xmltodict`, plus the
+`postgres` / `s3` / `ai` extras). Deployments install the exact, hash-checked versions in
+`requirements.lock` (core + `postgres` + `s3`; one universal lock, tested on Python 3.8 and 3.12):
+
+```bash
+pip install --require-hashes -r requirements.lock && pip install --no-deps -e .
+```
+
+After changing dependencies, regenerate it with
+`uv pip compile pyproject.toml --universal --extra postgres --extra s3 --generate-hashes --python-version 3.8 -o requirements.lock`.
 
 ### Optional
 

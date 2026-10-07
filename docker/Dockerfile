@@ -41,15 +41,17 @@ WORKDIR /app
 
 # Build context MUST be the repository root:
 #   docker build -f docker/Dockerfile .
-COPY pyproject.toml requirements.txt README.md ./
+# Dependencies first (exact, hash-checked versions from the lock) so code
+# changes do not invalidate this layer
+COPY requirements.lock ./
+RUN python3 -m venv /opt/venv && \
+    pip install --no-cache-dir --require-hashes -r requirements.lock
+
+COPY pyproject.toml README.md ./
 COPY xts_agent/ ./xts_agent/
 COPY config/ ./config/
 COPY scripts/ ./scripts/
-
-# Regular (non-editable) install into a venv
-RUN python3 -m venv /opt/venv && \
-    pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 # Run as an unprivileged user (UID/GID overridable to match host file ownership)
 ARG XTS_UID=1000

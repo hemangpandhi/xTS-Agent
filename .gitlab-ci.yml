@@ -32,10 +32,14 @@ variables:
   DEVICE_MIN_COUNT: "6"
   PYTHON: "python3"
   PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.pip-cache"
+  # One run id for every job of a pipeline: joins log lines, metrics and reports
+  XTS_RUN_ID: "p${CI_PIPELINE_ID}"
 
 # ─── Caching ────────────────────────────────────────────────
 cache:
-  key: "${CI_COMMIT_REF_SLUG}"
+  key:
+    files:
+      - requirements.lock               # new venv whenever pinned deps change
   paths:
     - .pip-cache/
     - .venv/
@@ -64,7 +68,8 @@ setup_environment:
       ${PYTHON} -m venv .venv
       source .venv/bin/activate
     - pip install --upgrade pip
-    - pip install -e .
+    - pip install --require-hashes -r requirements.lock
+    - pip install --no-deps -e .
     - |
       echo "--- Tool Versions ---"
       ${PYTHON} --version
@@ -76,6 +81,14 @@ setup_environment:
         bash scripts/download_xts_packages.sh
     - adb devices -l
     - ${PYTHON} -m xts_agent.cli setup --config config/default_config.yaml
+    - |
+      # TradeFed never deletes results/logs (GBs per CTS session). Set the
+      # CI/CD variable XTS_PRUNE_DAYS to delete older sessions before each
+      # run; the newest per suite and resumable ones are always kept.
+      if [ -n "${XTS_PRUNE_DAYS:-}" ]; then
+        ${PYTHON} -m xts_agent.cli cleanup --plan "${TEST_PLAN}" --prune-results --keep-days "${XTS_PRUNE_DAYS}"
+      fi
+      df -h "${XTS_PACKAGES_DIR}" .
   artifacts:
     paths:
       - .venv/
