@@ -89,6 +89,10 @@ mypy                            # config in pyproject.toml
 python -m unittest discover -s tests -t .   # or one area: python -m unittest tests.test_triage
 ```
 
+`tests/test_golden.py` checks parsing, grouping and the heartbeat against real CTS output kept in
+`tests/golden/`; `tests/test_e2e.py` runs the real CLI (`run`, retry, reports, triage, database)
+against fake `cts-tradefed` and `adb` scripts.
+
 ### Optional
 
 | Dependency | Why |
