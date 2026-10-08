@@ -4,6 +4,22 @@ This document explains how the agent is built and what happens during a run.
 For the business case and how to present it, see [OEM_OVERVIEW.md](OEM_OVERVIEW.md).
 For setup and commands, see the [README](../README.md).
 
+## Detailed architecture at a glance
+
+![xTS Agent detailed system architecture: entry points and configuration, the nine in-house packages under the orchestrator, the unchanged Google/AOSP toolchain, devices, data stores and optional services, with numbered data flows](images/architecture-detailed.png)
+
+Flows:
+1. CI or an engineer starts a command.
+2. Configuration is merged and validated.
+3. The agent drives TradeFed.
+4. TradeFed runs the tests on the devices.
+5. The agent checks, preps and reboots devices over adb.
+6. The agent reads and writes its memory (database, results, checkpoints, leases, source index).
+7. The agent publishes to Jira, Slack, Prometheus and the archive.
+8. Cancel signals stop the run cleanly.
+
+![Module map: all 44 Python modules of xts_agent grouped into nine packages](images/module-map.png)
+
 ## 1. Design principles
 
 | Principle | What it means in practice |

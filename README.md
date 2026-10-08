@@ -18,6 +18,8 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 
 ---
 
+![xTS Agent detailed architecture](docs/images/architecture-detailed.png)
+
 ## Why use it
 
 | Area | What you get |
