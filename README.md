@@ -1,10 +1,55 @@
 # xTS Agent
 
-xTS Agent runs Android Automotive (AAOS) compatibility suites
-(**CTS / VTS / STS / GTS / ATS / CATBox**) through TradeFed.
+xTS Agent automates Android Automotive (AAOS) compatibility testing
+(**CTS / VTS / STS / GTS / ATS / CATBox**) on top of Google's official TradeFed launchers.
+It handles everything around the test packages:
 
-It discovers ADB devices, shards tests across them, retries failures,
-runs light RCA, and writes HTML / JUnit / JSON reports.
+- **Execution.** Healthy devices are allocated safely, suites are sharded and run concurrently, interrupted runs resume, and retries re-run only what failed.
+- **Triage.** Thousands of failing tests become a short list of root causes, each with history, an owner and one Jira ticket.
+- **Visibility.** Reports, trends and live metrics.
+
+TradeFed and its `test_result.xml` stay untouched, so certification output is exactly what the official tools produced.
+
+| Document | For |
+|----------|-----|
+| [docs/OEM_OVERVIEW.md](docs/OEM_OVERVIEW.md) | Explaining the agent to an OEM: problem, benefits, limits, pilot KPIs, talk track, FAQ |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, run flow, triage pipeline, data, deployment, extension points |
+| This README | Installing, configuring and operating it |
+
+---
+
+## Why use it
+
+| Area | What you get |
+|------|--------------|
+| **Faster execution** | Every healthy same-build device is used. Several suites run in parallel on a split sized by measured device-hours. Retries are sharded across all devices and target only failed or not-executed modules. Checkpoints after every suite allow `--resume` instead of a restart. |
+| **Trustworthy results** | A `certification` profile refuses filtered plans. Unexecuted modules are flagged INCOMPLETE. A suite never shards across mixed builds. Waivers expire and never change results. Physical devices are never wiped. |
+| **A device farm that runs itself** | A health gate runs before allocation. Host-wide leases stop jobs sharing a device. Devices that keep failing are quarantined automatically. The same declarative prep profile runs before each suite. |
+| **Faster triage** | Failures are grouped by root-cause signature: on a real 11-device CTS run, **1,303 failures → 183 groups**, with the top 10 groups covering 57%. Each group is labelled NEW (regression, with the last good build), PERSISTENT or FLAKY, and gets known-issue status, an owner from a YAML map and **one deduplicated Jira ticket**. |
+| **AI root-cause hints, on-prem** | Optional structured RCA per group from a local LLM with your source indexed. External providers are off unless explicitly allowed, and agreement with human classification is measured. |
+| **Visibility** | Self-contained HTML, JSON and JUnit reports, a trends dashboard, a live heartbeat in the job log, and Prometheus gauges with suggested alerts. |
+| **Production-safe operations** | Graceful cancel, a disk guard, results retention, secrets from the environment, hash-pinned dependencies, and a blocking CI check (lint, types, unit, golden and end-to-end tests). |
+
+## How it works
+
+```mermaid
+graph LR
+    P[Test plan YAML] --> L[Load + validate<br/>disk guard]
+    L --> D[Devices<br/>health gate, quarantine,<br/>same-build pool, leases]
+    D --> X[TradeFed<br/>sharded, concurrent suites,<br/>heartbeat, checkpoints]
+    X --> R[Targeted retry<br/>run retry on failed /<br/>not-executed modules]
+    R --> T[Triage<br/>groups, NEW/PERSISTENT/FLAKY,<br/>known issues, owners, AI RCA]
+    T --> O[Outputs<br/>reports, Jira, DB, dashboard,<br/>metrics, archive, Slack]
+```
+
+1. **Load the plan.** It is merged with `config/default_config.yaml` and secrets from the environment. Certification plans with filters are rejected, and the run stops if disk space is low.
+2. **Allocate devices.** Online ADB devices pass a health gate. Quarantined devices are skipped. The rest are grouped by build and leased host-wide.
+3. **Run.** Each suite runs as `run commandAndExit <plan> -s <serial>... --shard-count N`. The agent prints a heartbeat to the job log and checkpoints progress.
+4. **Retry.** `run retry` on the previous TradeFed session re-runs only the failed or not-executed modules, sharded across all devices, with isolation (reboot and prep) between attempts.
+5. **Triage.** Failures are grouped by signature, then history, known issues, owners and the optional AI RCA are added, and Jira tickets are filed.
+6. **Report.** HTML, JSON and JUnit reports, results database rows, the dashboard, metrics, the optional artifact archive and a Slack message. The exit code tells CI whether the run passed.
+
+Details and diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -26,11 +71,15 @@ xTS-Agent/
 ├── xts_agent/                 # Python package (CLI, orchestrator, TradeFed runner)
 ├── config/
 │   ├── default_config.yaml    # Global defaults
-│   └── test_plans/            # Runnable plans (smoke, hardware CTS, cert, …)
+│   ├── test_plans/            # Runnable plans (smoke, hardware CTS, cert, …)
+│   ├── known_issues.yaml      # Known issues and time-boxed waivers
+│   ├── ownership.yaml         # Failure group → team / Jira component
+│   └── known_failures/        # Rule-based RCA patterns
 ├── scripts/                   # All supported host scripts (setup, run, monitor)
 ├── docker/                    # Dockerfile + compose (build locally)
+├── docs/                      # OEM overview, architecture
 ├── results/                   # Generated at runtime (gitignored)
-└── tests/                     # Unit tests
+└── tests/                     # Unit, golden (real CTS output) and end-to-end tests
 ```
 
 ### Supported scripts (`scripts/`)
@@ -422,11 +471,34 @@ get your security/legal sign-off before enabling it.
 
 | Artifact | Path |
 |----------|------|
-| HTML / JSON / JUnit | `results/reports/` |
+| HTML / JSON report | `results/reports/xts_report_*.{html,json}` |
 | JUnit (CI) | `results/junit/` |
-| TradeFed logs | `results/logs/` |
-| RCA | `results/rca/` |
-| History DB | `results/xts_agent.db` |
+| Triage (groups, labels, owners, AI RCA) and Jira preview | `results/triage/` |
+| Trends dashboard | `results/reports/dashboard.html` |
+| Checkpoint and live heartbeat | `results/run_state/<plan>.json` |
+| TradeFed console logs | `results/logs/` |
+| Rule-based RCA | `results/rca/` |
+| Results database | `results/xts_agent.db` (or PostgreSQL) |
+| Agent log (JSON, rotated) | `logs/xts_agent.log` |
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `setup` | Validate the host environment and create result directories |
+| `run --plan P [--auto-retry] [--resume] [--dry-run]` | Execute a plan end to end |
+| `retry --plan P [--max-retries N]` | Retry the latest results of a plan |
+| `analyze --plan P [--rca] [--classify-failures]` | RCA and triage on the latest results |
+| `report --plan P --format html,json,junit` | Regenerate reports |
+| `triage --results-dir D` / `--import-history D` | Triage any TradeFed results dir; seed history |
+| `dashboard --plan P` | Regenerate the trends dashboard |
+| `index-code --plan P` | Build the local source index for AI RCA |
+| `device-check --min-devices N` | Fail unless N devices are online |
+| `health-check [--reboot-unhealthy]` | Run the health gate on all devices |
+| `quarantine [--release SERIAL]` | List or release quarantined devices |
+| `cleanup [--kill-tradefed] [--prune-results --keep-days N] [--dry-run]` | Stop leftover TradeFed processes, prune old results |
+
+Examples:
 
 ```bash
 python3 -m xts_agent.cli report --plan config/test_plans/cts_only.yaml \
@@ -465,27 +537,45 @@ Suggested alerts: heartbeat older than 2x the interval while `xts_run_in_progres
 
 ```mermaid
 graph TD
-    A[CLI xts_agent.cli] --> B[Orchestrator]
-    B --> C[ConfigLoader + default_config]
-    B --> D[TestPlanExecutor]
-    D --> E[DeviceManager / ADB]
-    D --> F[TradefedRunner]
-    F --> G[TradeFed]
-    E --> H[Device 1..N]
-    G --> H
-    B --> I[RetryManager]
-    B --> J[RCA + Reports]
+    CLI[cli.py] --> ORC[Orchestrator]
+    ORC --> CFG[ConfigLoader<br/>defaults + plan + env secrets]
+    ORC --> EXE[TestPlanExecutor<br/>device split, concurrent suites, resume]
+    EXE --> DM[DeviceManager<br/>health gate, leases, quarantine, prep]
+    EXE --> TFR[TradefedRunner<br/>heartbeat, results-dir detection]
+    EXE --> RM[RetryManager<br/>run retry + isolation]
+    TFR --> TF[TradeFed] --> DEV[Devices 1..N]
+    DM --> DEV
+    ORC --> TRI[Triage engine<br/>signatures, history, known issues, owners]
+    TRI --> AI[AI RCA, local LLM]
+    TRI --> JIRA[Jira filer]
+    ORC --> REP[Reports, dashboard, metrics, Slack]
+    ORC --> DB[(SQLite / PostgreSQL)]
+    ORC --> S3[(S3 / MinIO)]
 ```
 
-Flow: load plan → allocate devices → pin serials (`-s`) → TradeFed shards →
-parse `test_result.xml` → optional retry/RCA → reports.
+| Package | Role |
+|---------|------|
+| `xts_agent/cli.py`, `orchestrator.py`, `config_loader.py` | Commands, run sequence, configuration |
+| `xts_agent/device/` | ADB, discovery, health gate, leases, prep, quarantine ledger |
+| `xts_agent/execution/` | Plan executor, TradeFed runner, heartbeat, checkpoints, cancel, sharding |
+| `xts_agent/retry/` | Suite retry and isolation |
+| `xts_agent/results/` | `test_result.xml` parser, per-suite run store |
+| `xts_agent/triage/` | Signatures, history, known issues, ownership, AI RCA, Jira |
+| `xts_agent/rca/` | Rule-based classification, LLM providers, source-code index |
+| `xts_agent/reporting/` | HTML, JSON, JUnit, dashboard, Prometheus, Slack |
+| `xts_agent/storage/` | SQL layer, artifact archive |
+
+Full description, sequence diagrams and data stores: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
-## GitLab CI (optional)
+## GitLab CI
 
-Shell runner on the device host, tag `android-test-host`.  
-Stages: setup → health-check → execute → retry → analyze → report.
+A shell runner on the device host, with tag `android-test-host`.
+
+Stages: **check** → setup → health-check → execute-xts → retry → analyze → report.
+
+`check` (ruff, mypy, all tests) is blocking and runs before any job touches a device. Store secrets as masked, protected CI/CD variables. Set `XTS_PRUNE_DAYS` to prune old results.
 
 ---
 
