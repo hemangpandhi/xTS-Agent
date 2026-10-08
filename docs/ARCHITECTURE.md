@@ -2,7 +2,7 @@
 
 This document explains how the agent is built and what happens during a run.
 For the business case and how to present it, see [OEM_OVERVIEW.md](OEM_OVERVIEW.md).
-For setup and commands, see the [README](../README.md).
+For setup and commands, see the [README](../README.md); to run it step by step, see the [Execution Guide](EXECUTION_GUIDE.md).
 
 ## Detailed architecture at a glance
 

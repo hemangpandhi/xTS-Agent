@@ -1,0 +1,39 @@
+# Agent validation on a Cuttlefish AAOS cluster (docs/VALIDATION.md, stage A).
+# Small CTS and VTS subsets run at the same time so leases, the device split,
+# retries, cancel/resume and triage are all exercised within about an hour.
+# Not a certification run. Module names depend on the xTS package version:
+# check with `cts-tradefed list modules` / `vts-tradefed list modules`.
+name: "Validation - Cuttlefish AAOS"
+description: "Agent validation: concurrent CTS + VTS subsets on aosp_cf_x86_64_auto"
+profile: development
+max_concurrent_suites: 2
+devices:
+  min_devices: 2
+  device_type: aaos
+suites:
+  - name: cts
+    priority: 1
+    plan: cts
+    enabled: true
+    include_filters:
+      - CtsUtilTestCases
+      - CtsTextTestCases
+      - CtsJniTestCases
+      - CtsCarTestCases       # AAOS-specific; expected to produce real failures for triage
+    sharding:
+      shard_count: auto
+    retry:
+      max_retries: 1
+      strategy: RETRY_ANY_FAILURE
+      isolation_grade: FULLY_ISOLATED   # uses device.virtual_reset_command on Cuttlefish
+  - name: vts
+    priority: 2
+    plan: vts
+    enabled: true
+    include_filters:
+      - VtsHalAutomotiveVehicle_TargetTest
+    sharding:
+      shard_count: auto
+    retry:
+      max_retries: 1
+      strategy: RETRY_ANY_FAILURE

@@ -183,6 +183,9 @@ Measure before and after on the same hardware and builds. All figures below come
 
 ## 9. Rollout steps
 
+Every step below has commands and pass criteria in the [Execution Guide](EXECUTION_GUIDE.md).
+
+0. Validate the agent on a Cuttlefish AAOS cluster, then on a Pixel Tablet with AAOS (guide stages A and B).
 1. Install on the existing device host (bare metal or Docker). See the [README](../README.md).
 2. Put xTS packages under `/opt/xts`. Run `scripts/preflight.sh` and `scripts/check_ready.sh`.
 3. Run the smoke plan, then a development CTS plan.

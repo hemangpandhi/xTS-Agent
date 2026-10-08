@@ -14,7 +14,8 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 |----------|-----|
 | [docs/OEM_OVERVIEW.md](docs/OEM_OVERVIEW.md) | Explaining the agent to an OEM: problem, benefits, limits, pilot KPIs, talk track, FAQ |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agent architecture (perception, reasoning, memory, actions, learning loops, communication), harness layers, technology stack, what is built in-house vs Google tooling, components, run flow, triage pipeline, data, deployment |
-| This README | Installing, configuring and operating it |
+| [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) | **Step-by-step execution**: host setup, Cuttlefish validation, Pixel Tablet (AAOS), OEM head unit, CI, reading results, troubleshooting, sign-off sheet |
+| This README | Installing, configuring and operating it (reference) |
 
 ---
 
@@ -90,7 +91,7 @@ xTS-Agent/
 │   └── known_failures/        # Rule-based RCA patterns
 ├── scripts/                   # All supported host scripts (setup, run, monitor)
 ├── docker/                    # Dockerfile + compose (build locally)
-├── docs/                      # OEM overview, architecture
+├── docs/                      # OEM overview, architecture, execution guide
 ├── results/                   # Generated at runtime (gitignored)
 └── tests/                     # Unit, golden (real CTS output) and end-to-end tests
 ```
@@ -104,6 +105,7 @@ xTS-Agent/
 | `preflight.sh` | Host pre-flight (aapt2, packages, devices, agent import) |
 | `check_ready.sh` | Go/no-go gate before a production run |
 | `start_cluster.sh` | Spawn N Cuttlefish instances |
+| `cvd_reset.sh` | Powerwash one Cuttlefish instance by adb serial (`device.virtual_reset_command`) |
 | `run_nightly.sh` | Optional cluster spawn + multi-device plan run |
 | `setup_gitlab_runner.sh` | Optional GitLab shell-runner install |
 
@@ -181,6 +183,8 @@ against fake `cts-tradefed` and `adb` scripts.
 
 ## Path A — New machine **without Docker** (hardware)
 
+> First time? Follow [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) end to end; it adds pass criteria and the validation stages. This section is the short reference.
+
 ### A1. Clone + system setup
 
 ```bash
@@ -233,7 +237,7 @@ adb devices -l
 **Cuttlefish:**
 ```bash
 export AOSP_ROOT=/path/to/aosp
-export LUNCH_TARGET=aosp_cf_x86_64_phone-userdebug
+export LUNCH_TARGET=aosp_cf_x86_64_auto-userdebug   # AAOS image
 ./scripts/start_cluster.sh 10
 adb devices -l
 ```
@@ -393,6 +397,8 @@ docker compose -f docker/docker-compose.yml run --rm xts-agent \
 | `full_certification.yaml` | certification | `cts` (+ VTS/STS/…) | Full AAOS cert |
 | `full_cts.yaml` | development | **`cts-virtual-device`** | **Cuttlefish / virtual only** |
 | `vts_only.yaml` / `catbox_functional.yaml` | certification | suite-specific | Manual single-suite |
+| `validation_virtual.yaml` | development | `cts` + `vts` subsets, 2 at once | Agent validation on Cuttlefish AAOS ([guide](docs/EXECUTION_GUIDE.md#stage-a-cuttlefish-aaos-cluster)) |
+| `validation_hardware.yaml` | development | `cts` subset | Agent validation on Pixel Tablet / OEM units ([guide](docs/EXECUTION_GUIDE.md#stage-b-pixel-tablet-with-aaos)) |
 
 **Profiles.** A plan declares `profile: certification` or `profile: development`
 (default). Certification plans must run every module: any `exclude_filters`,
