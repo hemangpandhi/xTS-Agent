@@ -55,7 +55,7 @@ graph TB
 | Observability: offline HTML report, trends dashboard, Prometheus metrics | One page per run and trends over time for management |
 | Quality harness: golden tests on real CTS output, end-to-end CLI test | Changes to the agent are checked before they touch a device |
 
-A side-by-side of "Google tooling alone vs with the agent", and the full technology stack, are in [ARCHITECTURE.md §3](ARCHITECTURE.md#3-the-harness-layers-and-technology-stack).
+A side-by-side of "Google tooling alone vs with the agent", and the full technology stack, are in [ARCHITECTURE.md §4](ARCHITECTURE.md#4-the-harness-layers-and-technology-stack).
 
 ## 4. The workflow, before and after
 

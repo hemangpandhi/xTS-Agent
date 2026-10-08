@@ -35,7 +35,98 @@ graph LR
 
 Only the agent host needs access to the devices. Everything to the right of the agent is optional and switched on in configuration.
 
-## 3. The harness: layers and technology stack
+## 3. Agent architecture: perception, reasoning, memory, action, learning
+
+Viewed as an agent, xTS Agent has the five classic parts: it **perceives** its environment, **reasons** about what to do, keeps **memory**, **acts** through tools, and **learns** from the outcome of each run.
+
+```mermaid
+flowchart LR
+    subgraph P["Perception (inputs)"]
+        P1[Plans + config<br/>YAML, env secrets]
+        P2[Device state<br/>adb getprop, dumpsys]
+        P3[TradeFed console<br/>live log stream]
+        P4[test_result.xml<br/>per-test results]
+        P5[OEM source code<br/>indexed for RAG]
+    end
+    subgraph B["Reasoning (the brain)"]
+        B1[Planner<br/>suites, device split,<br/>concurrency]
+        B2[Decision rules<br/>health gate, retry,<br/>completeness, certification]
+        B3[Triage logic<br/>signatures, history,<br/>known issues, owners]
+        B4[Local LLM<br/>root-cause hints]
+    end
+    subgraph M["Memory"]
+        M1[Short-term<br/>checkpoint, heartbeat,<br/>device leases]
+        M2[(Long-term<br/>failure history, run durations,<br/>device ledger, AI cache)]
+        M3[(Knowledge<br/>known issues, ownership map,<br/>source-code index)]
+    end
+    subgraph A["Actions (tools)"]
+        A1[TradeFed<br/>run, run retry, list results]
+        A2[adb<br/>prep, reboot, probe]
+        A3[Jira REST<br/>create or comment]
+        A4[Reports<br/>HTML, JSON, JUnit, dashboard]
+        A5[Notify + archive<br/>Prometheus, Slack, S3]
+    end
+    subgraph E["Environment"]
+        E1[AAOS devices<br/>hardware, Cuttlefish]
+        E2[Teams + CI<br/>owners, GitLab, dashboards]
+    end
+    P --> B
+    B <--> M
+    B --> A
+    A --> E
+    E -. outcomes feed the next run .-> P
+```
+
+### 3.1 Components
+
+| Part | Components | Code |
+|------|-----------|------|
+| Perception | Config loader; adb probes and health gate; TradeFed console reader (heartbeat); result parser; source-code indexer | `config_loader.py`, `device/`, `execution/progress.py`, `results/result_parser.py`, `rca/code_indexer.py` |
+| Reasoning | Planner (suite order, concurrency, device split by device-hours); decision rules (health, quarantine, retry, completeness, certification profile); triage logic (signatures, history labels, waivers, ownership); local LLM for root-cause hints | `orchestrator.py`, `execution/test_plan_executor.py`, `retry/`, `triage/`, `rca/llm_provider.py` |
+| Memory | Short-term: run-state checkpoint and heartbeat, device leases. Long-term: results database (suite runs, per-test history, AI cache), device ledger. Knowledge: `known_issues.yaml`, `ownership.yaml`, ChromaDB source index | `execution/run_state.py`, `device/device_ledger.py`, `storage/db.py`, `config/` |
+| Actions | TradeFed launchers, adb commands, Jira REST, report writers, metrics, Slack, S3 upload | `execution/tradefed_runner.py`, `device/adb_wrapper.py`, `triage/jira_filer.py`, `reporting/`, `storage/artifacts.py` |
+| Environment | Devices (hardware, Cuttlefish); people and systems that consume results (owners, CI, dashboards) | — |
+
+### 3.2 Data flow
+
+1. **Plan in.** The plan and defaults become a validated plan model.
+2. **Devices in.** adb probes turn connected devices into a healthy, same-build, leased pool.
+3. **Execution.** The planner hands each suite a device share. TradeFed runs it. The console stream feeds the heartbeat (short-term memory) and the checkpoint.
+4. **Results.** `test_result.xml` is parsed and drives the decisions: complete or not, retry or not.
+5. **Triage.** Failures become signatures, then groups. Long-term memory adds history labels, and knowledge adds known issues and owners. The LLM adds hints, using the source index and the AI cache.
+6. **Out.** Actions write reports, tickets, metrics and archives. Outcomes are written back to memory for the next run.
+
+### 3.3 Communication
+
+| Between | Mechanism |
+|---------|-----------|
+| Agent → TradeFed | Subprocess: `run commandAndExit`, `run retry`, `list results`; stdout parsed live |
+| TradeFed → Agent | `test_result.xml` in the session directory; exit code |
+| Agent ↔ devices | `adb shell`: getprop, dumpsys, settings, reboot |
+| Agent jobs ↔ each other | `flock` lease files in a shared lease directory; device ledger |
+| CI ↔ Agent | CLI commands, exit codes, JUnit XML, SIGTERM on cancel |
+| Agent ↔ memory | SQL (SQLite or PostgreSQL); JSON checkpoint per plan |
+| Agent → teams | HTTPS REST: Jira, Slack webhook, Pushgateway; HTML reports |
+| Agent → LLM | In-process llama.cpp; an external API only when `allow_external_providers` is set |
+| Agent → archive | S3 API via boto3 (S3 or MinIO) |
+
+There is no long-running agent daemon or message bus. Jobs coordinate through file locks and the database.
+
+### 3.4 Learning mechanisms
+
+Learning here means rules that use recorded data. It is not model training.
+
+| Observe | Remember | Adapt |
+|---------|----------|-------|
+| Suite durations on each run | `suite_runs` table | The next device split is sized by measured device-hours |
+| Device failures (lost reboots, drop-offs) | Device reliability ledger | Quarantine after 3 consecutive failures, for 24 h |
+| Per-test results of every run | Failure history | NEW / PERSISTENT / FLAKY labels; NEW groups open tickets |
+| The same signature seen again | Jira label `xts-sig-<signature>` | Comment on the open ticket instead of filing a duplicate |
+| AI answer vs the human known-issue classification | AI cache and agreement metric | Reuse answers; trust the AI only as far as the measured agreement |
+
+`triage --import-history` seeds these loops from past TradeFed results.
+
+## 4. The harness: layers and technology stack
 
 The agent is one layer in a four-layer test harness. Google and AOSP provide the test content and the runner. The agent, built in-house, adds orchestration and intelligence on top. Integrations connect it to your existing infrastructure.
 
@@ -82,7 +173,7 @@ graph TB
     AD --> CF
 ```
 
-### 3.1 Technology stack
+### 4.1 Technology stack
 
 | Layer | Component | Source | Used for |
 |-------|-----------|--------|----------|
@@ -99,9 +190,9 @@ graph TB
 | | llama-cpp-python, ChromaDB, sentence-transformers | Open source | On-prem AI RCA and source-code index (optional) |
 | Quality | ruff, mypy, unittest | Open source | Blocking CI check |
 | Packaging | Docker (Ubuntu 24.04 base), GitLab Runner | Open source | Optional container; CI execution |
-| Agent logic | Everything under `xts_agent/` | **Built in-house** | Section 3.2 |
+| Agent logic | Everything under `xts_agent/` | **Built in-house** | Section 4.2 |
 
-### 3.2 What is built in-house
+### 4.2 What is built in-house
 
 Google's tooling runs the tests and writes the results. Everything that turns that into a dependable, fast and triaged process is the agent's own code:
 
@@ -118,7 +209,7 @@ Google's tooling runs the tests and writes the results. Everything that turns th
 | Operations | Disk guard, results retention that keeps resumable sessions, `cleanup` scoped to the agent's own processes | `utils/retention.py`, `cli.py` |
 | Quality harness | Golden tests on real CTS output; end-to-end test of the real CLI against fake `cts-tradefed` and `adb` | `tests/` |
 
-### 3.3 TradeFed alone vs with the agent
+### 4.3 TradeFed alone vs with the agent
 
 | Need | Google tooling alone | With xTS Agent |
 |------|----------------------|----------------|
@@ -133,7 +224,7 @@ Google's tooling runs the tests and writes the results. Everything that turns th
 | Live status | Scroll the console | Heartbeat, stall warning, Prometheus alerts |
 
 
-## 4. Components
+## 5. Components
 
 ```mermaid
 graph TD
@@ -182,9 +273,9 @@ graph TD
 | `storage/` | One SQL layer for SQLite (default) and PostgreSQL; optional S3/MinIO upload. |
 | `utils/` | Logging, environment validation, disk guard and retention. |
 
-## 5. Run flow
+## 6. Run flow
 
-### 5.1 End-to-end sequence
+### 6.1 End-to-end sequence
 
 ```mermaid
 sequenceDiagram
@@ -220,7 +311,7 @@ sequenceDiagram
     O-->>U: exit code (0 pass, non-zero fail / cancel / no disk)
 ```
 
-### 5.2 Step by step
+### 6.2 Step by step
 
 1. **Load configuration.** Defaults, then the plan, then environment variables for secrets. A certification plan containing filters is rejected before any device is touched.
 2. **Disk guard.** `run` and `retry` exit with code 3 if the package, results or temp filesystem has less than `ops.min_free_disk_gb`.
@@ -245,7 +336,7 @@ sequenceDiagram
    - The retry is sharded across all allocated devices.
    - Isolation between attempts: reboot plus prep on hardware; optional reset command on Cuttlefish. Physical devices are never wiped.
 9. **Release.** Leases are released and the ledger records whether each device survived. A device that keeps failing is quarantined for `quarantine_hours`.
-10. **Triage.** See section 6.
+10. **Triage.** See section 7.
 11. **Outputs.**
     - HTML, JSON and JUnit reports.
     - Rows in the results database.
@@ -255,7 +346,7 @@ sequenceDiagram
     - A Slack message.
 12. **Exit code.** 0 when every suite passed. Otherwise non-zero: failures, 3 for no disk space, 143 or 130 when cancelled. CI marks the job from it.
 
-### 5.3 Cancel and resume
+### 6.3 Cancel and resume
 
 ```mermaid
 stateDiagram-v2
@@ -272,7 +363,7 @@ On `--resume`:
 - suites that already passed are skipped;
 - an interrupted suite continues from its last TradeFed session with `run retry`, on devices running the same build, instead of starting again.
 
-## 6. Triage pipeline
+## 7. Triage pipeline
 
 ```mermaid
 graph LR
@@ -307,7 +398,7 @@ graph LR
   - Only NEW and NO_HISTORY groups open tickets, capped per run.
   - `mode: dry_run` writes a preview file instead of filing.
 
-## 7. Data
+## 8. Data
 
 | Store | Contents | Location |
 |-------|----------|----------|
@@ -321,7 +412,7 @@ graph LR
 
 Several agent hosts can share history and trends by pointing at one PostgreSQL database.
 
-## 8. Deployment
+## 9. Deployment
 
 ```mermaid
 graph TB
@@ -353,7 +444,7 @@ graph TB
 - **Several jobs can share one host.** Leases keep them off each other's devices.
 - **Dependencies** are installed from hash-checked lock files (`requirements.lock`, `requirements-dev.lock`).
 
-## 9. Extension points
+## 10. Extension points
 
 | To add | Where |
 |--------|-------|
@@ -365,7 +456,7 @@ graph TB
 | An LLM backend | `rca/llm_provider.py`. |
 | A report or notifier | `reporting/`, called from `Orchestrator.generate_reports`. |
 
-## 10. Quality gates
+## 11. Quality gates
 
 - **Static checks:** ruff (correctness rules) and mypy run in the blocking `check` stage before any device job.
 - **Unit tests:** `tests/test_<area>.py`.

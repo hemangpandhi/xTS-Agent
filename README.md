@@ -13,7 +13,7 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 | Document | For |
 |----------|-----|
 | [docs/OEM_OVERVIEW.md](docs/OEM_OVERVIEW.md) | Explaining the agent to an OEM: problem, benefits, limits, pilot KPIs, talk track, FAQ |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Harness layers, technology stack, what is built in-house vs Google tooling, components, run flow, triage pipeline, data, deployment |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agent architecture (perception, reasoning, memory, actions, learning loops, communication), harness layers, technology stack, what is built in-house vs Google tooling, components, run flow, triage pipeline, data, deployment |
 | This README | Installing, configuring and operating it |
 
 ---
@@ -39,7 +39,7 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 | Test toolchain | TradeFed, CTS/VTS/STS/GTS/ATS/CATBox, adb, aapt2, JDK 17 | Google / AOSP, used unchanged |
 | Devices | AAOS head units (USB/TCP), Cuttlefish | OEM hardware / AOSP |
 
-What each in-house part adds compared with TradeFed alone: [docs/ARCHITECTURE.md §3](docs/ARCHITECTURE.md#3-the-harness-layers-and-technology-stack).
+What each in-house part adds compared with TradeFed alone: [docs/ARCHITECTURE.md §4](docs/ARCHITECTURE.md#4-the-harness-layers-and-technology-stack).
 
 ## How it works
 
