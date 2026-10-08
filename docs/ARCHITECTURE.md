@@ -35,7 +35,105 @@ graph LR
 
 Only the agent host needs access to the devices. Everything to the right of the agent is optional and switched on in configuration.
 
-## 3. Components
+## 3. The harness: layers and technology stack
+
+The agent is one layer in a four-layer test harness. Google and AOSP provide the test content and the runner. The agent, built in-house, adds orchestration and intelligence on top. Integrations connect it to your existing infrastructure.
+
+```mermaid
+graph TB
+    subgraph L4["Layer 4 · Integrations (yours, optional)"]
+        CI[GitLab CI<br/>scheduler]
+        JR[Jira]
+        PR[Prometheus /<br/>Pushgateway]
+        PG[(PostgreSQL)]
+        S3[(S3 / MinIO)]
+        SL[Slack]
+        AT[OmniLab ATS 2.0<br/>experimental]
+    end
+    subgraph L3["Layer 3 · xTS Agent (built in-house)"]
+        direction LR
+        OR[Orchestration<br/>plans, profiles, concurrency,<br/>checkpoint / resume, cancel]
+        DV[Device management<br/>health gate, leases,<br/>quarantine, prep]
+        RT[Retry engine<br/>targeted, sharded,<br/>isolation]
+        TG[Triage engine<br/>signatures, history,<br/>known issues, owners]
+        AI[AI RCA<br/>local LLM + source RAG]
+        OB[Observability<br/>heartbeat, metrics,<br/>reports, dashboard]
+    end
+    subgraph L2["Layer 2 · Google / AOSP test toolchain (unchanged)"]
+        direction LR
+        TF[TradeFed<br/>cts/vts/sts/gts/ats/catbox-tradefed]
+        SU[xTS suites<br/>CTS, VTS, STS, GTS, ATS, CATBox]
+        AD[adb<br/>platform-tools]
+        AA[aapt2<br/>build-tools]
+        JD[JDK 17]
+    end
+    subgraph L1["Layer 1 · Devices"]
+        HW[AAOS head units<br/>USB / TCP]
+        CF[Cuttlefish<br/>virtual devices]
+    end
+    L4 --- L3
+    L3 --> TF
+    L3 --> AD
+    TF --> SU
+    TF --> AD
+    TF --> AA
+    TF --> JD
+    AD --> HW
+    AD --> CF
+```
+
+### 3.1 Technology stack
+
+| Layer | Component | Source | Used for |
+|-------|-----------|--------|----------|
+| Devices | AAOS head units, Cuttlefish (`launch_cvd`) | OEM hardware / AOSP | Test targets |
+| Test toolchain | TradeFed (`*-tradefed` launchers) | Google, ships inside each xTS package | Runs the suites, sharding, `run retry`, `test_result.xml` |
+| | CTS, VTS, STS, GTS, ATS, CATBox | Google (GTS and others via partner portal) | Test content |
+| | adb (platform-tools) | Google Android SDK | Device discovery, health checks, prep, reboots |
+| | aapt2 (build-tools) | Google Android SDK | APK parsing inside TradeFed |
+| | JDK 17 | OpenJDK | TradeFed runtime |
+| Agent runtime | Python 3.8+ | Open source | Agent language |
+| | click, PyYAML, Jinja2, rich, requests, xmltodict | Open source (pinned, hash-checked) | CLI, config, reports, console, HTTP (Jira, Slack, Pushgateway, ATS, Gemini), XML |
+| | SQLite (built in) / psycopg 3 | Open source | Results database, PostgreSQL option |
+| | boto3 | Open source | S3 / MinIO archive (optional) |
+| | llama-cpp-python, ChromaDB, sentence-transformers | Open source | On-prem AI RCA and source-code index (optional) |
+| Quality | ruff, mypy, unittest | Open source | Blocking CI check |
+| Packaging | Docker (Ubuntu 24.04 base), GitLab Runner | Open source | Optional container; CI execution |
+| Agent logic | Everything under `xts_agent/` | **Built in-house** | Section 3.2 |
+
+### 3.2 What is built in-house
+
+Google's tooling runs the tests and writes the results. Everything that turns that into a dependable, fast and triaged process is the agent's own code:
+
+| Area | In-house capability | Code |
+|------|---------------------|------|
+| Orchestration | Plan model with certification and development profiles; concurrent suites on a device split sized by measured device-hours; checkpoint and `--resume` on top of TradeFed sessions; graceful cancel | `orchestrator.py`, `execution/test_plan_executor.py`, `run_state.py`, `cancel.py` |
+| Device management | Health gate (boot, battery, network, storage, wakefulness, automotive feature); host-wide `flock` leases that TradeFed keeps holding even if the agent is killed; reliability ledger with automatic quarantine; declarative prep profile; build-fingerprint pools | `device/` |
+| Retry engine | Drives `run retry` on the right session with `FAILED` / `NOT_EXECUTED`, sharded across all devices; isolation that reboots and re-preps but never wipes hardware | `retry/` |
+| Result integrity | Results-dir detection from the console log, confirmed with `list results`; completeness gate (INCOMPLETE, FAILED outranks it); filtered certification plans refused | `execution/tradefed_runner.py`, `results/result_parser.py`, `config_loader.py` |
+| Live progress | TradeFed console parser: modules started and finished per device, failures so far, stall warning | `execution/progress.py` |
+| Triage engine | Failure-signature algorithm (normalised message, framework frames skipped, `[instant]` twins merged); NEW / PERSISTENT / FLAKY history with retry de-duplication; expiring report-only waivers; ownership routing; Jira filing deduplicated by signature label | `triage/` |
+| AI RCA | One structured answer per group (cause, category, confidence, fix, evidence) from a local model with retrieval over OEM source; cached; agreement with human classification measured | `triage/ai_rca.py`, `rca/` |
+| Observability and reporting | Offline HTML report, trends dashboard, JUnit for CI, Prometheus gauges without a running exporter, tagged rotated logs | `reporting/`, `utils/logger.py` |
+| Operations | Disk guard, results retention that keeps resumable sessions, `cleanup` scoped to the agent's own processes | `utils/retention.py`, `cli.py` |
+| Quality harness | Golden tests on real CTS output; end-to-end test of the real CLI against fake `cts-tradefed` and `adb` | `tests/` |
+
+### 3.3 TradeFed alone vs with the agent
+
+| Need | Google tooling alone | With xTS Agent |
+|------|----------------------|----------------|
+| Pick devices | Pass `-s` serials by hand; no health check | Health gate, quarantine, same-build pool, chosen automatically |
+| Share a rack | Nothing stops two runs using one device | Host-wide leases; a busy device names its holder |
+| Several suites | One invocation per suite, started by hand | Concurrent suites on a split sized by history |
+| Interruption | Find the session, run `run retry` by hand | `--resume` skips passed suites and continues the rest |
+| Retries | Manual `run retry` per session | Automatic, sharded on all devices, with isolation |
+| Completeness | Read the summary yourself | INCOMPLETE gate; certification profile refuses filters |
+| Failures | One line per failing test in `test_result.xml` | Root-cause groups with history, owner, waiver status, one Jira ticket |
+| Trends | Per-session folders on one machine | Results database, dashboard, metrics |
+| Live status | Scroll the console | Heartbeat, stall warning, Prometheus alerts |
+
+
+## 4. Components
 
 ```mermaid
 graph TD
@@ -84,9 +182,9 @@ graph TD
 | `storage/` | One SQL layer for SQLite (default) and PostgreSQL; optional S3/MinIO upload. |
 | `utils/` | Logging, environment validation, disk guard and retention. |
 
-## 4. Run flow
+## 5. Run flow
 
-### 4.1 End-to-end sequence
+### 5.1 End-to-end sequence
 
 ```mermaid
 sequenceDiagram
@@ -122,7 +220,7 @@ sequenceDiagram
     O-->>U: exit code (0 pass, non-zero fail / cancel / no disk)
 ```
 
-### 4.2 Step by step
+### 5.2 Step by step
 
 1. **Load configuration.** Defaults, then the plan, then environment variables for secrets. A certification plan containing filters is rejected before any device is touched.
 2. **Disk guard.** `run` and `retry` exit with code 3 if the package, results or temp filesystem has less than `ops.min_free_disk_gb`.
@@ -147,7 +245,7 @@ sequenceDiagram
    - The retry is sharded across all allocated devices.
    - Isolation between attempts: reboot plus prep on hardware; optional reset command on Cuttlefish. Physical devices are never wiped.
 9. **Release.** Leases are released and the ledger records whether each device survived. A device that keeps failing is quarantined for `quarantine_hours`.
-10. **Triage.** See section 5.
+10. **Triage.** See section 6.
 11. **Outputs.**
     - HTML, JSON and JUnit reports.
     - Rows in the results database.
@@ -157,7 +255,7 @@ sequenceDiagram
     - A Slack message.
 12. **Exit code.** 0 when every suite passed. Otherwise non-zero: failures, 3 for no disk space, 143 or 130 when cancelled. CI marks the job from it.
 
-### 4.3 Cancel and resume
+### 5.3 Cancel and resume
 
 ```mermaid
 stateDiagram-v2
@@ -174,7 +272,7 @@ On `--resume`:
 - suites that already passed are skipped;
 - an interrupted suite continues from its last TradeFed session with `run retry`, on devices running the same build, instead of starting again.
 
-## 5. Triage pipeline
+## 6. Triage pipeline
 
 ```mermaid
 graph LR
@@ -209,7 +307,7 @@ graph LR
   - Only NEW and NO_HISTORY groups open tickets, capped per run.
   - `mode: dry_run` writes a preview file instead of filing.
 
-## 6. Data
+## 7. Data
 
 | Store | Contents | Location |
 |-------|----------|----------|
@@ -223,7 +321,7 @@ graph LR
 
 Several agent hosts can share history and trends by pointing at one PostgreSQL database.
 
-## 7. Deployment
+## 8. Deployment
 
 ```mermaid
 graph TB
@@ -255,7 +353,7 @@ graph TB
 - **Several jobs can share one host.** Leases keep them off each other's devices.
 - **Dependencies** are installed from hash-checked lock files (`requirements.lock`, `requirements-dev.lock`).
 
-## 8. Extension points
+## 9. Extension points
 
 | To add | Where |
 |--------|-------|
@@ -267,7 +365,7 @@ graph TB
 | An LLM backend | `rca/llm_provider.py`. |
 | A report or notifier | `reporting/`, called from `Orchestrator.generate_reports`. |
 
-## 9. Quality gates
+## 10. Quality gates
 
 - **Static checks:** ruff (correctness rules) and mypy run in the blocking `check` stage before any device job.
 - **Unit tests:** `tests/test_<area>.py`.

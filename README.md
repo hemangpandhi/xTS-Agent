@@ -13,7 +13,7 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 | Document | For |
 |----------|-----|
 | [docs/OEM_OVERVIEW.md](docs/OEM_OVERVIEW.md) | Explaining the agent to an OEM: problem, benefits, limits, pilot KPIs, talk track, FAQ |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, run flow, triage pipeline, data, deployment, extension points |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Harness layers, technology stack, what is built in-house vs Google tooling, components, run flow, triage pipeline, data, deployment |
 | This README | Installing, configuring and operating it |
 
 ---
@@ -29,6 +29,17 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 | **AI root-cause hints, on-prem** | Optional structured RCA per group from a local LLM with your source indexed. External providers are off unless explicitly allowed, and agreement with human classification is measured. |
 | **Visibility** | Self-contained HTML, JSON and JUnit reports, a trends dashboard, a live heartbeat in the job log, and Prometheus gauges with suggested alerts. |
 | **Production-safe operations** | Graceful cancel, a disk guard, results retention, secrets from the environment, hash-pinned dependencies, and a blocking CI check (lint, types, unit, golden and end-to-end tests). |
+
+## The harness at a glance
+
+| Layer | What | Who provides it |
+|-------|------|-----------------|
+| Integrations | GitLab CI, Jira, Prometheus, PostgreSQL, S3/MinIO, Slack | Your infrastructure (optional) |
+| **xTS Agent** | Orchestration, device management, retry engine, triage engine, on-prem AI RCA, observability | **Built in-house (`xts_agent/`)** |
+| Test toolchain | TradeFed, CTS/VTS/STS/GTS/ATS/CATBox, adb, aapt2, JDK 17 | Google / AOSP, used unchanged |
+| Devices | AAOS head units (USB/TCP), Cuttlefish | OEM hardware / AOSP |
+
+What each in-house part adds compared with TradeFed alone: [docs/ARCHITECTURE.md §3](docs/ARCHITECTURE.md#3-the-harness-layers-and-technology-stack).
 
 ## How it works
 

@@ -28,7 +28,36 @@ A command-line tool and CI integration that sits **around** Google's official Tr
 
 It does **not** modify TradeFed, the test packages or `test_result.xml`. What you submit for certification is exactly what the official tools produced.
 
-## 3. The workflow, before and after
+## 3. The harness and what is ours
+
+```mermaid
+graph TB
+    I["Integrations (yours): GitLab CI · Jira · Prometheus · PostgreSQL · S3 · Slack"]
+    A["xTS Agent (built in-house): orchestration · device management · retry engine ·<br/>triage engine · on-prem AI RCA · observability"]
+    G["Google / AOSP toolchain (unchanged): TradeFed · CTS VTS STS GTS ATS CATBox · adb · aapt2 · JDK 17"]
+    D["Devices: AAOS head units (USB / TCP) · Cuttlefish"]
+    I --- A --> G --> D
+    A -->|adb: health, prep, reboot| D
+```
+
+- **Google and AOSP provide the test content and the runner:** the xTS suites, TradeFed, adb and aapt2. The agent uses them unchanged, so results stay valid for certification.
+- **Open-source libraries** (Python, click, Jinja2, SQLite and others, all pinned and hash-checked) are the building blocks.
+- **The agent's own code is the differentiator.** It covers everything between "TradeFed can run a suite" and "the OEM ships with known, owned, tracked failures":
+
+| Built in-house | Unique benefit to the OEM |
+|----------------|---------------------------|
+| Device management: health gate, host-wide leases, quarantine, same-build pools, prep profile | A shared rack that stays reliable without a person babysitting it |
+| Orchestration: certification profile, concurrent suites sized by history, checkpoint and `--resume`, graceful cancel | Shorter cycles; interruptions no longer cost a restart; filtered runs can't reach submission |
+| Retry engine: targeted `run retry`, sharded on all devices, no wipe on hardware | Retries finish faster and don't shrink the farm |
+| Result integrity and live progress: completeness gate, results-dir detection, TradeFed console heartbeat | A green result means a complete run; hangs are visible within the hour |
+| Triage engine: failure signatures, NEW / PERSISTENT / FLAKY history, expiring waivers, ownership routing, deduplicated Jira | 1,303 failures → 183 owned root causes in our lab run; regressions surface first; no duplicate tickets |
+| On-prem AI RCA with retrieval over OEM source, measured against human classification | Root-cause hints without sending code or logs outside |
+| Observability: offline HTML report, trends dashboard, Prometheus metrics | One page per run and trends over time for management |
+| Quality harness: golden tests on real CTS output, end-to-end CLI test | Changes to the agent are checked before they touch a device |
+
+A side-by-side of "Google tooling alone vs with the agent", and the full technology stack, are in [ARCHITECTURE.md §3](ARCHITECTURE.md#3-the-harness-layers-and-technology-stack).
+
+## 4. The workflow, before and after
 
 ```mermaid
 graph LR
@@ -48,16 +77,16 @@ graph LR
     end
 ```
 
-## 4. Benefits
+## 5. Benefits
 
-### 4.1 Faster execution
+### 5.1 Faster execution
 
 - **All devices busy.** Each suite is sharded across every healthy device on the same build. With `max_concurrent_suites`, several suites run in parallel on a split sized by their measured device-hours. When a suite finishes, its devices move straight to the next one.
 - **Retries only re-run what failed.** TradeFed `run retry` targets failed or not-executed modules and is sharded across all allocated devices, not one.
 - **No restarting from zero.** Progress is checkpointed after every suite and retry. After a host reboot or a cancelled job, `run --resume` skips passed suites and continues interrupted ones from their last session.
 - **Parallel device work.** Probing, health checks and reboots run concurrently.
 
-### 4.2 Trustworthy results
+### 5.2 Trustworthy results
 
 - **Certification profile.** Plans marked `certification` cannot carry module filters, so a filtered run can never be passed off as a full one.
 - **Incomplete runs are flagged.** A run is marked INCOMPLETE when modules were not executed, even if nothing failed.
@@ -65,14 +94,14 @@ graph LR
 - **No hidden result changes.** Known issues and waivers only annotate the report. Waivers must have an expiry date.
 - **Physical devices are never wiped** between retries, so the farm doesn't silently shrink (lost ADB keys, Wi-Fi, setup state).
 
-### 4.3 A device farm that runs itself
+### 5.3 A device farm that runs itself
 
 - **Health gate before allocation:** boot completed, battery, network, storage, wakefulness, automotive feature.
 - **Host-wide leases:** concurrent CI jobs and manual runs never share a device, and a busy device says who holds it.
 - **Quarantine:** devices that keep failing are set aside for 24 hours and listed by `xts-agent quarantine`.
 - **Declarative prep profile:** the same device setup before every suite.
 
-### 4.4 Faster triage and issue resolution
+### 5.4 Faster triage and issue resolution
 
 The largest saving. Measured on a real CTS 17_r2 run in this lab (11 Cuttlefish devices, 2.4 hours, 163,264 tests executed, 99.2% pass rate):
 
@@ -96,14 +125,14 @@ For each group the agent adds:
 
 Engineers start from about 180 owned problems sorted by size and novelty, instead of 1,300 test lines.
 
-### 4.5 Visibility for management
+### 5.5 Visibility for management
 
 - **One page per run:** a self-contained HTML report (works offline and can be attached anywhere), plus JSON and JUnit (failures show in GitLab merge requests).
 - **Trends dashboard** from the results database: pass rate, duration and failures per suite over time.
 - **Live status:** a heartbeat in the job log and Prometheus gauges (run in progress, quiet TradeFed, tests by result, quarantined devices) with suggested alerts.
 - **Multi-site:** several hosts can share one PostgreSQL history.
 
-### 4.6 Fit for an OEM production environment
+### 5.6 Fit for an OEM production environment
 
 | Concern | How it is handled |
 |---------|-------------------|
@@ -114,7 +143,7 @@ Engineers start from about 180 owned problems sorted by size and novelty, instea
 | Change safety | Blocking CI gate (lint, type check, unit, golden tests on real CTS output, end-to-end test) before any device job runs. |
 | Infrastructure | Runs on bare metal or Docker on the existing device host; GitLab CI as scheduler; SQLite needs no server. |
 
-## 5. What it does not do (yet)
+## 6. What it does not do (yet)
 
 Set expectations honestly:
 
@@ -124,15 +153,15 @@ Set expectations honestly:
 - **AI RCA is advisory.** Its agreement with human-classified known issues is measured so you can decide how much to rely on it.
 - **ATS 2.0 upload is experimental.**
 
-## 6. How to present it (talk track)
+## 7. How to present it (talk track)
 
 1. **Start with their pain.** Ask how long a full certification cycle takes, how often runs are restarted, and how many engineer-days triage takes per drop.
 2. **Show a real report.** Open the HTML report and the triage table from a run on their hardware: 1,303 failures shown as 183 owned groups, NEW ones on top.
 3. **Explain the safety.** Official TradeFed, results untouched, certification profile, on-prem AI.
 4. **Show operations.** Kill a run mid-way, then `--resume`. Show the heartbeat, the quarantine list and the dashboard.
-5. **Agree a pilot and the numbers to measure** (section 7).
+5. **Agree a pilot and the numbers to measure** (section 8).
 
-## 7. Measuring the benefit in a pilot
+## 8. Measuring the benefit in a pilot
 
 Measure before and after on the same hardware and builds. All figures below come from data the agent already records.
 
@@ -152,7 +181,7 @@ Measure before and after on the same hardware and builds. All figures below come
 2. Run Jira in `dry_run` mode for the first week.
 3. Fill in `config/ownership.yaml` with the OEM's teams.
 
-## 8. Rollout steps
+## 9. Rollout steps
 
 1. Install on the existing device host (bare metal or Docker). See the [README](../README.md).
 2. Put xTS packages under `/opt/xts`. Run `scripts/preflight.sh` and `scripts/check_ready.sh`.
@@ -162,7 +191,7 @@ Measure before and after on the same hardware and builds. All figures below come
 6. Turn on Jira (dry run, then live), Prometheus alerts and, optionally, PostgreSQL, the artifact archive and local AI RCA.
 7. Use `certification` profile plans for submission runs.
 
-## 9. FAQ
+## 10. FAQ
 
 **Does it change CTS results?**
 No. It reads TradeFed's output; waivers only annotate the agent's own reports.
