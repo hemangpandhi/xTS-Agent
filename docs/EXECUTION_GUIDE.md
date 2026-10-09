@@ -4,6 +4,8 @@ This guide takes you from an empty Linux host to a validated agent running on
 an OEM head unit. Follow the stages in order; each step lists the command, what
 you should see, and what to do if you don't.
 
+![Execution stages](images/execution-roadmap.png)
+
 | Stage | Devices | Goal | Time |
 |-------|---------|------|------|
 | [0. Host setup](#stage-0-host-setup) | none | Install the agent, toolchain and xTS packages | ½ day |
