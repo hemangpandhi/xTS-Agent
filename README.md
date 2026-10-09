@@ -1,10 +1,69 @@
 # xTS Agent
 
-xTS Agent runs Android Automotive (AAOS) compatibility suites
-(**CTS / VTS / STS / GTS / ATS / CATBox**) through TradeFed.
+xTS Agent automates Android Automotive (AAOS) compatibility testing
+(**CTS / VTS / STS / GTS / ATS / CATBox**) on top of Google's official TradeFed launchers.
+It handles everything around the test packages:
 
-It discovers ADB devices, shards tests across them, retries failures,
-runs light RCA, and writes HTML / JUnit / JSON reports.
+- **Execution.** Healthy devices are allocated safely, suites are sharded and run concurrently, interrupted runs resume, and retries re-run only what failed.
+- **Triage.** Thousands of failing tests become a short list of root causes, each with history, an owner and one Jira ticket.
+- **Visibility.** Reports, trends and live metrics.
+
+TradeFed and its `test_result.xml` stay untouched, so certification output is exactly what the official tools produced.
+
+| Document | For |
+|----------|-----|
+| [docs/OEM_OVERVIEW.md](docs/OEM_OVERVIEW.md) | Explaining the agent to an OEM: problem, benefits, limits, pilot KPIs, talk track, FAQ |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agent architecture (perception, reasoning, memory, actions, learning loops, communication), harness layers, technology stack, what is built in-house vs Google tooling, components, run flow, triage pipeline, data, deployment |
+| [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) | **Step-by-step execution**: host setup, Cuttlefish validation, Pixel Tablet (AAOS), OEM head unit, CI, reading results, troubleshooting, sign-off sheet |
+| This README | Installing, configuring and operating it (reference) |
+
+---
+
+![xTS Agent detailed architecture](docs/images/architecture-detailed.png)
+
+## Why use it
+
+| Area | What you get |
+|------|--------------|
+| **Faster execution** | Every healthy same-build device is used. Several suites run in parallel on a split sized by measured device-hours. Retries are sharded across all devices and target only failed or not-executed modules. Checkpoints after every suite allow `--resume` instead of a restart. |
+| **Trustworthy results** | A `certification` profile refuses filtered plans. Unexecuted modules are flagged INCOMPLETE. A suite never shards across mixed builds. Waivers expire and never change results. Physical devices are never wiped. |
+| **A device farm that runs itself** | A health gate runs before allocation. Host-wide leases stop jobs sharing a device. Devices that keep failing are quarantined automatically. The same declarative prep profile runs before each suite. |
+| **Faster triage** | Failures are grouped by root-cause signature: on a real 11-device CTS run, **1,303 failures → 183 groups**, with the top 10 groups covering 57%. Each group is labelled NEW (regression, with the last good build), PERSISTENT or FLAKY, and gets known-issue status, an owner from a YAML map and **one deduplicated Jira ticket**. |
+| **AI root-cause hints, on-prem** | Optional structured RCA per group from a local LLM with your source indexed. External providers are off unless explicitly allowed, and agreement with human classification is measured. |
+| **Visibility** | Self-contained HTML, JSON and JUnit reports, a trends dashboard, a live heartbeat in the job log, and Prometheus gauges with suggested alerts. |
+| **Production-safe operations** | Graceful cancel, a disk guard, results retention, secrets from the environment, hash-pinned dependencies, and a blocking CI check (lint, types, unit, golden and end-to-end tests). |
+
+## The harness at a glance
+
+| Layer | What | Who provides it |
+|-------|------|-----------------|
+| Integrations | GitLab CI, Jira, Prometheus, PostgreSQL, S3/MinIO, Slack | Your infrastructure (optional) |
+| **xTS Agent** | Orchestration, device management, retry engine, triage engine, on-prem AI RCA, observability | **Built in-house (`xts_agent/`)** |
+| Test toolchain | TradeFed, CTS/VTS/STS/GTS/ATS/CATBox, adb, aapt2, JDK 17 | Google / AOSP, used unchanged |
+| Devices | AAOS head units (USB/TCP), Cuttlefish | OEM hardware / AOSP |
+
+What each in-house part adds compared with TradeFed alone: [docs/ARCHITECTURE.md §4](docs/ARCHITECTURE.md#4-the-harness-layers-and-technology-stack).
+
+## How it works
+
+```mermaid
+graph LR
+    P[Test plan YAML] --> L[Load + validate<br/>disk guard]
+    L --> D[Devices<br/>health gate, quarantine,<br/>same-build pool, leases]
+    D --> X[TradeFed<br/>sharded, concurrent suites,<br/>heartbeat, checkpoints]
+    X --> R[Targeted retry<br/>run retry on failed /<br/>not-executed modules]
+    R --> T[Triage<br/>groups, NEW/PERSISTENT/FLAKY,<br/>known issues, owners, AI RCA]
+    T --> O[Outputs<br/>reports, Jira, DB, dashboard,<br/>metrics, archive, Slack]
+```
+
+1. **Load the plan.** It is merged with `config/default_config.yaml` and secrets from the environment. Certification plans with filters are rejected, and the run stops if disk space is low.
+2. **Allocate devices.** Online ADB devices pass a health gate. Quarantined devices are skipped. The rest are grouped by build and leased host-wide.
+3. **Run.** Each suite runs as `run commandAndExit <plan> -s <serial>... --shard-count N`. The agent prints a heartbeat to the job log and checkpoints progress.
+4. **Retry.** `run retry` on the previous TradeFed session re-runs only the failed or not-executed modules, sharded across all devices, with isolation (reboot and prep) between attempts.
+5. **Triage.** Failures are grouped by signature, then history, known issues, owners and the optional AI RCA are added, and Jira tickets are filed.
+6. **Report.** HTML, JSON and JUnit reports, results database rows, the dashboard, metrics, the optional artifact archive and a Slack message. The exit code tells CI whether the run passed.
+
+Details and diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -26,12 +85,15 @@ xTS-Agent/
 ├── xts_agent/                 # Python package (CLI, orchestrator, TradeFed runner)
 ├── config/
 │   ├── default_config.yaml    # Global defaults
-│   └── test_plans/            # Runnable plans (smoke, hardware CTS, cert, …)
+│   ├── test_plans/            # Runnable plans (smoke, hardware CTS, cert, …)
+│   ├── known_issues.yaml      # Known issues and time-boxed waivers
+│   ├── ownership.yaml         # Failure group → team / Jira component
+│   └── known_failures/        # Rule-based RCA patterns
 ├── scripts/                   # All supported host scripts (setup, run, monitor)
 ├── docker/                    # Dockerfile + compose (build locally)
-├── monitor_web/               # Optional localhost resource UI
+├── docs/                      # OEM overview, architecture, execution guide
 ├── results/                   # Generated at runtime (gitignored)
-└── tests/                     # Unit tests
+└── tests/                     # Unit, golden (real CTS output) and end-to-end tests
 ```
 
 ### Supported scripts (`scripts/`)
@@ -43,10 +105,8 @@ xTS-Agent/
 | `preflight.sh` | Host pre-flight (aapt2, packages, devices, agent import) |
 | `check_ready.sh` | Go/no-go gate before a production run |
 | `start_cluster.sh` | Spawn N Cuttlefish instances |
-| `run_when_devices_ready.sh` | Wait for N ADB devices, then run a plan |
+| `cvd_reset.sh` | Powerwash one Cuttlefish instance by adb serial (`device.virtual_reset_command`) |
 | `run_nightly.sh` | Optional cluster spawn + multi-device plan run |
-| `check_progress.sh` | Live TradeFed progress summary |
-| `monitor_resources.sh` | CPU/RAM CSV sampler |
 | `setup_gitlab_runner.sh` | Optional GitLab shell-runner install |
 
 ---
@@ -58,7 +118,7 @@ xTS-Agent/
 | Dependency | Why |
 |------------|-----|
 | Ubuntu 20.04+ / Debian 11+ | Supported host OS |
-| Python **3.10+** | Agent runtime |
+| Python **3.8+** (3.10+ recommended; 3.8 is end-of-life) | Agent runtime |
 | JDK **17+** | TradeFed |
 | **ADB** (platform-tools) | Device discovery / control |
 | Android SDK **build-tools** (`aapt2`) | TradeFed APK parsing |
@@ -67,7 +127,35 @@ xTS-Agent/
 
 ### Python packages
 
-From `pyproject.toml` / `requirements.txt`: `click`, `pyyaml`, `jinja2`, `rich`, `requests`, `xmltodict`
+Declared in `pyproject.toml` (`click`, `pyyaml`, `jinja2`, `rich`, `requests`, `xmltodict`, plus the
+`postgres` / `s3` / `ai` extras). Deployments install the exact, hash-checked versions in
+`requirements.lock` (core + `postgres` + `s3`; one universal lock, tested on Python 3.8 and 3.12):
+
+```bash
+pip install --require-hashes -r requirements.lock && pip install --no-deps -e .
+```
+
+After changing dependencies, regenerate both locks (the dev lock is the same set plus the `dev` tools):
+
+```bash
+uv pip compile pyproject.toml --universal --extra postgres --extra s3 --generate-hashes --python-version 3.8 -o requirements.lock
+uv pip compile pyproject.toml --universal --extra postgres --extra s3 --extra dev --generate-hashes --python-version 3.8 -o requirements-dev.lock
+```
+
+### Checks (blocking in CI)
+
+The `check` stage runs before anything touches a device, and the pipeline stops if it fails:
+
+```bash
+pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+ruff check xts_agent tests      # pyflakes, import order, bugbear, a few correctness rules
+mypy                            # config in pyproject.toml
+python -m unittest discover -s tests -t .   # or one area: python -m unittest tests.test_triage
+```
+
+`tests/test_golden.py` checks parsing, grouping and the heartbeat against real CTS output kept in
+`tests/golden/`; `tests/test_e2e.py` runs the real CLI (`run`, retry, reports, triage, database)
+against fake `cts-tradefed` and `adb` scripts.
 
 ### Optional
 
@@ -95,6 +183,8 @@ From `pyproject.toml` / `requirements.txt`: `click`, `pyyaml`, `jinja2`, `rich`,
 
 ## Path A — New machine **without Docker** (hardware)
 
+> First time? Follow [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) end to end; it adds pass criteria and the validation stages. This section is the short reference.
+
 ### A1. Clone + system setup
 
 ```bash
@@ -119,7 +209,10 @@ export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/34.0.0
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install -e .
+pip install --require-hashes -r requirements.lock   # exact pinned versions
+pip install --no-deps -e .
+# Optional, for on-prem AI RCA (pulls torch, compiles llama.cpp):
+# pip install -e ".[ai]"
 ```
 
 ### A4. Place xTS packages
@@ -144,7 +237,7 @@ adb devices -l
 **Cuttlefish:**
 ```bash
 export AOSP_ROOT=/path/to/aosp
-export LUNCH_TARGET=aosp_cf_x86_64_phone-userdebug
+export LUNCH_TARGET=aosp_cf_x86_64_auto-userdebug   # AAOS image
 ./scripts/start_cluster.sh 10
 adb devices -l
 ```
@@ -192,14 +285,48 @@ python3 -m xts_agent.cli run \
   --auto-retry
 ```
 
+**Several agents on one host.** Devices are leased host-wide through lock
+files in `device.lease_dir` (default `/var/tmp/xts-agent/leases`, or
+`XTS_LEASE_DIR`), so concurrent CI jobs or a manual run never share a device;
+a busy device's error names the holder (pid, user, CI job). TradeFed inherits
+the lease, so devices stay locked while it runs even if the agent is killed.
+All agents on a host must use the same lease directory.
+
+**Flaky devices are quarantined.** A device that fails 3 times in a row
+(reboot never comes back, or it drops offline during a suite) is skipped for
+24 h (`device.quarantine_after_failures` / `quarantine_hours`). List or
+release with `xts-agent quarantine [--release SERIAL]`.
+
+**Running suites in parallel.** Set `max_concurrent_suites: N` in a plan (or
+`execution.max_concurrent_suites` in defaults). The agent picks one
+same-build device pool and splits it across the first N suites in proportion
+to their expected device-hours (measured from past runs on this host, else
+built-in estimates); every suite gets at least one device and at most its
+`max_shards`. When a suite finishes, its devices start the next pending suite.
+Validate one concurrent run on your xTS versions before relying on it.
+
+**Resuming an interrupted run.** Progress is checkpointed to
+`results/run_state/<plan>.json` after every suite and retry. If the host
+reboots or the job is cancelled, rerun the same command with `--resume`:
+suites that already passed are skipped, and an interrupted suite continues
+from its last TradeFed session with `run retry` (failed + not-executed
+modules) on devices running the same build, instead of starting over.
+
+```bash
+python3 -m xts_agent.cli run \
+  --plan config/test_plans/full_certification.yaml \
+  --config config/default_config.yaml \
+  --auto-retry --resume
+```
+
 Helpers:
 
 ```bash
-MIN_DEVICES=4 TEST_PLAN=config/test_plans/cts_only.yaml \
-  ./scripts/run_when_devices_ready.sh
+NUM_DEVICES=4 SPAWN_CLUSTER=0 TEST_PLAN=config/test_plans/cts_only.yaml \
+  ./scripts/run_nightly.sh   # wait for 4 ADB devices, then run
 
 NUM_DEVICES=10 SPAWN_CLUSTER=1 \
-  TEST_PLAN=config/test_plans/full_cts_hardware.yaml \
+  TEST_PLAN=config/test_plans/dev_cts_hardware_triage.yaml \
   ./scripts/run_nightly.sh
 ```
 
@@ -210,8 +337,13 @@ NUM_DEVICES=10 SPAWN_CLUSTER=1 \
 ### Facts
 
 - **No published image** — build from this repo.
-- Image includes Ubuntu 24.04, JDK 17, Python agent, Android cmdline-tools + build-tools 34.
+- Image includes Ubuntu 24.04, JDK 17, Python agent, checksum-verified Android cmdline-tools + build-tools 34.
+- Runs as unprivileged user `xts` (UID/GID 1000; override with `--build-arg XTS_UID=… XTS_GID=…` to match host file ownership).
 - Mount host `/opt/xts` and ADB keys; use **`network_mode: host`** so container ADB sees host devices.
+- Mount the host `platform-tools` whose adb runs the host adb server at `/host-platform-tools`
+  (check with `which adb` on the host). A different adb version in the container restarts the
+  host adb server and can break running tests.
+- Secrets are passed from the host environment (`XTS_ATS2_API_KEY`, …), never baked into the image.
 
 ### Build + run
 
@@ -222,7 +354,9 @@ mkdir -p results
 docker run --rm --network host \
   -v /opt/xts:/opt/xts:ro \
   -v "$PWD/results":/app/results \
-  -v "$HOME/.android":/root/.android:ro \
+  -v "$HOME/.android":/home/xts/.android:ro \
+  -v "$(dirname "$(which adb)")":/host-platform-tools:ro \
+  -e XTS_ATS2_API_KEY -e XTS_SLACK_WEBHOOK \
   xts-agent:local \
   python3 -m xts_agent.cli run \
     --plan config/test_plans/cts_only.yaml \
@@ -235,6 +369,7 @@ Or Compose (from repo root):
 ```bash
 export XTS_PACKAGES_DIR=/opt/xts
 export XTS_RESULTS_DIR="$PWD/results"
+export HOST_PLATFORM_TOOLS="$(dirname "$(which adb)")"
 docker compose -f docker/docker-compose.yml build
 docker compose -f docker/docker-compose.yml run --rm xts-agent \
   python3 -m xts_agent.cli run \
@@ -253,16 +388,101 @@ docker compose -f docker/docker-compose.yml run --rm xts-agent \
 
 ## Test plans
 
-| Plan file | TradeFed plan | Use when |
-|-----------|---------------|----------|
-| `smoke_test.yaml` | `cts` + include filter | First hardware check |
-| `cts_only.yaml` | `cts`, `shard_count: auto` | **Hardware multi-device CTS** |
-| `full_cts_hardware.yaml` | `cts`, auto shards | Full hardware CTS |
-| `full_certification.yaml` | `cts` (+ VTS/STS/…) | Full AAOS cert |
-| `full_cts.yaml` | **`cts-virtual-device`** | **Cuttlefish / virtual only** |
-| `vts_only.yaml` / `catbox_functional.yaml` | suite-specific | Manual single-suite |
+| Plan file | Profile | TradeFed plan | Use when |
+|-----------|---------|---------------|----------|
+| `smoke_test.yaml` | development | `cts` + include filter | First hardware check |
+| `cts_only.yaml` | certification | `cts`, `shard_count: auto` | **Hardware multi-device CTS** |
+| `full_cts_hardware.yaml` | certification | `cts`, auto shards | Full hardware CTS |
+| `dev_cts_hardware_triage.yaml` | development | `cts` minus known-failing modules | Fast nightly/triage iteration |
+| `full_certification.yaml` | certification | `cts` (+ VTS/STS/…) | Full AAOS cert |
+| `full_cts.yaml` | development | **`cts-virtual-device`** | **Cuttlefish / virtual only** |
+| `vts_only.yaml` / `catbox_functional.yaml` | certification | suite-specific | Manual single-suite |
+| `validation_virtual.yaml` | development | `cts` + `vts` subsets, 2 at once | Agent validation on Cuttlefish AAOS ([guide](docs/EXECUTION_GUIDE.md#stage-a-cuttlefish-aaos-cluster)) |
+| `validation_hardware.yaml` | development | `cts` subset | Agent validation on Pixel Tablet / OEM units ([guide](docs/EXECUTION_GUIDE.md#stage-b-pixel-tablet-with-aaos)) |
+
+**Profiles.** A plan declares `profile: certification` or `profile: development`
+(default). Certification plans must run every module: any `exclude_filters`,
+`include_filters` or `modules` subset is rejected at load time, because filtered
+results are not valid for submission. Reports are labelled with the profile.
+Keep module exclusions in development plans only.
 
 Defaults: `config/default_config.yaml`.
+
+---
+
+## Secrets
+
+Never commit credentials in YAML (the loader warns when a secret-named key
+holds a plaintext value). Either reference an environment variable anywhere
+in a plan or `default_config.yaml`:
+
+```yaml
+ats2:
+  api_key: "${XTS_ATS2_API_KEY}"
+  base_url: "${ATS2_URL:-https://ats.example.internal}"
+```
+
+or set one of these, which always override YAML:
+
+| Variable | Setting |
+|----------|---------|
+| `XTS_GEMINI_API_KEY` | `ai_rca.gemini_api_key` |
+| `XTS_ATS2_API_KEY` | `ats2.api_key` |
+| `XTS_SLACK_WEBHOOK` | Slack webhook for notifications |
+| `XTS_WIFI_PASSWORD` | Wi-Fi password for device preparation |
+| `XTS_JIRA_TOKEN` | Jira PAT (Server/DC) or API token (Cloud) |
+| `XTS_DATABASE_URL` | Optional PostgreSQL URL for the shared results database |
+
+In GitLab, store them as **masked + protected** CI/CD variables (or inject
+from Vault); on bare metal, export them from a root-owned env file.
+
+## Failure triage and Jira
+
+After every run (and `analyze` / `retry`) the agent groups failures by root-cause
+signature and labels each group:
+
+- **History** - `NEW` (passed in earlier runs: a regression, with the last
+  passing build), `PERSISTENT`, `FLAKY`, or `NO_HISTORY`.
+- **Known issue / waiver** - from `config/known_issues.yaml`. Waivers must
+  expire and never change TradeFed results.
+- **Owner** - from `config/ownership.yaml` (a starter map: replace the
+  placeholder teams/components with yours).
+
+Output: `results/triage/triage_*.json` and a triage table in the HTML report.
+
+```bash
+# Seed history from past TradeFed results (oldest first is handled for you)
+xts-agent triage --import-history /opt/xts/android-cts/results/2026.10.04_16.16.31.269_4285
+# Triage any TradeFed results dir, no agent run needed
+xts-agent triage --results-dir /opt/xts/android-cts/results/<session_dir>
+```
+
+**Jira.** With `jira.enabled: true`, each actionable group gets one ticket
+(labelled `xts-sig-<signature>`); if an open ticket with that label exists the
+agent comments on it instead of filing a duplicate. Only `NEW`/`NO_HISTORY`
+groups open new tickets, capped by `max_new_issues_per_run`. Start with
+`mode: dry_run` (writes `results/triage/jira_preview_*.json`) and import past
+results first, otherwise the first run sees every group as `NO_HISTORY`.
+
+## Results database
+
+Run summaries (`suite_runs`), failure history and the AI cache live in SQLite at
+`agent.database_path` by default. For several agent hosts sharing history,
+point them at one PostgreSQL database:
+
+```bash
+pip install -e ".[postgres]"
+export XTS_DATABASE_URL="postgresql://xts:<password>@db.lab.example:5432/xts"
+```
+
+Tables are created on first use. Credentials are masked in logs.
+
+## AI RCA (on-prem by default)
+
+`ai_rca` defaults to `provider: llama_cpp`, so failure logs, stack traces and
+retrieved OEM source never leave the host. External providers (`gemini`) are
+refused unless `ai_rca.allow_external_providers: true` is set explicitly —
+get your security/legal sign-off before enabling it.
 
 ---
 
@@ -270,11 +490,34 @@ Defaults: `config/default_config.yaml`.
 
 | Artifact | Path |
 |----------|------|
-| HTML / JSON / JUnit | `results/reports/` |
+| HTML / JSON report | `results/reports/xts_report_*.{html,json}` |
 | JUnit (CI) | `results/junit/` |
-| TradeFed logs | `results/logs/` |
-| RCA | `results/rca/` |
-| History DB | `results/xts_agent.db` |
+| Triage (groups, labels, owners, AI RCA) and Jira preview | `results/triage/` |
+| Trends dashboard | `results/reports/dashboard.html` |
+| Checkpoint and live heartbeat | `results/run_state/<plan>.json` |
+| TradeFed console logs | `results/logs/` |
+| Rule-based RCA | `results/rca/` |
+| Results database | `results/xts_agent.db` (or PostgreSQL) |
+| Agent log (JSON, rotated) | `logs/xts_agent.log` |
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `setup` | Validate the host environment and create result directories |
+| `run --plan P [--auto-retry] [--resume] [--dry-run]` | Execute a plan end to end |
+| `retry --plan P [--max-retries N]` | Retry the latest results of a plan |
+| `analyze --plan P [--rca] [--classify-failures]` | RCA and triage on the latest results |
+| `report --plan P --format html,json,junit` | Regenerate reports |
+| `triage --results-dir D` / `--import-history D` | Triage any TradeFed results dir; seed history |
+| `dashboard --plan P` | Regenerate the trends dashboard |
+| `index-code --plan P` | Build the local source index for AI RCA |
+| `device-check --min-devices N` | Fail unless N devices are online |
+| `health-check [--reboot-unhealthy]` | Run the health gate on all devices |
+| `quarantine [--release SERIAL]` | List or release quarantined devices |
+| `cleanup [--kill-tradefed] [--prune-results --keep-days N] [--dry-run]` | Stop leftover TradeFed processes, prune old results |
+
+Examples:
 
 ```bash
 python3 -m xts_agent.cli report --plan config/test_plans/cts_only.yaml \
@@ -284,15 +527,28 @@ python3 -m xts_agent.cli analyze --plan config/test_plans/cts_only.yaml \
 python3 -m xts_agent.cli device-check --min-devices 4
 python3 -m xts_agent.cli health-check
 python3 -m xts_agent.cli cleanup --kill-tradefed
+python3 -m xts_agent.cli cleanup --prune-results --keep-days 14 --dry-run
 ```
 
-Live helpers:
+Live progress is in the job log (TradeFed heartbeat every `ops.progress_interval_secs`)
+and, when enabled, in Prometheus; see Operations below.
 
-```bash
-./scripts/check_progress.sh
-./scripts/monitor_resources.sh
-./monitor_web/start_web_monitor.sh   # http://127.0.0.1:8585
-```
+## Operations
+
+All under `ops:` in `config/default_config.yaml` (overridable per plan).
+
+| Concern | Behaviour |
+|---------|-----------|
+| **Cancel / stop** | SIGTERM or Ctrl-C (CI cancel, `docker stop`, systemd) stops TradeFed so it flushes partial results, skips retries/RCA/uploads, writes the checkpoint and reports, exits 143/130. Continue later with `run --resume`. A second signal force-kills. `cleanup --kill-tradefed` in `after_script` remains the fallback if the agent is SIGKILLed. |
+| **Heartbeat** | Every `progress_interval_secs` (600) the job log shows modules finished/started, failures so far and the module on each device; a TradeFed log silent for `stall_warning_mins` (60) is flagged as a likely hang. The same data is written to `results/run_state/<plan>.json`. |
+| **Metrics** | `metrics_textfile_dir` (node_exporter textfile collector) and/or `pushgateway_url`. Heartbeat and end-of-run gauges: `xts_run_in_progress`, `xts_run_heartbeat_timestamp_seconds`, `xts_suite_quiet_seconds`, `xts_suite_tests{result}`, `xts_suite_status`, `xts_triage_groups{label}`, `xts_devices_quarantined`, ... |
+| **Disk guard** | `run`/`retry` exit 3 if a filesystem they write to (suite packages, results, temp dir) has less than `min_free_disk_gb` (20). |
+| **Retention** | TradeFed never deletes results or logs (GBs per CTS session). `cleanup --prune-results --keep-days N [--dry-run]` deletes older sessions, always keeping the newest 3 per suite and sessions an unfinished run can resume from. In CI set `XTS_PRUNE_DAYS`. |
+| **Logs** | One console stream (plain timestamped lines in CI, Rich on a terminal) and `logs/xts_agent.log` as JSON, rotated at 50 MB x 5. Every line carries the run id (`XTS_RUN_ID`, in CI the pipeline id) and the suite. |
+
+Suggested alerts: heartbeat older than 2x the interval while `xts_run_in_progress == 1`
+(agent or host died); `xts_suite_quiet_seconds > 3600` (TradeFed hung);
+`xts_devices_quarantined > 0`.
 
 ---
 
@@ -300,27 +556,45 @@ Live helpers:
 
 ```mermaid
 graph TD
-    A[CLI xts_agent.cli] --> B[Orchestrator]
-    B --> C[ConfigLoader + default_config]
-    B --> D[TestPlanExecutor]
-    D --> E[DeviceManager / ADB]
-    D --> F[TradefedRunner]
-    F --> G[TradeFed]
-    E --> H[Device 1..N]
-    G --> H
-    B --> I[RetryManager]
-    B --> J[RCA + Reports]
+    CLI[cli.py] --> ORC[Orchestrator]
+    ORC --> CFG[ConfigLoader<br/>defaults + plan + env secrets]
+    ORC --> EXE[TestPlanExecutor<br/>device split, concurrent suites, resume]
+    EXE --> DM[DeviceManager<br/>health gate, leases, quarantine, prep]
+    EXE --> TFR[TradefedRunner<br/>heartbeat, results-dir detection]
+    EXE --> RM[RetryManager<br/>run retry + isolation]
+    TFR --> TF[TradeFed] --> DEV[Devices 1..N]
+    DM --> DEV
+    ORC --> TRI[Triage engine<br/>signatures, history, known issues, owners]
+    TRI --> AI[AI RCA, local LLM]
+    TRI --> JIRA[Jira filer]
+    ORC --> REP[Reports, dashboard, metrics, Slack]
+    ORC --> DB[(SQLite / PostgreSQL)]
+    ORC --> S3[(S3 / MinIO)]
 ```
 
-Flow: load plan → allocate devices → pin serials (`-s`) → TradeFed shards →
-parse `test_result.xml` → optional retry/RCA → reports.
+| Package | Role |
+|---------|------|
+| `xts_agent/cli.py`, `orchestrator.py`, `config_loader.py` | Commands, run sequence, configuration |
+| `xts_agent/device/` | ADB, discovery, health gate, leases, prep, quarantine ledger |
+| `xts_agent/execution/` | Plan executor, TradeFed runner, heartbeat, checkpoints, cancel, sharding |
+| `xts_agent/retry/` | Suite retry and isolation |
+| `xts_agent/results/` | `test_result.xml` parser, per-suite run store |
+| `xts_agent/triage/` | Signatures, history, known issues, ownership, AI RCA, Jira |
+| `xts_agent/rca/` | Rule-based classification, LLM providers, source-code index |
+| `xts_agent/reporting/` | HTML, JSON, JUnit, dashboard, Prometheus, Slack |
+| `xts_agent/storage/` | SQL layer, artifact archive |
+
+Full description, sequence diagrams and data stores: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
-## GitLab CI (optional)
+## GitLab CI
 
-Shell runner on the device host, tag `android-test-host`.  
-Stages: setup → health-check → execute → retry → analyze → report.
+A shell runner on the device host, with tag `android-test-host`.
+
+Stages: **check** → setup → health-check → execute-xts → retry → analyze → report.
+
+`check` (ruff, mypy, all tests) is blocking and runs before any job touches a device. Store secrets as masked, protected CI/CD variables. Set `XTS_PRUNE_DAYS` to prune old results.
 
 ---
 

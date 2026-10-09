@@ -1,4 +1,5 @@
 # CTS Known Failure Exclusion Filters
+# Development profile only: certification plans reject exclude filters.
 # ====================================
 # Add test filters here to exclude known failures from CTS execution.
 # Format: <ModuleName> <TestClass>#<TestMethod>

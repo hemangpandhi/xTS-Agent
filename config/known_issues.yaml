@@ -1,0 +1,26 @@
+# Known xTS issues, matched against failure groups during triage.
+#
+# A group matching an issue is reported as KNOWN (with its Jira key) instead
+# of opening a new ticket. All `match` fields given must match:
+#   signature      - failure-group signature(s) from the triage report
+#   message_regex  - regex over the failure message + stack trace
+#   test_regex     - regex over "<abi> <module> <class>#<test>" ids
+#   module_regex   - regex over module names
+#
+# Waivers are report-time only: they never change TradeFed results or suite
+# status, every waiver must have an `expires` date, and certification runs
+# only honour waivers that list `certification` in `profiles` (default:
+# development only).
+
+issues:
+  - id: KI-0001
+    title: "KitchenSink holds window focus on Cuttlefish auto images"
+    jira: ""                          # e.g. AAOS-1234
+    classification: ENVIRONMENT_ISSUE
+    match:
+      message_regex: "com\\.google\\.android\\.car\\.kitchensink was focused"
+    # waiver:
+    #   reason: "Debug app preinstalled on aosp_cf_x86_64_auto; not on product builds"
+    #   expires: 2026-12-31
+    #   builds_regex: "aosp_cf_x86_64_auto"
+    #   profiles: [development]

@@ -1,0 +1,86 @@
+# Module -> owning team, used to route failure groups and Jira tickets.
+#
+# STARTER MAP: team names and Jira components below are placeholders.
+# Replace them with your real teams/components. Rules are checked top to
+# bottom; the first `module_regex` that matches the module name wins
+# (names are matched without ABI, e.g. "CtsCarTestCases[instant]").
+#
+#   team            - owning team (shown in reports, used for routing)
+#   jira_component  - Jira component set on new tickets (optional)
+#   assignee        - Jira username / account id to assign (optional)
+#   watchers        - extra Jira users to notify (optional)
+
+default:
+  team: xts-triage
+  jira_component: xTS
+
+rules:
+  # Automotive
+  - module_regex: "^(Cts|Ats)?Car|^CtsAutomotive|^CtsVehicle|^Catbox|^Vts.*Vehicle"
+    team: aaos-car-framework
+    jira_component: Car Framework
+
+  # UI, windowing, input
+  - module_regex: "^CtsWindowManager|^CtsSurfaceControl|^CtsDisplay|^CtsView|^CtsUiRendering|^CtsUiAutomation|^CtsWallpaper"
+    team: window-and-display
+    jira_component: Window Manager
+  - module_regex: "^CtsInputMethod|^CtsInput|^CtsText|^CtsWidget|^CtsAccessibility"
+    team: input-and-text
+    jira_component: Input
+
+  # Media, camera, graphics
+  - module_regex: "^CtsMedia|^CtsAudio|^CtsVideo|^CtsCamera|^CtsMidi|^CtsTv"
+    team: media
+    jira_component: Media
+  - module_regex: "^CtsGraphics|^CtsGpu|^CtsDeqp|^CtsOpenGL|^CtsVulkan|^CtsNativeHardware"
+    team: graphics
+    jira_component: Graphics
+
+  # Connectivity
+  - module_regex: "^CtsNet|^CtsWifi|^CtsBluetooth|^CtsUsb|^CtsHostsideNetwork|^CtsDns|^CtsVcn"
+    team: connectivity
+    jira_component: Connectivity
+  - module_regex: "^CtsTelephony|^CtsTelecom|^CtsCarrier|^CtsSms|^CtsContacts"
+    team: telephony
+    jira_component: Telephony
+
+  # Security, permissions, privacy
+  - module_regex: "^CtsSecurity|^CtsSelinux|^CtsKeystore|^CtsAppSecurity|^CtsPermission|^CtsSensorPrivacy|^CtsAdServices|^CtsAd[A-Z]|^CtsHiddenApi|^signed-CtsSecure"
+    team: security-and-privacy
+    jira_component: Security
+
+  # Framework, apps, packages, policy
+  - module_regex: "^CtsApp|^CtsActivityManager|^CtsContent|^CtsOs|^CtsJob|^CtsAlarm|^CtsBroadcast|^CtsNotification|^CtsSync|^CtsBattery|^CtsHealth"
+    team: framework-core
+    jira_component: Framework
+  - module_regex: "^CtsPackage|^CtsDynamic|^CtsStagedInstall|^CtsRollback|^CtsApex|^CtsSdk"
+    team: package-manager
+    jira_component: Package Manager
+  - module_regex: "^CtsDevicePolicy|^CtsAdmin|^CtsMultiUser|^CtsUser"
+    team: enterprise-and-users
+    jira_component: Device Policy
+
+  - module_regex: "^CtsAutoFill|^CtsPreference|^CtsSettings|^CtsSharesheet|^CtsSafetyCenter|^CtsHibernation|^CtsSuspendApps|^CtsVirtualDevices|^CtsCompanion|^CtsVoice"
+    team: framework-apps
+    jira_component: System Apps
+  - module_regex: "^CtsWebkit|^CtsWebView"
+    team: webview
+    jira_component: WebView
+
+  # Storage, location, sensors
+  - module_regex: "^CtsScopedStorage|^CtsStorage|^CtsProvider|^CtsDownload|^CtsBlobStore"
+    team: storage
+    jira_component: Storage
+  - module_regex: "^CtsLocation|^CtsSensor|^CtsGnss"
+    team: location-and-sensors
+    jira_component: Sensors
+
+  # Runtime and native
+  - module_regex: "^CtsJvmti|^CtsJdwp|^CtsLibcore|^CtsBionic|^CtsNative|^CtsArt|^art_|^CtsSimpleperf|^CtsPerfetto|^CtsStatsd|AtomHostTestCases"
+    team: runtime-and-native
+    jira_component: Runtime
+
+  # Vendor (VTS)
+  - module_regex: "^Vts"
+    team: vendor-bsp
+    jira_component: BSP

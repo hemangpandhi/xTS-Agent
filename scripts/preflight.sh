@@ -13,7 +13,6 @@ cd "${ROOT_DIR}"
 XTS_DIR="${XTS_PACKAGES_DIR:-/opt/xts}"
 ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 MIN_DEVICES="${MIN_DEVICES:-1}"
-REPAIR_AAPT="${REPAIR_AAPT:-1}"
 
 log() { echo "[+] $*"; }
 warn() { echo "[!] $*" >&2; }
@@ -61,20 +60,21 @@ if [[ -z "${AAPT2}" ]]; then
 fi
 log "AAPT2: ${AAPT2}"
 
-# 4) Optional safe TradeFed aapt repair (backup first)
-if [[ "${REPAIR_AAPT}" == "1" ]]; then
-  TF_SCRIPT="${XTS_DIR}/android-cts/tools/cts-tradefed"
-  if [[ -f "${TF_SCRIPT}" ]]; then
-    python3 - <<PY
+# 4) Read-only TradeFed launcher check (xTS packages are never modified)
+TF_SCRIPT="${XTS_DIR}/android-cts/tools/cts-tradefed"
+if [[ -f "${TF_SCRIPT}" ]]; then
+  if python3 - <<PY
 from pathlib import Path
 from xts_agent.utils.env_validator import EnvironmentValidator
-ok = EnvironmentValidator.validate_aapt2(Path("${TF_SCRIPT}"), repair=True)
-raise SystemExit(0 if ok else 1)
+raise SystemExit(0 if EnvironmentValidator.check_tradefed_script(Path("${TF_SCRIPT}")) else 1)
 PY
-    log "Validated/repaired CTS TradeFed aapt2 mapping"
+  then
+    log "CTS TradeFed launcher resolves aapt2 from PATH"
   else
-    warn "CTS TradeFed not found at ${TF_SCRIPT} (skip aapt repair)"
+    warn "CTS TradeFed launcher has a hard-coded --aapt path; restore the stock script"
   fi
+else
+  warn "CTS TradeFed not found at ${TF_SCRIPT}"
 fi
 
 # 5) xTS packages presence

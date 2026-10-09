@@ -136,11 +136,9 @@ source .venv/bin/activate
 
 # Install xTS Agent
 pip install --upgrade pip
-if [ -f "pyproject.toml" ]; then
-    pip install -e "."
-elif [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt
-fi
+# Exact, hash-checked versions from the lock; then the agent itself
+pip install --require-hashes -r requirements.lock
+pip install --no-deps -e "."
 
 log_info "Python environment ready at ${XTS_AGENT_DIR}/.venv"
 

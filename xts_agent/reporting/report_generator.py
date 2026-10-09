@@ -19,6 +19,8 @@ class ReportGenerator:
         output_dir: str | Path,
         formats: List[str] | None = None,
         basename: str = "report",
+        triage: Any = None,
+        junit_detail: str = "failures",
     ) -> dict:
         formats = formats or ["html", "json", "junit"]
         output_dir = Path(output_dir)
@@ -27,20 +29,17 @@ class ReportGenerator:
 
         if "html" in formats:
             path = output_dir / f"{basename}.html"
-            HTMLReportGenerator().generate(plan_result, rca_report, comparison, path)
+            HTMLReportGenerator().generate(plan_result, rca_report, comparison, path, triage=triage)
             written["html"] = path
         if "junit" in formats:
-            # Also write under results/junit for GitLab CI artifact path
-            path = output_dir / f"{basename}.xml"
-            GitLabReportGenerator().generate(plan_result, path)
-            written["junit"] = path
+            # Single copy, under results/junit where GitLab CI collects it
             junit_dir = output_dir.parent / "junit"
             junit_dir.mkdir(parents=True, exist_ok=True)
-            junit_copy = junit_dir / f"{basename}.xml"
-            junit_copy.write_bytes(path.read_bytes())
-            written["junit_ci"] = junit_copy
+            path = junit_dir / f"{basename}.xml"
+            GitLabReportGenerator(junit_detail).generate(plan_result, path)
+            written["junit"] = path
         if "json" in formats:
             path = output_dir / f"{basename}.json"
-            JSONReportGenerator().generate(plan_result, rca_report, comparison, path)
+            JSONReportGenerator().generate(plan_result, rca_report, comparison, path, triage=triage)
             written["json"] = path
         return written

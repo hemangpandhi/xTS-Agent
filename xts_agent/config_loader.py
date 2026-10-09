@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -18,6 +20,60 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 logger = logging.getLogger(__name__)
+
+PROFILES = ("certification", "development")
+
+# ${VAR} or ${VAR:-default} anywhere in a YAML string value
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+# Keys whose values are credentials and must not be committed in plaintext
+SECRET_KEYS = frozenset(
+    {"api_key", "ai_api_key", "gemini_api_key", "slack_webhook", "wifi_password", "database_url"}
+)
+
+
+def _expand_env(value: Any, source: Path, key_path: str = "") -> Any:
+    """Expand ${VAR} references and warn about plaintext secrets."""
+    if isinstance(value, dict):
+        return {
+            k: _expand_env(v, source, f"{key_path}.{k}" if key_path else str(k))
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_expand_env(v, source, key_path) for v in value]
+    if not isinstance(value, str):
+        return value
+
+    if key_path.rsplit(".", 1)[-1] in SECRET_KEYS and value and not _ENV_REF.search(value):
+        logger.warning(
+            "Plaintext secret at %s in %s; use \"${ENV_VAR}\" and a secret store instead",
+            key_path,
+            source,
+        )
+
+    def _sub(match: "re.Match[str]") -> str:
+        name, default = match.group(1), match.group(2)
+        if name in os.environ:
+            return os.environ[name]
+        if default is None:
+            logger.warning("Environment variable %s (referenced at %s) is not set", name, key_path)
+        return default or ""
+
+    return _ENV_REF.sub(_sub, value)
+
+
+# Environment variables that override secret settings regardless of YAML
+SECRET_ENV_OVERRIDES = {
+    "XTS_GEMINI_API_KEY": "ai_rca.gemini_api_key",
+    "XTS_ATS2_API_KEY": "ats2.api_key",
+    "XTS_SLACK_WEBHOOK": "post_execution.reporting.notifications.slack_webhook",
+    "XTS_WIFI_PASSWORD": "device_prep.wifi_password",
+}
+
+
+class ConfigError(ValueError):
+    """Raised when a test plan is invalid for its declared profile."""
+
 
 DEFAULT_CONFIG_CANDIDATES = (
     Path("config/default_config.yaml"),
@@ -92,6 +148,17 @@ class ShardingConfig:
     dynamic_sharding: bool = True
     intra_module_sharding: bool = True
     max_shards: int = 16
+    token_sharding: bool = False
+
+
+@dataclass
+class DiagnosticsConfig:
+    """TradeFed failure diagnostics; defaults section + per-suite `artifacts:`."""
+
+    logcat_on_failure: bool = True
+    screenshot_on_failure: bool = True
+    bugreport_on_failure: bool = False
+    max_logcat_size_mb: int = 50
 
 
 @dataclass
@@ -102,6 +169,22 @@ class DeviceRequirements:
     reboot_between_suites: bool = False
     min_battery_level: int = 20
     properties: Dict[str, str] = field(default_factory=dict)
+    # Apply the device_prep profile to allocated devices before each suite
+    prepare: bool = True
+
+
+@dataclass
+class DevicePrepConfig:
+    """CTS device-setup profile, from the defaults ``device:`` section."""
+
+    screen_timeout: int = 2147483647
+    disable_screen_lock: bool = True
+    enable_location: bool = True
+    disable_adb_install_verifier: bool = True
+    connect_wifi: bool = True
+    wifi_ssid: str = ""
+    wifi_password: str = ""
+    extra_commands: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -113,19 +196,10 @@ class SuiteRetryPostConfig:
 
 
 @dataclass
-class AgentRetryPostConfig:
-    enabled: bool = True
-    max_retries: int = 2
-    classify_before_retry: bool = True
-    rules: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class RCAPostConfig:
     enabled: bool = True
     ai_powered: bool = False
     failure_classification: bool = True
-    generate_report: bool = True
     baseline_path: str = ""
     patterns_file: str = "config/known_failures/patterns.yaml"
     ai_api_key: str = ""
@@ -140,12 +214,12 @@ class ReportingPostConfig:
     json_summary: bool = True
     regression_report: bool = False
     notifications: Dict[str, Any] = field(default_factory=dict)
+    junit_detail: str = "failures"  # "failures" (small) or "all" (every test)
 
 
 @dataclass
 class PostExecutionConfig:
     suite_retry: SuiteRetryPostConfig = field(default_factory=SuiteRetryPostConfig)
-    agent_retry: AgentRetryPostConfig = field(default_factory=AgentRetryPostConfig)
     rca: RCAPostConfig = field(default_factory=RCAPostConfig)
     reporting: ReportingPostConfig = field(default_factory=ReportingPostConfig)
 
@@ -156,12 +230,13 @@ class ATS2Config:
     base_url: str = ""
     api_key: str = ""
     timeout_secs: int = 30
+    # Unverified against a real OmniLab ATS deployment: confirm with your ATS team
+    upload_path: str = "/api/v1/results/upload"
 
 
 @dataclass
 class PathsConfig:
     xts_packages_dir: str = "/opt/xts"
-    tools_dir: str = "/opt/xts/tools"
     java_home: str = ""
     android_sdk: str = ""
     adb_path: str = ""
@@ -175,6 +250,9 @@ class AgentSettings:
     log_dir: str = "logs"
     results_dir: str = "results"
     database_path: str = "results/xts_agent.db"
+    # Optional shared database, e.g. postgresql://user:pass@host/xts (needs the
+    # [postgres] extra). Prefer XTS_DATABASE_URL so the password stays out of YAML.
+    database_url: str = ""
 
 
 @dataclass
@@ -193,19 +271,181 @@ class SuiteConfig:
     modules: List[str] = field(default_factory=list)
     retry: RetryConfig = field(default_factory=RetryConfig)
     sharding: ShardingConfig = field(default_factory=ShardingConfig)
+    diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
+
+
+
+@dataclass
+class AiRcaConfig:
+    enabled: bool = False
+    # On-prem by default: failure logs and OEM source never leave the host
+    provider: str = "llama_cpp"
+    # Must be explicitly true to send logs/stack traces/OEM source to a
+    # third-party API (e.g. gemini)
+    allow_external_providers: bool = False
+    request_timeout_secs: int = 120
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-1.5-pro"
+    llama_model_path: str = ""
+    llama_n_ctx: int = 16384
+    llama_n_gpu_layers: int = -1
+    index_db_path: str = "config/known_failures/chroma_db"
+    source_code_paths: List[str] = field(default_factory=list)
+    # sentence-transformers model name, or a local path for offline labs
+    embedding_model: str = "all-MiniLM-L6-v2"
+    # LLM calls per run: one per actionable failure group, largest first
+    max_groups: int = 20
+
+@dataclass
+class TriageConfig:
+    enabled: bool = True
+    known_issues_file: str = "config/known_issues.yaml"
+    ownership_file: str = "config/ownership.yaml"
+    history_window: int = 5
+    history_db: str = ""  # default: agent.database_path
+
+
+@dataclass
+class OpsConfig:
+    """Run-time operations: heartbeat, metrics, disk guard, retention."""
+
+    progress_interval_secs: int = 600  # TradeFed progress line in the job log; 0 = off
+    stall_warning_mins: int = 60  # warn when the TradeFed log is silent this long; 0 = off
+    metrics_textfile_dir: str = ""  # node_exporter textfile collector dir; "" = off
+    pushgateway_url: str = ""  # Prometheus Pushgateway; "" = off
+    min_free_disk_gb: float = 20.0  # refuse to start a run below this; 0 = off
+    keep_results_days: int = 0  # `cleanup --prune-results` default; 0 = keep forever
 
 
 @dataclass
 class TestPlanConfig:
+
     name: str
     suites: List[SuiteConfig]
     description: str = ""
+    # "certification" runs must execute every module; "development" may filter
+    profile: str = "development"
+    # >1 runs suites concurrently on an automatic, time-weighted device split
+    max_concurrent_suites: int = 1
+    cooldown_between_suites_secs: int = 0
     devices: DeviceRequirements = field(default_factory=DeviceRequirements)
     post_execution: PostExecutionConfig = field(default_factory=PostExecutionConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
     agent: AgentSettings = field(default_factory=AgentSettings)
     ats2: ATS2Config = field(default_factory=ATS2Config)
+    ai_rca: AiRcaConfig = field(default_factory=AiRcaConfig)
+    device_prep: DevicePrepConfig = field(default_factory=DevicePrepConfig)
+    triage: TriageConfig = field(default_factory=TriageConfig)
+    jira: Any = None  # xts_agent.triage.jira_filer.JiraConfig
+    artifacts: Any = None  # xts_agent.storage.artifacts.ArtifactConfig
+    ops: OpsConfig = field(default_factory=OpsConfig)
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+def _names(cls: type) -> Dict[str, None]:
+    return {f.name: None for f in fields(cls)}
+
+
+def _defaults_schema() -> Dict[str, Any]:
+    from xts_agent.storage.artifacts import ArtifactConfig
+    from xts_agent.triage.jira_filer import JiraConfig
+
+    return {
+        "agent": _names(AgentSettings),
+        "paths": _names(PathsConfig),
+        "device": {
+            **_names(DevicePrepConfig),
+            **dict.fromkeys(
+                ("min_battery_level", "adb_timeout_secs", "reboot_timeout_secs", "lease_dir",
+                 "quarantine_after_failures", "quarantine_hours", "virtual_reset_command")
+            ),
+        },
+        "execution": dict.fromkeys(
+            ("suite_timeout_hours", "max_concurrent_suites", "reboot_between_suites",
+             "cooldown_between_suites_secs")
+        ),
+        "sharding": dict.fromkeys(
+            ("max_shard_count", "dynamic_sharding", "token_sharding", "intra_module_sharding")
+        ),
+        "retry": {
+            "intra_module": dict.fromkeys(
+                ("max_testcase_run_count", "strategy", "isolation_grade", "reboot_at_last_retry")
+            ),
+            "suite_retry": dict.fromkeys(("enabled", "max_retries", "retry_type", "cooldown_secs")),
+        },
+        "diagnostics": _names(DiagnosticsConfig),
+        "rca": dict.fromkeys(
+            ("enabled", "ai_powered", "ai_api_key", "ai_model", "patterns_file", "classify_failures")
+        ),
+        "reporting": {
+            **dict.fromkeys(("formats", "html_report", "junit_xml", "json_summary", "junit_detail")),
+            "notifications": {"slack_webhook": None},
+        },
+        "triage": _names(TriageConfig),
+        "jira": _names(JiraConfig),
+        "artifacts": _names(ArtifactConfig),
+        "ats2": _names(ATS2Config),
+        "ai_rca": _names(AiRcaConfig),
+        "ops": _names(OpsConfig),
+    }
+
+
+def _plan_schema() -> Dict[str, Any]:
+    defaults = _defaults_schema()
+    suite_keys = {
+        **_names(SuiteConfig),
+        "retry": dict.fromkeys(
+            ("max_retries", "max_attempts", "strategy", "retry_strategy", "max_testcase_run_count",
+             "isolation_grade", "reboot_at_last_retry", "retry_type")
+        ),
+        "sharding": _names(ShardingConfig),
+        "artifacts": _names(DiagnosticsConfig),
+        "sub_plans": None,  # documentation only
+    }
+    return {
+        "name": None,
+        "description": None,
+        "profile": None,
+        "max_concurrent_suites": None,
+        "plan": dict.fromkeys(
+            ("name", "description", "profile", "max_concurrent_suites", "target_completion_hours")
+        ),
+        "devices": _names(DeviceRequirements),
+        "device_requirements": _names(DeviceRequirements),
+        "suites": [suite_keys],
+        "post_execution": {
+            "suite_retry": _names(SuiteRetryPostConfig),
+            "rca": {**_names(RCAPostConfig), "classify_failures": None},
+            "reporting": {
+                **_names(ReportingPostConfig),
+                "notifications": {"slack_webhook": None},
+            },
+        },
+        "ai_rca": defaults["ai_rca"],
+        "triage": defaults["triage"],
+        "jira": defaults["jira"],
+        "artifacts": defaults["artifacts"],
+        "ops": defaults["ops"],
+    }
+
+
+def warn_unknown_keys(data: Any, schema: Any, source: Path, where: str = "") -> List[str]:
+    """Warn about keys the agent does not read (usually typos); returns their paths."""
+    unknown: List[str] = []
+    if isinstance(schema, list) and isinstance(data, list):
+        for i, item in enumerate(data):
+            unknown += warn_unknown_keys(item, schema[0], source, f"{where}[{i}]")
+        return unknown
+    if not isinstance(schema, dict) or not isinstance(data, dict):
+        return unknown
+    for key, value in data.items():
+        path = f"{where}.{key}" if where else str(key)
+        if key not in schema:
+            unknown.append(path)
+            logger.warning("Unknown config key '%s' in %s is ignored (typo?)", path, source)
+        elif schema[key] is not None:
+            unknown += warn_unknown_keys(value, schema[key], source, path)
+    return unknown
 
 
 class ConfigLoader:
@@ -233,7 +473,8 @@ class ConfigLoader:
         with open(self.defaults_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         logger.info("Loaded defaults from %s", self.defaults_path)
-        return data
+        warn_unknown_keys(data, _defaults_schema(), self.defaults_path)
+        return _expand_env(data, self.defaults_path)
 
     def load_plan(self) -> TestPlanConfig:
         if not self.plan_path.exists():
@@ -241,7 +482,8 @@ class ConfigLoader:
 
         defaults = self.load_defaults()
         with open(self.plan_path, encoding="utf-8") as f:
-            plan_data = yaml.safe_load(f) or {}
+            plan_data = _expand_env(yaml.safe_load(f) or {}, self.plan_path)
+        warn_unknown_keys(plan_data, _plan_schema(), self.plan_path)
 
         # Support nested `plan:` metadata block from certification YAML
         plan_meta = plan_data.get("plan") if isinstance(plan_data.get("plan"), dict) else {}
@@ -251,6 +493,9 @@ class ConfigLoader:
             or "Unnamed Plan"
         )
         description = plan_data.get("description") or plan_meta.get("description") or ""
+        profile = str(plan_data.get("profile") or plan_meta.get("profile") or "development").lower()
+        if profile not in PROFILES:
+            raise ConfigError(f"Unknown profile {profile!r} in {self.plan_path}; use one of {PROFILES}")
 
         # Device requirements: accept `devices` or `device_requirements`
         device_raw = plan_data.get("devices") or plan_data.get("device_requirements") or {}
@@ -259,6 +504,9 @@ class ConfigLoader:
             default_device = defaults.get("device", {})
             merged_devices = {
                 "min_battery_level": default_device.get("min_battery_level", 20),
+                "reboot_between_suites": bool(
+                    (defaults.get("execution") or {}).get("reboot_between_suites", False)
+                ),
                 **device_raw,
             }
         else:
@@ -270,6 +518,7 @@ class ConfigLoader:
         ats2 = ATS2Config(**_filter_dataclass_kwargs(ATS2Config, defaults.get("ats2", {})))
 
         post_execution = self._parse_post_execution(defaults, plan_data.get("post_execution") or {})
+        ai_rca = self._parse_ai_rca(defaults, plan_data.get("ai_rca") or {}, post_execution.rca)
 
         default_retry = defaults.get("retry", {})
         default_sharding = defaults.get("sharding", {})
@@ -285,20 +534,112 @@ class ConfigLoader:
                     default_retry=default_retry,
                     default_sharding=default_sharding,
                     default_timeout=default_timeout,
+                    default_diagnostics=defaults.get("diagnostics") or {},
                 )
             )
 
-        return TestPlanConfig(
+        if profile == "certification":
+            self._validate_certification(suites)
+
+        max_concurrent = int(
+            plan_data.get("max_concurrent_suites")
+            or plan_meta.get("max_concurrent_suites")
+            or (defaults.get("execution") or {}).get("max_concurrent_suites")
+            or 1
+        )
+        plan = TestPlanConfig(
             name=name,
             description=description,
+            profile=profile,
+            max_concurrent_suites=max(1, max_concurrent),
+            cooldown_between_suites_secs=int(
+                (defaults.get("execution") or {}).get("cooldown_between_suites_secs", 0) or 0
+            ),
             suites=suites,
             devices=devices,
             post_execution=post_execution,
             paths=paths,
             agent=agent,
             ats2=ats2,
+            ai_rca=ai_rca,
+            device_prep=DevicePrepConfig(
+                **_filter_dataclass_kwargs(DevicePrepConfig, defaults.get("device") or {})
+            ),
+            triage=TriageConfig(
+                **_filter_dataclass_kwargs(
+                    TriageConfig,
+                    _deep_merge(defaults.get("triage") or {}, plan_data.get("triage") or {}),
+                )
+            ),
+            jira=self._parse_jira(defaults, plan_data),
+            artifacts=self._parse_artifacts(defaults, plan_data),
+            ops=OpsConfig(**_filter_dataclass_kwargs(
+                OpsConfig, _deep_merge(defaults.get("ops") or {}, plan_data.get("ops") or {})
+            )),
             raw_defaults=defaults,
         )
+        self._apply_secret_env_overrides(plan)
+        return plan
+
+    @staticmethod
+    def _apply_secret_env_overrides(plan: "TestPlanConfig") -> None:
+        if os.environ.get("XTS_GEMINI_API_KEY"):
+            plan.ai_rca.gemini_api_key = os.environ["XTS_GEMINI_API_KEY"]
+        if os.environ.get("XTS_DATABASE_URL"):
+            plan.agent.database_url = os.environ["XTS_DATABASE_URL"]
+        if os.environ.get("XTS_WIFI_PASSWORD"):
+            plan.device_prep.wifi_password = os.environ["XTS_WIFI_PASSWORD"]
+        if os.environ.get("XTS_ATS2_API_KEY"):
+            plan.ats2.api_key = os.environ["XTS_ATS2_API_KEY"]
+        if os.environ.get("XTS_SLACK_WEBHOOK"):
+            reporting = plan.post_execution.reporting
+            # Copy: the dict may be shared with raw_defaults
+            reporting.notifications = {
+                **(reporting.notifications or {}),
+                "slack_webhook": os.environ["XTS_SLACK_WEBHOOK"],
+            }
+
+    def _validate_certification(self, suites: List[SuiteConfig]) -> None:
+        """Filtered or partial runs are not valid certification results."""
+        problems = []
+        for suite in suites:
+            if not suite.enabled:
+                continue
+            for attr in ("exclude_filters", "include_filters", "modules"):
+                values = getattr(suite, attr)
+                if values:
+                    problems.append(f"{suite.name}.{attr} has {len(values)} entr(y/ies)")
+        if problems:
+            raise ConfigError(
+                f"{self.plan_path} is profile: certification but restricts the test set "
+                f"({'; '.join(problems)}). Move filters to a development plan and track "
+                "known failures as waivers instead."
+            )
+
+    @staticmethod
+    def _parse_artifacts(defaults: dict, plan_data: dict):
+        from xts_agent.storage.artifacts import ArtifactConfig
+
+        merged = _deep_merge(defaults.get("artifacts") or {}, plan_data.get("artifacts") or {})
+        return ArtifactConfig(**_filter_dataclass_kwargs(ArtifactConfig, merged))
+
+    @staticmethod
+    def _parse_jira(defaults: dict, plan_data: dict):
+        from xts_agent.triage.jira_filer import JiraConfig
+
+        merged = _deep_merge(defaults.get("jira") or {}, plan_data.get("jira") or {})
+        return JiraConfig(**_filter_dataclass_kwargs(JiraConfig, merged))
+
+    @staticmethod
+    def _parse_ai_rca(defaults: dict, plan_ai_rca: dict, rca: RCAPostConfig) -> AiRcaConfig:
+        """Plan ``ai_rca`` overrides defaults; legacy ``rca.ai_powered`` still enables it."""
+        merged = _deep_merge(defaults.get("ai_rca") or {}, plan_ai_rca)
+        ai_rca = AiRcaConfig(**_filter_dataclass_kwargs(AiRcaConfig, merged))
+        if rca.ai_powered and not ai_rca.enabled:
+            ai_rca.enabled = True
+        if not ai_rca.gemini_api_key and rca.ai_api_key:
+            ai_rca.gemini_api_key = rca.ai_api_key
+        return ai_rca
 
     def _parse_post_execution(self, defaults: dict, plan_post: dict) -> PostExecutionConfig:
         default_retry = defaults.get("retry", {})
@@ -314,23 +655,11 @@ class ConfigLoader:
             },
             plan_post.get("suite_retry") or {},
         )
-        agent_retry_src = _deep_merge(
-            {
-                "enabled": default_retry.get("agent_retry", {}).get("enabled", True),
-                "max_retries": default_retry.get("agent_retry", {}).get("max_retries", 2),
-                "classify_before_retry": default_retry.get("agent_retry", {}).get(
-                    "classify_before_retry", True
-                ),
-                "rules": {},
-            },
-            plan_post.get("agent_retry") or {},
-        )
         rca_src = _deep_merge(
             {
                 "enabled": default_rca.get("enabled", True),
                 "ai_powered": default_rca.get("ai_powered", False),
                 "failure_classification": default_rca.get("classify_failures", True),
-                "generate_report": default_rca.get("generate_report", True),
                 "baseline_path": "",
                 "patterns_file": default_rca.get(
                     "patterns_file", "config/known_failures/patterns.yaml"
@@ -360,6 +689,9 @@ class ConfigLoader:
             junit_xml="junit" in formats,
             json_summary="json" in formats,
             regression_report=bool(reporting_src.get("regression_report", False)),
+            junit_detail=str(
+                reporting_src.get("junit_detail") or default_reporting.get("junit_detail") or "failures"
+            ),
             notifications=reporting_src.get("notifications")
             or default_reporting.get("notifications")
             or {},
@@ -368,9 +700,6 @@ class ConfigLoader:
         return PostExecutionConfig(
             suite_retry=SuiteRetryPostConfig(
                 **_filter_dataclass_kwargs(SuiteRetryPostConfig, suite_retry_src)
-            ),
-            agent_retry=AgentRetryPostConfig(
-                **_filter_dataclass_kwargs(AgentRetryPostConfig, agent_retry_src)
             ),
             rca=RCAPostConfig(**_filter_dataclass_kwargs(RCAPostConfig, rca_src)),
             reporting=reporting,
@@ -384,6 +713,7 @@ class ConfigLoader:
         default_retry: dict,
         default_sharding: dict,
         default_timeout: float,
+        default_diagnostics: Optional[dict] = None,
     ) -> SuiteConfig:
         name = str(suite_data.get("name", "unknown"))
         name_lower = name.lower()
@@ -462,6 +792,15 @@ class ConfigLoader:
                     default_sharding.get("max_shard_count", 16),
                 )
             ),
+            token_sharding=bool(
+                sharding_raw.get("token_sharding", default_sharding.get("token_sharding", False))
+            ),
+        )
+        diagnostics = DiagnosticsConfig(
+            **_filter_dataclass_kwargs(
+                DiagnosticsConfig,
+                _deep_merge(default_diagnostics or {}, suite_data.get("artifacts") or {}),
+            )
         )
 
         return SuiteConfig(
@@ -479,4 +818,5 @@ class ConfigLoader:
             modules=list(suite_data.get("modules") or []),
             retry=retry,
             sharding=sharding,
+            diagnostics=diagnostics,
         )

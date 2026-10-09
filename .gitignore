@@ -12,9 +12,9 @@ build/
 .pytest_cache/
 
 # Generated monitor page (created by start_web_monitor.sh)
-monitor_web/index.html
-monitor_web/server.pid
-monitor_web/server.out
 
 # Local TradeFed backups from env validator
 *.bak
+.venv-check/
+.mypy_cache/
+.ruff_cache/

@@ -1,5 +1,6 @@
 name: "CATBox Functional"
 description: "Manual CI job — CATBox functional plan"
+profile: certification
 devices:
   min_devices: 1
 suites:

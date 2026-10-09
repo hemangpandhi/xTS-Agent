@@ -1,5 +1,6 @@
 name: "VTS Only"
 description: "Manual CI job — VTS suite only"
+profile: certification
 devices:
   min_devices: 1
 suites:

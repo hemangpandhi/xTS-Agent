@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
+import functools
 import logging
-import time
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence
 
 from xts_agent.config_loader import SuiteConfig
-from xts_agent.results.result_aggregator import ResultAggregator
-from xts_agent.results.result_parser import ResultParser
+from xts_agent.execution import cancel
+from xts_agent.results.result_parser import (
+    ResultParser,
+    derive_suite_status,
+    has_unexecuted_modules,
+)
+
+if TYPE_CHECKING:  # runtime import would be circular
+    from xts_agent.execution.test_plan_executor import SuiteResult
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class RetryResult:
-    tests_retried: int
-    tests_passed_on_retry: int
-    tests_still_failing: int
-    total_retry_attempts: int
 
 
 class RetryManager:
@@ -33,12 +32,15 @@ class RetryManager:
         self.retry_history: List[Dict[str, Any]] = []
 
     def should_retry(self, suite_result: Any, attempt: int, max_retries: int) -> bool:
-        if suite_result.status == "PASSED":
+        if suite_result.status in ("PASSED", "DRY_RUN"):
             return False
-        if not suite_result.session_id:
+        if suite_result.session_id is None:
             logger.warning("Cannot suite-retry without session_id")
             return False
         if attempt >= max_retries:
+            return False
+        if cancel.cancelled():
+            logger.warning("Run cancelled; no further retries for %s", suite_result.name)
             return False
         return True
 
@@ -49,8 +51,14 @@ class RetryManager:
         suite_config: SuiteConfig,
         device_serials: Sequence[str],
         log_dir: str | Path,
-    ) -> Any:
-        """Run TradeFed `run retry` up to suite max_retries, merging PASS-wins results."""
+        on_attempt: Optional[Callable[[Any], None]] = None,
+    ) -> SuiteResult:
+        """Run TradeFed `run retry` up to suite max_retries.
+
+        Each retry session's test_result.xml is cumulative (TradeFed carries the
+        previous session's results forward), so the latest session is the source
+        of truth and the next retry always targets it.
+        """
         # Suite max_retries == 0 is an explicit opt-out (e.g. smoke plans)
         max_retries = max(int(suite_config.retry.max_retries), 0)
         post = getattr(self.config, "post_execution", None)
@@ -70,9 +78,6 @@ class RetryManager:
 
         attempt = 0
         current = suite_result
-        parsed_sessions = []
-        if current.details is not None:
-            parsed_sessions.append(current.details)
 
         while self.should_retry(current, attempt, max_retries):
             attempt += 1
@@ -85,70 +90,91 @@ class RetryManager:
             )
 
             if self.isolation_handler and device_serials:
-                grade = suite_config.retry.isolation_grade
-                for serial in device_serials:
-                    self.isolation_handler.apply_isolation(serial, grade)
+                isolate = functools.partial(
+                    self.isolation_handler.apply_isolation, grade=suite_config.retry.isolation_grade
+                )
+                # Isolate all shards concurrently (each reboot can take minutes)
+                with ThreadPoolExecutor(max_workers=min(16, len(device_serials))) as pool:
+                    list(pool.map(isolate, device_serials))
 
-            if cooldown > 0:
-                time.sleep(min(cooldown, 300))
+            if cooldown > 0 and cancel.wait(min(cooldown, 300)):
+                break
 
+            # Older result dirs may have been pruned since the session was
+            # recorded, which renumbers sessions: trust the dir, not the number
+            if current.results_dir and hasattr(runner, "session_index_from_dir"):
+                index = runner.session_index_from_dir(current.results_dir)
+                if index is not None and index != current.session_id:
+                    logger.warning(
+                        "Session for %s is now %s (was %s; older results pruned?)",
+                        Path(current.results_dir).name, index, current.session_id,
+                    )
+                    current.session_id = index
+            # Runs with unexecuted modules must also re-run NOT_EXECUTED ones,
+            # even when they are FAILED (failures outrank INCOMPLETE)
+            attempt_retry_type: Optional[str] = retry_type
+            if has_unexecuted_modules(current) and str(retry_type).upper() == "FAILED":
+                attempt_retry_type = None
             cmd = runner.build_retry_command(
                 session_id=current.session_id,
-                retry_type=retry_type,
+                retry_type=attempt_retry_type,
                 device_serials=list(device_serials),
             )
-            exec_res = runner.execute(
-                cmd,
-                timeout_hours=suite_config.timeout_hours,
-                log_dir=log_dir,
-            )
+            try:
+                exec_res = runner.execute(
+                    cmd,
+                    timeout_hours=suite_config.timeout_hours,
+                    log_dir=log_dir,
+                )
+            except cancel.RunCancelled:
+                break
 
-            # Rebuild SuiteResult-like object via caller helpers when possible
             from xts_agent.execution.test_plan_executor import SuiteResult
 
-            status = "PASSED" if exec_res.success else "FAILED"
-            pass_c = fail_c = skip_c = 0
             details = None
-            results_dir = exec_res.results_dir or current.results_dir
             if exec_res.results_dir:
                 xml_path = Path(exec_res.results_dir) / "test_result.xml"
-                if xml_path.exists():
-                    try:
-                        details = ResultParser().parse_xml(xml_path)
-                        parsed_sessions.append(details)
-                        pass_c = details.summary.get("pass", 0)
-                        fail_c = details.summary.get("fail", 0)
-                        skip_c = details.summary.get("skip", 0)
-                        if fail_c > 0:
-                            status = "FAILED"
-                    except Exception as exc:
-                        logger.error("Retry result parse failed: %s", exc)
-
-            if parsed_sessions:
                 try:
-                    merged = ResultAggregator().merge_results(parsed_sessions)
-                    details = merged
-                    pass_c = merged.summary.get("pass", 0)
-                    fail_c = merged.summary.get("fail", 0)
-                    skip_c = merged.summary.get("skip", 0)
-                    status = "FAILED" if fail_c > 0 else "PASSED"
+                    details = ResultParser().parse_xml(xml_path)
                 except Exception as exc:
-                    logger.warning("Could not merge retry results: %s", exc)
+                    logger.error("Retry result parse failed: %s", exc)
 
+            if details is None or exec_res.session_id is None:
+                logger.error(
+                    "Retry %s/%s for %s produced no usable session; stopping retries",
+                    attempt,
+                    max_retries,
+                    current.name,
+                )
+                self.retry_history.append(
+                    {
+                        "suite": current.name,
+                        "attempt": attempt,
+                        "session_id": None,
+                        "status": "NO_RESULTS",
+                        "fail_count": current.fail_count,
+                    }
+                )
+                break
+
+            status, reason = derive_suite_status(details, exec_res.success)
             current = SuiteResult(
                 name=current.name,
                 status=status,
-                pass_count=pass_c,
-                fail_count=fail_c,
-                skip_count=skip_c,
+                pass_count=details.summary.get("pass", 0),
+                fail_count=details.summary.get("fail", 0),
+                skip_count=details.summary.get("skip", 0),
                 duration=current.duration + exec_res.duration,
-                session_id=exec_res.session_id or current.session_id,
-                results_dir=results_dir or "",
+                session_id=exec_res.session_id,
+                results_dir=exec_res.results_dir,
                 retry_count=attempt,
-                details=details if details is not None else current.details,
+                details=details,
                 log_path=exec_res.log_path,
                 device_serials=list(device_serials),
+                error_message=reason,
             )
+            if on_attempt is not None:
+                on_attempt(current)
             self.retry_history.append(
                 {
                     "suite": current.name,
@@ -175,32 +201,6 @@ class RetryManager:
             session_id, retry_type, device_serials=device_serials
         )
         return self.tradefed_runner.execute(cmd, timeout_hours=timeout_hours, log_dir=log_dir)
-
-    def execute_agent_retry(
-        self,
-        failed_tests: list,
-        device_manager: Any,
-        classifications: Optional[Dict[str, str]] = None,
-    ) -> RetryResult:
-        """Filter retryable failures based on RCA classifications when provided."""
-        classifications = classifications or {}
-        skip_classes = {"PRODUCT_BUG", "TEST_BUG"}
-        retried = [
-            t
-            for t in failed_tests
-            if classifications.get(getattr(t, "test_name", ""), "") not in skip_classes
-        ]
-        logger.info(
-            "Agent retry candidates: %s (of %s failed)",
-            len(retried),
-            len(failed_tests),
-        )
-        return RetryResult(
-            tests_retried=len(retried),
-            tests_passed_on_retry=0,
-            tests_still_failing=len(failed_tests),
-            total_retry_attempts=0,
-        )
 
     def get_retry_summary(self) -> Dict[str, Any]:
         return {

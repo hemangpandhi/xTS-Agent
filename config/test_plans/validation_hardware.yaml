@@ -1,0 +1,28 @@
+# Agent validation on physical AAOS devices: Pixel Tablet with an
+# aosp_tangorpro_car build, then the OEM head unit (docs/VALIDATION.md,
+# stages B and C). Not a certification run; use full_cts_hardware.yaml
+# (profile: certification) for the full comparison pass.
+name: "Validation - Physical AAOS"
+description: "Agent validation: CTS subset on physical AAOS devices"
+profile: development
+devices:
+  min_devices: 1
+  device_type: aaos
+  prepare: true            # stay awake, screen lock off, Wi-Fi join, install verifier off
+suites:
+  - name: cts
+    priority: 1
+    plan: cts
+    enabled: true
+    include_filters:
+      - CtsUtilTestCases
+      - CtsTextTestCases
+      - CtsJniTestCases
+      - CtsCarTestCases
+      - CtsNetTestCases       # needs the device on the test Wi-Fi
+    sharding:
+      shard_count: auto
+    retry:
+      max_retries: 1
+      strategy: RETRY_ANY_FAILURE
+      isolation_grade: REBOOT_ISOLATED  # physical devices are never wiped

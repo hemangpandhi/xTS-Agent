@@ -1,45 +1,48 @@
-"""Rule-based failure classification."""
+"""Rule-based failure classification.
+
+Only unambiguous infrastructure/environment signals are classified here.
+Anything else returns ``None`` and stays PRODUCT_BUG (the safe default for
+certification): assertion failures, crashes and timeouts in CTS are how the
+suite reports wrong product behavior, so they must not be filed as test bugs
+or infra noise. TEST_BUG / FLAKY_TEST come from curated patterns or history.
+"""
 
 from __future__ import annotations
+
+from typing import Optional
 
 from xts_agent.results.result_parser import TestCaseResult
 
 from .rca_engine import FailureType
 
+INFRA_SIGNALS = (
+    "devicenotavailableexception",
+    "deviceunresponsiveexception",
+    "shellcommandunresponsiveexception",
+    "device disconnected",
+    "device offline",
+    "device unresponsive",
+    "adb timeout",
+    "adb connection",
+    "connection reset by peer",
+)
+
+ENVIRONMENT_SIGNALS = (
+    "install_failed_insufficient_storage",
+    "unknownhostexception",
+    "no internet connection",
+    "not connected to wifi",
+)
+
 
 class FailureClassifier:
     def classify(
         self, test_case: TestCaseResult, logcat: str, device_state: dict
-    ) -> FailureType:
-        msg = (test_case.message or "").lower()
-        stack = (test_case.stack_trace or "").lower()
-        log = (logcat or "").lower()
+    ) -> Optional[FailureType]:
+        text = f"{test_case.message or ''}\n{test_case.stack_trace or ''}".lower()
 
-        if any(
-            s in msg
-            for s in (
-                "device disconnected",
-                "adb timeout",
-                "adb connection",
-                "not found",
-                "device unresponsive",
-            )
-        ):
+        if device_state.get("offline") or any(s in text for s in INFRA_SIGNALS):
             return FailureType.INFRASTRUCTURE_FAILURE
-        if "outofmemory" in stack or "anr in" in log or "fatal exception" in log:
-            return FailureType.INFRASTRUCTURE_FAILURE
-        if "install_failed" in msg or "unknownhost" in stack:
+        if any(s in text for s in ENVIRONMENT_SIGNALS):
             return FailureType.ENVIRONMENT_ISSUE
-        if "java.lang.assertionerror" in stack and "test" in stack:
-            return FailureType.TEST_BUG
-        if "flaky" in msg or ("timeout" in msg and "intermittent" in msg):
-            return FailureType.FLAKY_TEST
-        if "timeout" in msg:
-            return FailureType.FLAKY_TEST
-        if "network" in msg or "wifi" in msg:
-            return FailureType.ENVIRONMENT_ISSUE
-
-        if device_state.get("offline"):
-            return FailureType.INFRASTRUCTURE_FAILURE
-
-        return FailureType.PRODUCT_BUG
+        return None

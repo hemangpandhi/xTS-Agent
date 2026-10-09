@@ -6,7 +6,7 @@ import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,13 @@ class TestCaseResult:
     duration: Optional[int] = None
     rca_category: Optional[str] = None
     rca_recommendation: Optional[str] = None
+    # TradeFed module id ("<abi> <module>"); the same test runs once per ABI
+    module: str = ""
+
+    @property
+    def test_id(self) -> str:
+        test = f"{self.class_name}#{self.test_name}"
+        return f"{self.module} {test}" if self.module else test
 
 
 @dataclass
@@ -31,6 +38,11 @@ class ModuleResult:
     fail_count: int
     runtime: int
     test_cases: List[TestCaseResult] = field(default_factory=list)
+    abi: str = ""
+
+    @property
+    def module_id(self) -> str:
+        return f"{self.abi} {self.name}" if self.abi else self.name
 
 
 @dataclass
@@ -43,6 +55,66 @@ class TestResults:
     summary: Dict[str, int] = field(
         default_factory=lambda: {"pass": 0, "fail": 0, "skip": 0, "error": 0}
     )
+    modules_done: int = 0
+    modules_total: int = 0
+    # Invocation start (epoch ms) from <Result start=...>; orders runs in history
+    start_ms: int = 0
+    end_ms: int = 0
+    devices: List[str] = field(default_factory=list)  # <Result devices=...>
+
+    @property
+    def is_complete(self) -> bool:
+        return self.modules_total == 0 or self.modules_done >= self.modules_total
+
+
+def has_unexecuted_modules(suite_result) -> bool:
+    """True when a suite's results show modules that never ran.
+
+    Status alone is not enough: failures take precedence over INCOMPLETE, so
+    a FAILED suite can still have hundreds of modules left to execute.
+    """
+    details = getattr(suite_result, "details", None)
+    if details is not None and hasattr(details, "is_complete"):
+        return not details.is_complete
+    return getattr(suite_result, "status", "") == "INCOMPLETE"
+
+
+def derive_suite_status(parsed: Optional[TestResults], exec_success: bool) -> Tuple[str, str]:
+    """Return ``(status, reason)`` for a suite from its parsed results.
+
+    The TradeFed exit code alone is never enough for PASSED: the run must have
+    produced results, executed tests, completed every module and failed none.
+    """
+    if parsed is None:
+        return "FAILED", "TradeFed produced no test_result.xml"
+    fail = parsed.summary.get("fail", 0)
+    error = parsed.summary.get("error", 0)
+    if fail or error:
+        return "FAILED", f"{fail} test(s) failed, {error} errored"
+    if not parsed.is_complete:
+        return (
+            "INCOMPLETE",
+            f"only {parsed.modules_done} of {parsed.modules_total} modules completed",
+        )
+    if parsed.summary.get("pass", 0) + parsed.summary.get("skip", 0) == 0:
+        return "FAILED", "no tests were executed"
+    if not exec_success:
+        logger.warning("TradeFed exited non-zero but results are complete with no failures")
+    return "PASSED", ""
+
+
+def overall_status(statuses: Iterable[str]) -> str:
+    """Combine suite statuses: FAILED > INCOMPLETE > PASSED; all DRY_RUN => DRY_RUN."""
+    statuses = list(statuses)
+    if not statuses:
+        return "FAILED"
+    if all(s == "DRY_RUN" for s in statuses):
+        return "DRY_RUN"
+    if any(s not in ("PASSED", "INCOMPLETE", "DRY_RUN") for s in statuses):
+        return "FAILED"
+    if "INCOMPLETE" in statuses:
+        return "INCOMPLETE"
+    return "PASSED"
 
 
 class ResultParser:
@@ -66,6 +138,12 @@ class ResultParser:
             start_time=root.attrib.get("start_display", ""),
             end_time=root.attrib.get("end_display", ""),
         )
+        try:
+            results.start_ms = int(root.attrib.get("start", 0) or 0)
+            results.end_ms = int(root.attrib.get("end", 0) or 0)
+        except ValueError:
+            pass
+        results.devices = [d for d in root.attrib.get("devices", "").split(",") if d]
 
         build_info = root.find("Build")
         if build_info is not None:
@@ -89,6 +167,8 @@ class ResultParser:
                 )
             )
             results.summary["error"] = int(summary.attrib.get("error", 0))
+            results.modules_done = int(summary.attrib.get("modules_done", 0) or 0)
+            results.modules_total = int(summary.attrib.get("modules_total", 0) or 0)
 
         pass_from_cases = fail_from_cases = skip_from_cases = error_from_cases = 0
 
@@ -99,22 +179,26 @@ class ResultParser:
                 pass_count=int(mod.attrib.get("pass", 0)),
                 fail_count=int(mod.attrib.get("fail", 0)),
                 runtime=int(mod.attrib.get("runtime", 0) or 0),
+                abi=mod.attrib.get("abi", ""),
             )
             for tc in mod.findall(".//TestCase"):
                 for t in tc.findall("Test"):
-                    status = (t.attrib.get("result") or "PASS").upper()
                     fail = t.find("Failure")
+                    # The result attribute is authoritative: TradeFed also attaches
+                    # <Failure> to ASSUMPTION_FAILURE tests, which are skips.
+                    default = "FAIL" if fail is not None else "PASS"
+                    status = (t.attrib.get("result") or default).upper()
                     msg = None
                     stack = None
                     rca_category = None
                     rca_recommendation = None
                     if fail is not None:
-                        status = "FAIL"
                         msg = fail.attrib.get("message")
                         stack_elem = fail.find("StackTrace")
                         if stack_elem is not None:
                             stack = stack_elem.text or ""
-                            rca_category, rca_recommendation = self._inline_rca(stack)
+                            if status in ("FAIL", "FAILED", "FAILURE", "ERROR"):
+                                rca_category, rca_recommendation = self._inline_rca(stack)
 
                     if status in ("PASS", "PASSED"):
                         status = "PASS"
@@ -138,9 +222,14 @@ class ResultParser:
                             stack_trace=stack,
                             rca_category=rca_category,
                             rca_recommendation=rca_recommendation,
+                            module=mod_res.module_id,
                         )
                     )
             results.modules.append(mod_res)
+
+        if summary is None or "modules_total" not in summary.attrib:
+            results.modules_total = len(results.modules)
+            results.modules_done = sum(1 for m in results.modules if m.done)
 
         # If Summary omitted skip counts but cases were enumerated, prefer case totals
         case_total = pass_from_cases + fail_from_cases + skip_from_cases + error_from_cases

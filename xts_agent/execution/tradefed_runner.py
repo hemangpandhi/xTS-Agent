@@ -10,9 +10,52 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Callable, ClassVar, Dict, List, Optional, Sequence, Set
+
+from xts_agent.execution import cancel
+from xts_agent.execution.progress import ProgressMonitor, TradefedProgress
 
 logger = logging.getLogger(__name__)
+
+PIDFILE_GLOB = "tradefed_*.pid"
+
+
+def _is_tradefed_process(pid: int) -> bool:
+    """Guard against PID reuse: only treat live TradeFed processes as ours."""
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+    return b"tradefed" in cmdline
+
+
+def kill_recorded_tradefed(pid_dir: str | Path, grace_secs: float = 15) -> List[int]:
+    """Kill only the TradeFed process groups this agent recorded under ``pid_dir``.
+
+    Unlike ``pkill -f tradefed`` this never touches TradeFed runs started by
+    other jobs or users on the same host.
+    """
+    killed: List[int] = []
+    for pidfile in Path(pid_dir).glob(PIDFILE_GLOB):
+        try:
+            pgid = int(pidfile.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            pidfile.unlink(missing_ok=True)
+            continue
+        if _is_tradefed_process(pgid):
+            logger.info("Killing recorded TradeFed process group %s", pgid)
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+                deadline = time.time() + grace_secs
+                while time.time() < deadline and _is_tradefed_process(pgid):
+                    time.sleep(0.5)
+                if _is_tradefed_process(pgid):
+                    os.killpg(pgid, signal.SIGKILL)
+                killed.append(pgid)
+            except (ProcessLookupError, PermissionError) as exc:
+                logger.warning("Could not kill process group %s: %s", pgid, exc)
+        pidfile.unlink(missing_ok=True)
+    return killed
 
 
 @dataclass
@@ -31,7 +74,7 @@ class ExecutionResult:
 class TradefedRunner:
     """Wrapper for the TradeFed CLI."""
 
-    TF_EXIT_CODES = {
+    TF_EXIT_CODES: ClassVar[Dict[int, str]] = {
         0: "Success",
         1: "Configuration Error",
         2: "Device Not Available",
@@ -39,10 +82,20 @@ class TradefedRunner:
         4: "Timeout",
     }
 
+    # Printed by TradeFed at the end of a completed invocation
+    RESULT_DIR_PATTERN = re.compile(r"^.*RESULT DIRECTORY\s*:\s*(\S+)\s*$", re.MULTILINE)
+
     def __init__(self, suite_path: str | Path, command_name: str):
         self.suite_path = Path(suite_path)
         self.command_name = command_name
         self._process: Optional[subprocess.Popen] = None
+        # Heartbeat: progress line every N secs, warning after M quiet secs
+        self.progress_interval_secs: float = 600
+        self.stall_warning_secs: float = 3600
+        self.on_progress: Optional[Callable[[TradefedProgress], None]] = None
+        # Device lease fds inherited by TradeFed, so devices stay locked while
+        # it runs even if the agent process dies
+        self.lease_fds: Sequence[int] = ()
 
     @property
     def tools_dir(self) -> Path:
@@ -71,6 +124,8 @@ class TradefedRunner:
         extra_args: Optional[Sequence[str]] = None,
         device_serials: Optional[Sequence[str]] = None,
         modules: Optional[Sequence[str]] = None,
+        diagnostics: Optional[dict] = None,
+        sharding_options: Optional[dict] = None,
     ) -> List[str]:
         cmd = self.resolve_command_prefix() + ["run", "commandAndExit", plan]
         retry_config = retry_config or {}
@@ -82,6 +137,14 @@ class TradefedRunner:
 
         if shard_count > 1:
             cmd.extend(["--shard-count", str(shard_count)])
+            # Only emit flags that differ from TradeFed's defaults
+            sharding_options = sharding_options or {}
+            if sharding_options.get("dynamic_sharding") is False:
+                cmd.append("--no-dynamic-sharding")
+            if sharding_options.get("intra_module_sharding") is False:
+                cmd.append("--no-intra-module-sharding")
+            if sharding_options.get("token_sharding"):
+                cmd.append("--enable-token-sharding")
 
         # Pin allocated devices so TradeFed does not grab unrelated ADB targets
         for serial in device_serials:
@@ -102,7 +165,19 @@ class TradefedRunner:
             if retry_config.get("reboot_at_last_retry"):
                 cmd.append("--reboot-at-last-retry")
 
-        cmd.extend(["--logcat-on-failure", "--screenshot-on-failure"])
+        diagnostics = diagnostics if diagnostics is not None else {
+            "logcat_on_failure": True,
+            "screenshot_on_failure": True,
+        }
+        if diagnostics.get("logcat_on_failure"):
+            cmd.append("--logcat-on-failure")
+            if diagnostics.get("max_logcat_size_mb"):
+                size = int(diagnostics["max_logcat_size_mb"]) * 1024 * 1024
+                cmd.extend(["--logcat-on-failure-size", str(size)])
+        if diagnostics.get("screenshot_on_failure"):
+            cmd.append("--screenshot-on-failure")
+        if diagnostics.get("bugreport_on_failure"):
+            cmd.append("--bugreport-on-failure")
 
         for f in exclude_filters:
             cmd.extend(["--exclude-filter", f])
@@ -117,18 +192,18 @@ class TradefedRunner:
     def build_retry_command(
         self,
         session_id: int,
-        retry_type: str = "FAILED",
+        retry_type: Optional[str] = "FAILED",
         device_serials: Optional[Sequence[str]] = None,
     ) -> List[str]:
-        cmd = self.resolve_command_prefix() + [
-            "run",
-            "retry",
-            "--retry",
-            str(session_id),
-            "--retry-type",
-            retry_type,
-        ]
-        for serial in device_serials or []:
+        cmd = self.resolve_command_prefix() + ["run", "retry", "--retry", str(session_id)]
+        # TradeFed accepts FAILED or NOT_EXECUTED; omitting the flag retries both
+        if retry_type and str(retry_type).upper() != "BOTH":
+            cmd.extend(["--retry-type", str(retry_type).upper()])
+        serials = list(device_serials or [])
+        # Without --shard-count TradeFed runs the whole retry on one device
+        if len(serials) > 1:
+            cmd.extend(["--shard-count", str(len(serials))])
+        for serial in serials:
             cmd.extend(["-s", serial])
         return cmd
 
@@ -142,7 +217,8 @@ class TradefedRunner:
         log_dir: str | Path,
         env: Optional[dict] = None,
     ) -> ExecutionResult:
-        log_path = Path(log_dir) / f"tradefed_run_{int(time.time())}.log"
+        # time_ns + pid keeps concurrent/back-to-back runs from sharing a log file
+        log_path = Path(log_dir) / f"tradefed_run_{time.time_ns()}_{os.getpid()}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         start_time = time.time()
@@ -150,12 +226,16 @@ class TradefedRunner:
         session_id: Optional[int] = None
         results_dir: Optional[str] = None
         return_code = -1
-        success = False
         output_excerpt = ""
 
         run_env = os.environ.copy()
         if env:
             run_env.update(env)
+
+        # Never start TradeFed once the run is being cancelled
+        cancel.check()
+        # Result dirs that existed before this invocation; the new one is ours.
+        before = self.snapshot_result_dirs()
 
         try:
             with open(log_path, "w", encoding="utf-8") as log_file:
@@ -164,43 +244,71 @@ class TradefedRunner:
                 self._process = subprocess.Popen(
                     command,
                     cwd=cwd,
+                    stdin=subprocess.DEVNULL,
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     text=True,
                     env=run_env,
                     start_new_session=True,
+                    pass_fds=tuple(self.lease_fds),
                 )
-                self._process.wait(timeout=timeout_seconds)
+                # start_new_session => pgid == pid; recorded for scoped cleanup
+                pidfile = log_path.parent / f"tradefed_{self._process.pid}.pid"
+                pidfile.write_text(str(self._process.pid), encoding="utf-8")
+                cancel.register(self._process)
+                if cancel.cancelled():
+                    # Signal arrived between check() and register()
+                    os.killpg(self._process.pid, signal.SIGTERM)
+                monitor = None
+                if self.progress_interval_secs > 0:
+                    monitor = ProgressMonitor(
+                        log_path, self.progress_interval_secs, self.stall_warning_secs, self.on_progress
+                    )
+                    monitor.start()
+                try:
+                    self._process.wait(timeout=timeout_seconds)
+                finally:
+                    if monitor is not None:
+                        monitor.stop()
+                    cancel.unregister(self._process)
+                    if self._process.poll() is not None:
+                        pidfile.unlink(missing_ok=True)
 
             return_code = self._process.returncode if self._process else -1
-            success = return_code == 0
-            if return_code in self.TF_EXIT_CODES:
+            if cancel.cancelled():
+                logger.warning("TradeFed stopped by cancel (exit %s)", return_code)
+            elif return_code in self.TF_EXIT_CODES:
                 logger.info(
                     "TradeFed exited %s (%s)",
                     return_code,
                     self.TF_EXIT_CODES[return_code],
                 )
-
-            output = log_path.read_text(encoding="utf-8", errors="replace")
-            output_excerpt = output[-4000:] if output else ""
-            session_id = self.get_session_id(output)
-            results_dir = self.find_results_dir(output)
-
         except subprocess.TimeoutExpired:
             logger.error("TradeFed execution timed out after %s hours", timeout_hours)
             self.kill()
             return_code = 4
-            success = False
         except Exception as exc:
             logger.error("TradeFed execution failed: %s", exc)
             self.kill()
             return_code = -2
-            success = False
+
+        # Post-processing must never turn a finished run into an execution error.
+        # A timed-out run may still have flushed partial results worth retrying.
+        try:
+            output = log_path.read_text(encoding="utf-8", errors="replace")
+            output_excerpt = output[-4000:] if output else ""
+            results_dir = self.find_results_dir(output, before=before)
+            if results_dir:
+                session_id = self.resolve_session_id(results_dir)
+            else:
+                logger.warning("No TradeFed results directory found for %s", log_path)
+        except Exception as exc:
+            logger.error("Failed to locate TradeFed results for %s: %s", log_path, exc)
 
         duration = time.time() - start_time
         self._process = None
         return ExecutionResult(
-            success=success,
+            success=return_code == 0,
             session_id=session_id,
             return_code=return_code,
             duration=duration,
@@ -209,66 +317,113 @@ class TradefedRunner:
             output_excerpt=output_excerpt,
         )
 
-    def find_results_dir(self, output: str) -> Optional[str]:
-        """Locate TradeFed results directory from log output or known layouts."""
-        patterns = [
-            r"Saved log(?:s)? to[: ]+(.+)",
-            r"RESULTS? DIR(?:ECTORY)?[: =]+(.+)",
-            r"Test results saved to[: ]+(.+)",
-            r"Result XML path[: ]+(.+)/test_result\.xml",
-            r"Generated suite summary report at (.+)/",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, output, re.IGNORECASE)
-            if match:
-                candidate = match.group(1).strip().strip("'\"")
-                path = Path(candidate)
-                if path.is_file() and path.name == "test_result.xml":
-                    return str(path.parent)
-                if path.is_dir():
-                    return str(path)
-                # Even if not yet flushed, return the path TradeFed reported
-                if candidate:
-                    return candidate
-
-        # Fall back: newest results dir under the suite package
-        for results_root in (
-            self.suite_path / "results",
-            self.suite_path / "android-" + self.suite_path.name.replace("android-", "") / "results",
-            self.tools_dir.parent / "results",
-        ):
-            found = self._newest_result_dir(results_root)
-            if found:
-                return found
-        return None
+    @property
+    def results_roots(self) -> List[Path]:
+        """Directories where TradeFed writes per-invocation result dirs."""
+        roots: List[Path] = []
+        for root in (self.suite_path / "results", self.tools_dir.parent / "results"):
+            if root not in roots:
+                roots.append(root)
+        return roots
 
     @staticmethod
-    def _newest_result_dir(results_root: Path) -> Optional[str]:
+    def _session_dirs(results_root: Path) -> List[Path]:
+        """Result dirs TradeFed counts as sessions (skips the ``latest`` symlink)."""
         if not results_root.is_dir():
-            return None
-        candidates = []
-        for child in results_root.iterdir():
-            if child.is_dir() and (child / "test_result.xml").exists():
-                candidates.append(child)
-            elif child.name == "test_result.xml":
-                return str(results_root)
-        # Also accept timestamp dirs without waiting for xml if newest
-        if not candidates:
-            candidates = [c for c in results_root.iterdir() if c.is_dir()]
-        if not candidates:
-            return None
-        newest = max(candidates, key=lambda p: p.stat().st_mtime)
-        return str(newest)
+            return []
+        return sorted(
+            (
+                child
+                for child in results_root.iterdir()
+                if child.is_dir()
+                and not child.is_symlink()
+                and (child / "test_result.xml").exists()
+            ),
+            key=lambda p: p.name,
+        )
 
-    def get_session_id(self, output: str) -> Optional[int]:
-        for pattern in (
-            r"Session (\d+) completed",
-            r"session[_ ]id[: =]+(\d+)",
-            r"Invocation\[(\d+)\]",
-        ):
-            match = re.search(pattern, output, re.IGNORECASE)
-            if match:
-                return int(match.group(1))
+    def snapshot_result_dirs(self) -> Set[str]:
+        snapshot: Set[str] = set()
+        for root in self.results_roots:
+            if root.is_dir():
+                snapshot.update(
+                    str(c) for c in root.iterdir() if c.is_dir() and not c.is_symlink()
+                )
+        return snapshot
+
+    def find_results_dir(
+        self, output: str, before: Optional[Set[str]] = None
+    ) -> Optional[str]:
+        """Locate this invocation's results dir (must contain test_result.xml).
+
+        Prefers the dir that appeared since ``before`` was snapshotted, then the
+        ``RESULT DIRECTORY`` line TradeFed prints at the end of a completed run.
+        Never falls back to "newest dir", which could belong to another run.
+        """
+        if before is not None:
+            new_dirs = [
+                d
+                for root in self.results_roots
+                for d in self._session_dirs(root)
+                if str(d) not in before
+            ]
+            if new_dirs:
+                if len(new_dirs) > 1:
+                    logger.warning(
+                        "Multiple new result dirs appeared (concurrent run?): %s",
+                        [d.name for d in new_dirs],
+                    )
+                return str(max(new_dirs, key=lambda p: p.name))
+
+        for match in reversed(list(self.RESULT_DIR_PATTERN.finditer(output))):
+            path = Path(match.group(1).strip().strip("'\""))
+            if path.name == "test_result.xml":
+                path = path.parent
+            if (path / "test_result.xml").exists():
+                return str(path)
+        return None
+
+    def resolve_session_id(
+        self, results_dir: str | Path, timeout_secs: int = 300
+    ) -> Optional[int]:
+        """Map a results dir to the session index used by ``run retry --retry``."""
+        dir_name = Path(results_dir).name
+        try:
+            proc = subprocess.run(
+                self.build_list_results_command(),
+                cwd=str(self.tools_dir),
+                stdin=subprocess.DEVNULL,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_secs,
+            )
+            session_id = self.parse_session_table(proc.stdout, dir_name)
+            if session_id is not None:
+                return session_id
+            logger.warning("'list results' did not list %s", dir_name)
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.warning("'list results' failed (%s); deriving session from dir order", exc)
+
+        # TradeFed numbers sessions by result-dir name order.
+        names = [d.name for d in self._session_dirs(Path(results_dir).parent)]
+        if dir_name in names:
+            return names.index(dir_name)
+        return None
+
+    def session_index_from_dir(self, results_dir: str | Path) -> Optional[int]:
+        """Session index TradeFed assigns this dir now (result dirs in name order)."""
+        path = Path(results_dir)
+        names = [d.name for d in self._session_dirs(path.parent)]
+        return names.index(path.name) if path.name in names else None
+
+    @staticmethod
+    def parse_session_table(output: str, dir_name: str) -> Optional[int]:
+        """Parse the session index for ``dir_name`` from ``list results`` output."""
+        for line in output.splitlines():
+            parts = line.split()
+            if len(parts) > 1 and parts[0].isdigit() and dir_name in parts:
+                return int(parts[0])
         return None
 
     def kill(self) -> None:

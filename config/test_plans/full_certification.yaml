@@ -6,7 +6,12 @@ plan:
   name: "full_aaos_certification"
   description: "Complete xTS execution for AAOS Google Automotive Services (GAS) certification"
   target_completion_hours: 48
-  parallel_execution: false           # Suites run sequentially (TradeFed uses all devices per suite)
+  # Raise to run suites concurrently on an automatic, time-weighted device
+  # split (e.g. 2 = CTS alongside VTS/STS/...). 1 = sequential.
+  max_concurrent_suites: 1
+
+# Certification runs must execute every module: filters are rejected at load time.
+profile: certification
 
 device_requirements:
   min_devices: 6                      # Minimum 6 devices for 2-day target
@@ -39,12 +44,10 @@ suites:
     artifacts:
       logcat_on_failure: true
       screenshot_on_failure: true
-      bugreport_on_failure: true
+      bugreport_on_failure: false     # true = bugreport per failing test (slow, GBs); was never applied before
     timeout_hours: 20
     extra_args:
       - "--skip-system-status-check"
-    exclude_filters:
-      file: "config/known_failures/cts_known_failures.txt"
     modules: []                        # Empty = run all modules
 
   - name: vts
@@ -66,11 +69,9 @@ suites:
     artifacts:
       logcat_on_failure: true
       screenshot_on_failure: true
-      bugreport_on_failure: true
+      bugreport_on_failure: false     # true = bugreport per failing test (slow, GBs); was never applied before
     timeout_hours: 12
     extra_args: []
-    exclude_filters:
-      file: "config/known_failures/vts_known_failures.txt"
     modules: []
 
   - name: sts
@@ -89,10 +90,9 @@ suites:
       isolation_grade: "REBOOT_ISOLATED"
     artifacts:
       logcat_on_failure: true
-      bugreport_on_failure: true
+      bugreport_on_failure: false     # true = bugreport per failing test (slow, GBs); was never applied before
     timeout_hours: 6
     extra_args: []
-    exclude_filters: {}
     modules: []
 
   - name: gts
@@ -113,10 +113,9 @@ suites:
     artifacts:
       logcat_on_failure: true
       screenshot_on_failure: true
-      bugreport_on_failure: true
+      bugreport_on_failure: false     # true = bugreport per failing test (slow, GBs); was never applied before
     timeout_hours: 8
     extra_args: []
-    exclude_filters: {}
     modules: []
 
   - name: ats
@@ -136,10 +135,9 @@ suites:
     artifacts:
       logcat_on_failure: true
       screenshot_on_failure: true
-      bugreport_on_failure: true
+      bugreport_on_failure: false     # true = bugreport per failing test (slow, GBs); was never applied before
     timeout_hours: 4
     extra_args: []
-    exclude_filters: {}
     modules: []
 
   - name: catbox
@@ -161,7 +159,6 @@ suites:
       screenshot_on_failure: true
     timeout_hours: 4
     extra_args: []
-    exclude_filters: {}
     modules: []
     # CATBox-specific sub-plans (can be run individually)
     sub_plans:
@@ -181,29 +178,10 @@ post_execution:
     retry_type: "FAILED"              # FAILED | NOT_EXECUTED | BOTH
     cooldown_secs: 60
 
-  agent_retry:
-    enabled: true
-    max_retries: 2
-    classify_before_retry: true
-    rules:
-      infrastructure_failure:
-        action: "retry_with_reboot"
-        max_attempts: 3
-      flaky_test:
-        action: "retry"
-        max_attempts: 5
-      product_bug:
-        action: "skip_and_report"
-      environment_issue:
-        action: "report_with_fix_suggestion"
-      test_bug:
-        action: "skip_and_report"
-
   rca:
     enabled: true
     ai_powered: false                 # Set true if Gemini API key available
     failure_classification: true
-    generate_report: true
     baseline_path: ""                 # Path to baseline test_result.xml for regression detection
 
   reporting:
@@ -213,4 +191,3 @@ post_execution:
     regression_report: true
     notifications:
       slack_webhook: ""
-      email: []

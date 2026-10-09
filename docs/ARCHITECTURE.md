@@ -1,0 +1,480 @@
+# xTS Agent architecture
+
+This document explains how the agent is built and what happens during a run.
+For the business case and how to present it, see [OEM_OVERVIEW.md](OEM_OVERVIEW.md).
+For setup and commands, see the [README](../README.md); to run it step by step, see the [Execution Guide](EXECUTION_GUIDE.md).
+
+## Detailed architecture at a glance
+
+![xTS Agent detailed system architecture: entry points and configuration, the nine in-house packages under the orchestrator, the unchanged Google/AOSP toolchain, devices, data stores and optional services, with numbered data flows](images/architecture-detailed.png)
+
+Flows:
+1. CI or an engineer starts a command.
+2. Configuration is merged and validated.
+3. The agent drives TradeFed.
+4. TradeFed runs the tests on the devices.
+5. The agent checks, preps and reboots devices over adb.
+6. The agent reads and writes its memory (database, results, checkpoints, leases, source index).
+7. The agent publishes to Jira, Slack, Prometheus and the archive.
+8. Cancel signals stop the run cleanly.
+
+![Module map: all 44 Python modules of xts_agent grouped into nine packages](images/module-map.png)
+
+## 1. Design principles
+
+| Principle | What it means in practice |
+|-----------|---------------------------|
+| **TradeFed stays the source of truth** | The agent drives the official `*-tradefed` launchers and reads their `test_result.xml`. It never rewrites results, the launcher or the test packages, so certification output is exactly what Google's tooling produced. |
+| **Certification and development are separate** | `profile: certification` plans refuse module filters at load time. Waivers and known issues only annotate reports; they never change a TradeFed result. |
+| **Devices are shared safely** | Host-wide leases, a health gate, quarantine for unreliable devices, and no data wipe on physical hardware. |
+| **Failures are handled as root causes, not test lines** | Thousands of failing tests become a short list of groups, each with history, owner, known-issue status and a single Jira ticket. |
+| **On-prem by default** | AI RCA uses a local model unless external providers are explicitly allowed. Secrets come from the environment, never YAML. |
+| **Runs are interruptible** | Graceful cancel, checkpoints after every suite and retry, and `--resume`. |
+| **Everything is observable** | Heartbeat in the job log, Prometheus gauges, a rotated JSON log tagged with run id and suite. |
+
+## 2. Context
+
+```mermaid
+graph LR
+    CI[GitLab CI scheduler<br/>or engineer CLI] --> AG[xTS Agent<br/>on the device host]
+    AG -->|cts/vts/sts/gts/ats/catbox-tradefed| TF[TradeFed]
+    TF -->|adb| DEV[(AAOS devices<br/>hardware or Cuttlefish)]
+    AG -->|adb: probe, health, prep, reboot| DEV
+    AG --> DB[(Results DB<br/>SQLite or PostgreSQL)]
+    AG --> REP[Reports<br/>HTML, JSON, JUnit, dashboard]
+    AG --> JIRA[Jira<br/>one ticket per root cause]
+    AG --> LLM[Local LLM<br/>llama.cpp, optional]
+    AG --> S3[(S3 / MinIO<br/>artifact archive, optional)]
+    AG --> MON[Prometheus<br/>textfile or Pushgateway]
+    AG --> SL[Slack, optional]
+```
+
+Only the agent host needs access to the devices. Everything to the right of the agent is optional and switched on in configuration.
+
+## 3. Agent architecture: perception, reasoning, memory, action, learning
+
+Viewed as an agent, xTS Agent has the five classic parts: it **perceives** its environment, **reasons** about what to do, keeps **memory**, **acts** through tools, and **learns** from the outcome of each run.
+
+```mermaid
+flowchart LR
+    subgraph P["Perception (inputs)"]
+        P1[Plans + config<br/>YAML, env secrets]
+        P2[Device state<br/>adb getprop, dumpsys]
+        P3[TradeFed console<br/>live log stream]
+        P4[test_result.xml<br/>per-test results]
+        P5[OEM source code<br/>indexed for RAG]
+    end
+    subgraph B["Reasoning (the brain)"]
+        B1[Planner<br/>suites, device split,<br/>concurrency]
+        B2[Decision rules<br/>health gate, retry,<br/>completeness, certification]
+        B3[Triage logic<br/>signatures, history,<br/>known issues, owners]
+        B4[Local LLM<br/>root-cause hints]
+    end
+    subgraph M["Memory"]
+        M1[Short-term<br/>checkpoint, heartbeat,<br/>device leases]
+        M2[(Long-term<br/>failure history, run durations,<br/>device ledger, AI cache)]
+        M3[(Knowledge<br/>known issues, ownership map,<br/>source-code index)]
+    end
+    subgraph A["Actions (tools)"]
+        A1[TradeFed<br/>run, run retry, list results]
+        A2[adb<br/>prep, reboot, probe]
+        A3[Jira REST<br/>create or comment]
+        A4[Reports<br/>HTML, JSON, JUnit, dashboard]
+        A5[Notify + archive<br/>Prometheus, Slack, S3]
+    end
+    subgraph E["Environment"]
+        E1[AAOS devices<br/>hardware, Cuttlefish]
+        E2[Teams + CI<br/>owners, GitLab, dashboards]
+    end
+    P --> B
+    B <--> M
+    B --> A
+    A --> E
+    E -. outcomes feed the next run .-> P
+```
+
+### 3.1 Components
+
+| Part | Components | Code |
+|------|-----------|------|
+| Perception | Config loader; adb probes and health gate; TradeFed console reader (heartbeat); result parser; source-code indexer | `config_loader.py`, `device/`, `execution/progress.py`, `results/result_parser.py`, `rca/code_indexer.py` |
+| Reasoning | Planner (suite order, concurrency, device split by device-hours); decision rules (health, quarantine, retry, completeness, certification profile); triage logic (signatures, history labels, waivers, ownership); local LLM for root-cause hints | `orchestrator.py`, `execution/test_plan_executor.py`, `retry/`, `triage/`, `rca/llm_provider.py` |
+| Memory | Short-term: run-state checkpoint and heartbeat, device leases. Long-term: results database (suite runs, per-test history, AI cache), device ledger. Knowledge: `known_issues.yaml`, `ownership.yaml`, ChromaDB source index | `execution/run_state.py`, `device/device_ledger.py`, `storage/db.py`, `config/` |
+| Actions | TradeFed launchers, adb commands, Jira REST, report writers, metrics, Slack, S3 upload | `execution/tradefed_runner.py`, `device/adb_wrapper.py`, `triage/jira_filer.py`, `reporting/`, `storage/artifacts.py` |
+| Environment | Devices (hardware, Cuttlefish); people and systems that consume results (owners, CI, dashboards) | — |
+
+### 3.2 Data flow
+
+1. **Plan in.** The plan and defaults become a validated plan model.
+2. **Devices in.** adb probes turn connected devices into a healthy, same-build, leased pool.
+3. **Execution.** The planner hands each suite a device share. TradeFed runs it. The console stream feeds the heartbeat (short-term memory) and the checkpoint.
+4. **Results.** `test_result.xml` is parsed and drives the decisions: complete or not, retry or not.
+5. **Triage.** Failures become signatures, then groups. Long-term memory adds history labels, and knowledge adds known issues and owners. The LLM adds hints, using the source index and the AI cache.
+6. **Out.** Actions write reports, tickets, metrics and archives. Outcomes are written back to memory for the next run.
+
+### 3.3 Communication
+
+| Between | Mechanism |
+|---------|-----------|
+| Agent → TradeFed | Subprocess: `run commandAndExit`, `run retry`, `list results`; stdout parsed live |
+| TradeFed → Agent | `test_result.xml` in the session directory; exit code |
+| Agent ↔ devices | `adb shell`: getprop, dumpsys, settings, reboot |
+| Agent jobs ↔ each other | `flock` lease files in a shared lease directory; device ledger |
+| CI ↔ Agent | CLI commands, exit codes, JUnit XML, SIGTERM on cancel |
+| Agent ↔ memory | SQL (SQLite or PostgreSQL); JSON checkpoint per plan |
+| Agent → teams | HTTPS REST: Jira, Slack webhook, Pushgateway; HTML reports |
+| Agent → LLM | In-process llama.cpp; an external API only when `allow_external_providers` is set |
+| Agent → archive | S3 API via boto3 (S3 or MinIO) |
+
+There is no long-running agent daemon or message bus. Jobs coordinate through file locks and the database.
+
+### 3.4 Learning mechanisms
+
+Learning here means rules that use recorded data. It is not model training.
+
+| Observe | Remember | Adapt |
+|---------|----------|-------|
+| Suite durations on each run | `suite_runs` table | The next device split is sized by measured device-hours |
+| Device failures (lost reboots, drop-offs) | Device reliability ledger | Quarantine after 3 consecutive failures, for 24 h |
+| Per-test results of every run | Failure history | NEW / PERSISTENT / FLAKY labels; NEW groups open tickets |
+| The same signature seen again | Jira label `xts-sig-<signature>` | Comment on the open ticket instead of filing a duplicate |
+| AI answer vs the human known-issue classification | AI cache and agreement metric | Reuse answers; trust the AI only as far as the measured agreement |
+
+`triage --import-history` seeds these loops from past TradeFed results.
+
+## 4. The harness: layers and technology stack
+
+The agent is one layer in a four-layer test harness. Google and AOSP provide the test content and the runner. The agent, built in-house, adds orchestration and intelligence on top. Integrations connect it to your existing infrastructure.
+
+```mermaid
+graph TB
+    subgraph L4["Layer 4 · Integrations (yours, optional)"]
+        CI[GitLab CI<br/>scheduler]
+        JR[Jira]
+        PR[Prometheus /<br/>Pushgateway]
+        PG[(PostgreSQL)]
+        S3[(S3 / MinIO)]
+        SL[Slack]
+        AT[OmniLab ATS 2.0<br/>experimental]
+    end
+    subgraph L3["Layer 3 · xTS Agent (built in-house)"]
+        direction LR
+        OR[Orchestration<br/>plans, profiles, concurrency,<br/>checkpoint / resume, cancel]
+        DV[Device management<br/>health gate, leases,<br/>quarantine, prep]
+        RT[Retry engine<br/>targeted, sharded,<br/>isolation]
+        TG[Triage engine<br/>signatures, history,<br/>known issues, owners]
+        AI[AI RCA<br/>local LLM + source RAG]
+        OB[Observability<br/>heartbeat, metrics,<br/>reports, dashboard]
+    end
+    subgraph L2["Layer 2 · Google / AOSP test toolchain (unchanged)"]
+        direction LR
+        TF[TradeFed<br/>cts/vts/sts/gts/ats/catbox-tradefed]
+        SU[xTS suites<br/>CTS, VTS, STS, GTS, ATS, CATBox]
+        AD[adb<br/>platform-tools]
+        AA[aapt2<br/>build-tools]
+        JD[JDK 17]
+    end
+    subgraph L1["Layer 1 · Devices"]
+        HW[AAOS head units<br/>USB / TCP]
+        CF[Cuttlefish<br/>virtual devices]
+    end
+    L4 --- L3
+    L3 --> TF
+    L3 --> AD
+    TF --> SU
+    TF --> AD
+    TF --> AA
+    TF --> JD
+    AD --> HW
+    AD --> CF
+```
+
+### 4.1 Technology stack
+
+| Layer | Component | Source | Used for |
+|-------|-----------|--------|----------|
+| Devices | AAOS head units, Cuttlefish (`launch_cvd`) | OEM hardware / AOSP | Test targets |
+| Test toolchain | TradeFed (`*-tradefed` launchers) | Google, ships inside each xTS package | Runs the suites, sharding, `run retry`, `test_result.xml` |
+| | CTS, VTS, STS, GTS, ATS, CATBox | Google (GTS and others via partner portal) | Test content |
+| | adb (platform-tools) | Google Android SDK | Device discovery, health checks, prep, reboots |
+| | aapt2 (build-tools) | Google Android SDK | APK parsing inside TradeFed |
+| | JDK 17 | OpenJDK | TradeFed runtime |
+| Agent runtime | Python 3.8+ | Open source | Agent language |
+| | click, PyYAML, Jinja2, rich, requests, xmltodict | Open source (pinned, hash-checked) | CLI, config, reports, console, HTTP (Jira, Slack, Pushgateway, ATS, Gemini), XML |
+| | SQLite (built in) / psycopg 3 | Open source | Results database, PostgreSQL option |
+| | boto3 | Open source | S3 / MinIO archive (optional) |
+| | llama-cpp-python, ChromaDB, sentence-transformers | Open source | On-prem AI RCA and source-code index (optional) |
+| Quality | ruff, mypy, unittest | Open source | Blocking CI check |
+| Packaging | Docker (Ubuntu 24.04 base), GitLab Runner | Open source | Optional container; CI execution |
+| Agent logic | Everything under `xts_agent/` | **Built in-house** | Section 4.2 |
+
+### 4.2 What is built in-house
+
+Google's tooling runs the tests and writes the results. Everything that turns that into a dependable, fast and triaged process is the agent's own code:
+
+| Area | In-house capability | Code |
+|------|---------------------|------|
+| Orchestration | Plan model with certification and development profiles; concurrent suites on a device split sized by measured device-hours; checkpoint and `--resume` on top of TradeFed sessions; graceful cancel | `orchestrator.py`, `execution/test_plan_executor.py`, `run_state.py`, `cancel.py` |
+| Device management | Health gate (boot, battery, network, storage, wakefulness, automotive feature); host-wide `flock` leases that TradeFed keeps holding even if the agent is killed; reliability ledger with automatic quarantine; declarative prep profile; build-fingerprint pools | `device/` |
+| Retry engine | Drives `run retry` on the right session with `FAILED` / `NOT_EXECUTED`, sharded across all devices; isolation that reboots and re-preps but never wipes hardware | `retry/` |
+| Result integrity | Results-dir detection from the console log, confirmed with `list results`; completeness gate (INCOMPLETE, FAILED outranks it); filtered certification plans refused | `execution/tradefed_runner.py`, `results/result_parser.py`, `config_loader.py` |
+| Live progress | TradeFed console parser: modules started and finished per device, failures so far, stall warning | `execution/progress.py` |
+| Triage engine | Failure-signature algorithm (normalised message, framework frames skipped, `[instant]` twins merged); NEW / PERSISTENT / FLAKY history with retry de-duplication; expiring report-only waivers; ownership routing; Jira filing deduplicated by signature label | `triage/` |
+| AI RCA | One structured answer per group (cause, category, confidence, fix, evidence) from a local model with retrieval over OEM source; cached; agreement with human classification measured | `triage/ai_rca.py`, `rca/` |
+| Observability and reporting | Offline HTML report, trends dashboard, JUnit for CI, Prometheus gauges without a running exporter, tagged rotated logs | `reporting/`, `utils/logger.py` |
+| Operations | Disk guard, results retention that keeps resumable sessions, `cleanup` scoped to the agent's own processes | `utils/retention.py`, `cli.py` |
+| Quality harness | Golden tests on real CTS output; end-to-end test of the real CLI against fake `cts-tradefed` and `adb` | `tests/` |
+
+### 4.3 TradeFed alone vs with the agent
+
+| Need | Google tooling alone | With xTS Agent |
+|------|----------------------|----------------|
+| Pick devices | Pass `-s` serials by hand; no health check | Health gate, quarantine, same-build pool, chosen automatically |
+| Share a rack | Nothing stops two runs using one device | Host-wide leases; a busy device names its holder |
+| Several suites | One invocation per suite, started by hand | Concurrent suites on a split sized by history |
+| Interruption | Find the session, run `run retry` by hand | `--resume` skips passed suites and continues the rest |
+| Retries | Manual `run retry` per session | Automatic, sharded on all devices, with isolation |
+| Completeness | Read the summary yourself | INCOMPLETE gate; certification profile refuses filters |
+| Failures | One line per failing test in `test_result.xml` | Root-cause groups with history, owner, waiver status, one Jira ticket |
+| Trends | Per-session folders on one machine | Results database, dashboard, metrics |
+| Live status | Scroll the console | Heartbeat, stall warning, Prometheus alerts |
+
+
+## 5. Components
+
+```mermaid
+graph TD
+    CLI[cli.py<br/>click commands] --> ORC[orchestrator.py]
+    ORC --> CFG[config_loader.py<br/>defaults + plan + env secrets]
+    ORC --> EXE[execution/test_plan_executor.py]
+    EXE --> DM[device/device_manager.py<br/>discovery, health gate, leases]
+    DM --> ADB[device/adb_wrapper.py]
+    DM --> LED[device/device_ledger.py<br/>quarantine]
+    EXE --> PREP[device/device_prep.py]
+    EXE --> SH[execution/shard_manager.py]
+    EXE --> TFR[execution/tradefed_runner.py]
+    TFR --> PRG[execution/progress.py<br/>heartbeat]
+    EXE --> RS[execution/run_state.py<br/>checkpoint / resume]
+    EXE --> RM[retry/retry_manager.py]
+    RM --> ISO[retry/isolation.py]
+    ORC --> RP[results/result_parser.py]
+    ORC --> TRI[triage/engine.py]
+    TRI --> SIG[signature.py]
+    TRI --> HIS[history.py]
+    TRI --> KI[known_issues.py]
+    TRI --> OWN[ownership.py]
+    ORC --> AIR[triage/ai_rca.py]
+    AIR --> LLMP[rca/llm_provider.py]
+    AIR --> IDX[rca/code_indexer.py]
+    ORC --> JF[triage/jira_filer.py]
+    ORC --> RCA[rca/rca_engine.py<br/>rule-based classification]
+    ORC --> REPG[reporting/*]
+    ORC --> STO[storage/db.py, artifacts.py]
+    ORC --> RET[utils/retention.py<br/>disk guard, pruning]
+    CLI -. SIGTERM / Ctrl-C .-> CAN[execution/cancel.py]
+```
+
+| Package | Responsibility |
+|---------|----------------|
+| `cli.py` | Commands: `setup`, `run`, `retry`, `analyze`, `report`, `triage`, `dashboard`, `index-code`, `device-check`, `health-check`, `quarantine`, `cleanup`. |
+| `orchestrator.py` | Runs one plan from start to finish: disk guard, execution, RCA, triage, reports, uploads, persistence, metrics, notification. |
+| `config_loader.py` | Merges `default_config.yaml` with a plan, expands `${ENV}` references, applies secret environment variables, validates the certification profile and warns on unknown keys. |
+| `device/` | ADB wrapper with timeouts; device discovery and build grouping; health gate (boot, battery `present`, network, storage, wakefulness, automotive feature); host-wide `flock` leases; declarative prep profile; reliability ledger and quarantine. |
+| `execution/` | Plan sequencing, concurrent suites on a device split, TradeFed invocation and results-dir detection, heartbeat parsing, checkpoints, graceful cancel, optional ATS 2.0 upload. |
+| `retry/` | TradeFed `run retry` on the previous session (`FAILED` or `NOT_EXECUTED`), sharded across all allocated devices, with isolation between attempts (reboot and prep on hardware; optional reset command on virtual devices). |
+| `results/` | Parses `test_result.xml` (summary, modules done/total, ABI and `[instant]` test IDs, start/end, devices) and stores per-suite summaries for trends and device-hour estimates. |
+| `triage/` | Failure signatures and grouping, NEW/PERSISTENT/FLAKY history, known issues and waivers, ownership routing, structured AI RCA per group, Jira filing. |
+| `rca/` | Rule-based classification and pattern matching, diagnostic collection, LLM providers, local source-code index for retrieval. |
+| `reporting/` | Self-contained HTML report, JSON summary, JUnit for CI, trends dashboard, Prometheus metrics, Slack. |
+| `storage/` | One SQL layer for SQLite (default) and PostgreSQL; optional S3/MinIO upload. |
+| `utils/` | Logging, environment validation, disk guard and retention. |
+
+## 6. Run flow
+
+### 6.1 End-to-end sequence
+
+```mermaid
+sequenceDiagram
+    participant U as CI / engineer
+    participant O as Orchestrator
+    participant E as Executor
+    participant D as DeviceManager
+    participant T as TradeFed
+    participant R as RetryManager
+    participant G as Triage
+    U->>O: xts-agent run --plan P [--auto-retry] [--resume]
+    O->>O: load + validate config, disk guard
+    O->>E: execute_plan
+    E->>D: discover, health gate, skip quarantined, lease
+    E->>E: split devices across concurrent suites
+    loop each suite
+        E->>D: apply prep profile
+        E->>T: run commandAndExit <plan> -s s1 -s s2 ... --shard-count N
+        T-->>E: console log (heartbeat) + results dir
+        E->>E: parse test_result.xml, checkpoint
+        opt failures or modules not executed
+            E->>R: run retry --retry <session> --retry-type FAILED|NOT_EXECUTED
+            R->>T: retry, sharded across devices
+            T-->>R: merged session
+            E->>E: re-parse, checkpoint
+        end
+        E->>D: release lease, record device survival
+    end
+    E-->>O: PlanResult
+    O->>G: group failures, history, known issues, owners
+    G->>G: optional AI RCA per group, Jira tickets
+    O->>O: HTML/JSON/JUnit, DB rows, dashboard, metrics, artifacts, Slack
+    O-->>U: exit code (0 pass, non-zero fail / cancel / no disk)
+```
+
+### 6.2 Step by step
+
+1. **Load configuration.** Defaults, then the plan, then environment variables for secrets. A certification plan containing filters is rejected before any device is touched.
+2. **Disk guard.** `run` and `retry` exit with code 3 if the package, results or temp filesystem has less than `ops.min_free_disk_gb`.
+3. **Device allocation.**
+   1. List online ADB devices.
+   2. Skip quarantined ones.
+   3. Run the health gate in parallel, rebooting unhealthy devices when configured.
+   4. Group by build fingerprint, so one suite never shards across mixed builds.
+   5. Take host-wide leases. A busy device reports who holds it (pid, user, CI job).
+4. **Device split.** With `max_concurrent_suites: N`, the same-build pool is divided between the first N suites in proportion to their expected device-hours. Estimates come from past runs in the results database, or built-in estimates. When a suite finishes, its devices start the next pending suite.
+5. **Preparation.** The declarative prep profile is applied before each suite: stay awake, screen timeout and lock, location, Wi-Fi join, adb install verifier off, plus any extra commands.
+6. **Execution.** TradeFed runs `run commandAndExit <plan>` with one `-s <serial>` per device and `--shard-count N`. The agent tails the console log:
+   - Every `ops.progress_interval_secs` it logs modules started and finished, failures so far and the module on each device.
+   - It warns when TradeFed has been silent for `ops.stall_warning_mins`.
+   - It finds the results directory from the log and confirms it with `list results`.
+7. **Parse and checkpoint.** It parses `test_result.xml` and derives the suite status:
+   - FAILED outranks INCOMPLETE.
+   - Unfinished modules make a run INCOMPLETE even when nothing failed.
+
+   The state is written to `results/run_state/<plan>.json`.
+8. **Retry.** With `--auto-retry` or `post_execution.suite_retry.enabled`, TradeFed `run retry` re-runs only failed or not-executed modules from the previous session.
+   - The retry is sharded across all allocated devices.
+   - Isolation between attempts: reboot plus prep on hardware; optional reset command on Cuttlefish. Physical devices are never wiped.
+9. **Release.** Leases are released and the ledger records whether each device survived. A device that keeps failing is quarantined for `quarantine_hours`.
+10. **Triage.** See section 7.
+11. **Outputs.**
+    - HTML, JSON and JUnit reports.
+    - Rows in the results database.
+    - The trends dashboard.
+    - Prometheus gauges.
+    - Optional artifact upload (TradeFed's own zip is reused) and ATS 2.0 upload.
+    - A Slack message.
+12. **Exit code.** 0 when every suite passed. Otherwise non-zero: failures, 3 for no disk space, 143 or 130 when cancelled. CI marks the job from it.
+
+### 6.3 Cancel and resume
+
+```mermaid
+stateDiagram-v2
+    [*] --> Running
+    Running --> Cancelling: SIGTERM / Ctrl-C
+    Cancelling --> Stopped: TradeFed stopped, partial results flushed,<br/>checkpoint + reports written (exit 143/130)
+    Cancelling --> Killed: second signal
+    Stopped --> Running: run --resume
+    Running --> Done
+    Done --> [*]
+```
+
+On `--resume`:
+- suites that already passed are skipped;
+- an interrupted suite continues from its last TradeFed session with `run retry`, on devices running the same build, instead of starting again.
+
+## 7. Triage pipeline
+
+```mermaid
+graph LR
+    F[Failed tests<br/>from test_result.xml] --> S[Signature<br/>normalised exception + top frames]
+    S --> GR[Groups<br/>one per root cause]
+    GR --> H{History}
+    H -->|passed before| NEW[NEW + last good build]
+    H -->|failed before| PER[PERSISTENT]
+    H -->|alternates| FLK[FLAKY]
+    GR --> K[Known issues / waivers<br/>config/known_issues.yaml]
+    GR --> OW[Owner<br/>config/ownership.yaml]
+    GR --> AI[AI RCA per group<br/>local LLM + source index, cached]
+    NEW --> J[Jira: one ticket per group<br/>deduplicated by xts-sig label]
+    K --> REP[Triage report<br/>JSON + HTML table]
+    OW --> J
+    AI --> REP
+    J --> REP
+```
+
+- **Signatures.** A signature is built from the exception type, the first message line with volatile parts removed (numbers, ids, component names, hashes), and the first stack frames above the failing test's own class. Assertion and reflection frames are skipped. Tests that fail through the same helper with the same error land in one group, even across modules. A module and its `[instant]` variant failing the same way share a group.
+- **History.** Every run is recorded per test. A retry of the same invocation replaces the earlier record instead of counting twice. History can be seeded from old TradeFed results with `triage --import-history`.
+- **Known issues.** Each entry matches by signature, message, test or module pattern. A waiver must have an expiry date, and it changes only the report label, never the TradeFed result.
+- **Owners.** Module and package patterns in `config/ownership.yaml` map to a team, a Jira component, an assignee and watchers.
+- **AI RCA.** One structured answer per group, not per test: root cause, category, confidence, suggested fix and evidence.
+  - It runs on llama.cpp by default.
+  - External providers are refused unless `ai_rca.allow_external_providers: true`.
+  - Answers are cached by signature and model.
+  - Agreement with human-classified known issues is measured, so you can decide how far to trust it.
+- **Jira.**
+  - One ticket per actionable group, labelled `xts-sig-<signature>`.
+  - An open ticket with that label gets a comment instead of a duplicate.
+  - Only NEW and NO_HISTORY groups open tickets, capped per run.
+  - `mode: dry_run` writes a preview file instead of filing.
+
+## 8. Data
+
+| Store | Contents | Location |
+|-------|----------|----------|
+| TradeFed results | `test_result.xml`, logs, zip; unchanged | `/opt/xts/android-<suite>/results/`, `logs/` |
+| Results database | `suite_runs` (trends, device-hour estimates), `triage_runs` / `triage_modules` / `triage_failures` (history), `ai_cache`, `run_artifacts` | SQLite at `agent.database_path`, or PostgreSQL via `XTS_DATABASE_URL` |
+| Run state | Checkpoint and live heartbeat per plan | `results/run_state/<plan>.json` |
+| Reports | HTML, JSON, JUnit, triage JSON, Jira preview, dashboard | `results/reports/`, `results/junit/`, `results/triage/` |
+| Device ledger and leases | Consecutive failures and quarantine; `flock` lease files | `device.lease_dir` (default `/var/tmp/xts-agent/leases`) |
+| Agent log | JSON lines tagged with run id and suite, rotated at 50 MB × 5 | `logs/xts_agent.log` |
+| Archive (optional) | Results zip, logs, reports | S3 or MinIO bucket |
+
+Several agent hosts can share history and trends by pointing at one PostgreSQL database.
+
+## 9. Deployment
+
+```mermaid
+graph TB
+    subgraph GitLab
+        SCH[Schedules / MRs]
+    end
+    subgraph Host[Device host, shell runner tag android-test-host]
+        RUN[gitlab-runner] --> AG1[xts-agent job A]
+        RUN --> AG2[xts-agent job B]
+        AG1 & AG2 --> L[(Leases)]
+        AG1 & AG2 --> ADBS[adb server]
+        ADBS --> HW[USB / TCP hardware]
+        ADBS --> CF[Cuttlefish instances]
+    end
+    SCH --> RUN
+    AG1 & AG2 --> PG[(PostgreSQL, optional)]
+    AG1 & AG2 --> PROM[Prometheus / Pushgateway]
+```
+
+- **Bare metal** (recommended for hardware) or the **Docker** image built from `docker/Dockerfile`. The image runs as an unprivileged user and uses the host's adb through `network_mode: host`.
+- **CI stages:**
+  1. `check` (ruff, mypy, unit, golden and end-to-end tests);
+  2. `setup`;
+  3. `health-check`;
+  4. `execute-xts`;
+  5. `retry`;
+  6. `analyze`;
+  7. `report`.
+- **Several jobs can share one host.** Leases keep them off each other's devices.
+- **Dependencies** are installed from hash-checked lock files (`requirements.lock`, `requirements-dev.lock`).
+
+## 10. Extension points
+
+| To add | Where |
+|--------|-------|
+| A new suite | Install `android-<suite>/tools/<suite>-tradefed` under `paths.xts_packages_dir`, add it to `KNOWN_SUITES` in `suites/suite_registry.py`, reference it in a plan. |
+| Device prep steps | The `device.prep` profile in config; `device/device_prep.py`. |
+| Health checks | `device/device_manager.py`, health gate. |
+| Failure patterns / classification | `config/known_failures/`, `rca/pattern_matcher.py`, `rca/failure_classifier.py`. |
+| Owners and known issues | `config/ownership.yaml`, `config/known_issues.yaml` (data only, no code). |
+| An LLM backend | `rca/llm_provider.py`. |
+| A report or notifier | `reporting/`, called from `Orchestrator.generate_reports`. |
+
+## 11. Quality gates
+
+- **Static checks:** ruff (correctness rules) and mypy run in the blocking `check` stage before any device job.
+- **Unit tests:** `tests/test_<area>.py`.
+- **Golden tests:** `tests/test_golden.py` runs against real CTS output kept in `tests/golden/`. This is how the heartbeat miscount was caught.
+- **End-to-end test:** `tests/test_e2e.py` runs the real CLI against fake `cts-tradefed` and `adb` scripts. It covers execution, retry, reports, triage, the database, leases and exit codes.
