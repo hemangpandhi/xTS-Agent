@@ -614,3 +614,7 @@ adb devices -l
 ```
 
 **Wrong plan on hardware** — do not use `full_cts.yaml` (`cts-virtual-device`). Use `cts_only.yaml` or `full_cts_hardware.yaml`.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
