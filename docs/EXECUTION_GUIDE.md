@@ -41,7 +41,7 @@ The agent refuses to start with less than `ops.min_free_disk_gb` (20 GB) free.
 ```bash
 git clone https://github.com/hemangpandhi/xTS-Agent.git ~/xTS-Agent
 cd ~/xTS-Agent
-git checkout main            # or fix/production-hardening until PR #5 is merged
+git checkout main
 sudo ./scripts/setup_environment.sh
 ```
 
