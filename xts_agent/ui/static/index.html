@@ -6,360 +6,605 @@
 <title>xTS Agent Console</title>
 <style>
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --border: #dfe3e8; --text: #1b1f24;
-  --muted: #5d6673; --accent: #2563eb; --accent-text: #ffffff;
-  --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2; --warn: #a16207; --warn-bg: #fef3c7;
-  --info: #1d4ed8; --info-bg: #dbeafe; --idle: #475569; --idle-bg: #e2e8f0;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --log-bg: #0f1419; --log-text: #d6dde6;
+  --bg: #f4f6fa; --panel: #ffffff; --panel-2: #f6f8fb; --panel-3: #eceff5; --border: #e1e6ee; --border-2: #d3d9e3;
+  --text: #121826; --text-2: #3b4456; --muted: #6b7486; --faint: #9aa3b2;
+  --accent: #4f46e5; --accent-2: #6366f1; --accent-soft: #eef0ff;
+  --ok: #16a34a; --ok-soft: #e7f7ed; --bad: #dc2626; --bad-soft: #fdecec; --warn: #d97706; --warn-soft: #fdf3e2;
+  --info: #2563eb; --info-soft: #e8efff; --skip: #94a3b8; --skip-soft: #eef1f5;
+  --side: #0f1424; --side-text: #aeb6c8; --side-hover: #1a2136; --side-active: #232c47;
+  --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06); --shadow-lg: 0 10px 30px rgba(16,24,40,.12);
+  --mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --log-bg: #0b0f19; --log-text: #cfd7e6; --radius: 12px;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2230; --border: #2d3440; --text: #e6edf3;
-    --muted: #8b96a5; --accent: #4f8cff; --ok: #4ade80; --ok-bg: #12301f; --bad: #f87171; --bad-bg: #3a1618;
-    --warn: #fbbf24; --warn-bg: #362a0c; --info: #93c5fd; --info-bg: #172a4a; --idle: #a3adbb; --idle-bg: #262d38;
-  }
-}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0a0d16; --panel: #121726; --panel-2: #171d2e; --panel-3: #1d2438; --border: #232b40; --border-2: #2d3650;
+  --text: #e8ecf5; --text-2: #c3cad9; --muted: #8b95aa; --faint: #5f6981;
+  --accent: #7c83ff; --accent-2: #8f95ff; --accent-soft: #1e2246;
+  --ok: #34d399; --ok-soft: #10271f; --bad: #f87171; --bad-soft: #2e1519; --warn: #fbbf24; --warn-soft: #2d2410;
+  --info: #60a5fa; --info-soft: #132241; --skip: #64748b; --skip-soft: #1a2030;
+  --side: #080b13; --side-text: #8b95aa; --side-hover: #121829; --side-active: #1a2240;
+  --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 12px 32px rgba(0,0,0,.5);
+} }
 :root[data-theme="dark"] {
-  --bg: #0d1117; --panel: #161b22; --panel-2: #1c2230; --border: #2d3440; --text: #e6edf3;
-  --muted: #8b96a5; --accent: #4f8cff; --ok: #4ade80; --ok-bg: #12301f; --bad: #f87171; --bad-bg: #3a1618;
-  --warn: #fbbf24; --warn-bg: #362a0c; --info: #93c5fd; --info-bg: #172a4a; --idle: #a3adbb; --idle-bg: #262d38;
+  --bg: #0a0d16; --panel: #121726; --panel-2: #171d2e; --panel-3: #1d2438; --border: #232b40; --border-2: #2d3650;
+  --text: #e8ecf5; --text-2: #c3cad9; --muted: #8b95aa; --faint: #5f6981;
+  --accent: #7c83ff; --accent-2: #8f95ff; --accent-soft: #1e2246;
+  --ok: #34d399; --ok-soft: #10271f; --bad: #f87171; --bad-soft: #2e1519; --warn: #fbbf24; --warn-soft: #2d2410;
+  --info: #60a5fa; --info-soft: #132241; --skip: #64748b; --skip-soft: #1a2030;
+  --side: #080b13; --side-text: #8b95aa; --side-hover: #121829; --side-active: #1a2240;
+  --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 12px 32px rgba(0,0,0,.5);
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
-header { background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
-.bar { max-width: 1280px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 20px; min-height: 52px; flex-wrap: wrap; }
-.brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; }
-.brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
-nav { display: flex; gap: 4px; }
-nav a { padding: 6px 12px; border-radius: 6px; color: var(--muted); font-weight: 500; }
-nav a.on { background: var(--panel-2); color: var(--text); }
-nav a:hover { text-decoration: none; color: var(--text); }
+svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -3px; }
+.app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+aside { background: var(--side); color: var(--side-text); padding: 18px 12px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 3px; }
+.logo { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; color: #fff; }
+.logo .mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #6366f1, #22d3ee); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(99,102,241,.45); }
+.logo .mark svg { width: 18px; height: 18px; stroke: #fff; }
+.logo b { font-size: 15px; letter-spacing: .2px; display: block; } .logo small { color: var(--side-text); font-size: 11.5px; }
+.navlabel { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: #5d6780; padding: 14px 12px 6px; font-weight: 600; }
+aside a.nav { display: flex; align-items: center; gap: 11px; padding: 8px 12px; border-radius: 8px; color: var(--side-text); font-weight: 500; }
+aside a.nav:hover { background: var(--side-hover); color: #e5e9f2; text-decoration: none; }
+aside a.nav.on { background: var(--side-active); color: #fff; } aside a.nav.on svg { stroke: #8f95ff; }
+aside a.nav .count { margin-left: auto; background: #6366f1; color: #fff; font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 999px; line-height: 18px; font-style: normal; }
+.side-foot { margin-top: auto; padding: 12px; border-top: 1px solid #1a2136; font-size: 12px; }
+.side-foot .host { color: #e5e9f2; font-weight: 600; word-break: break-all; }
+.conn { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
+.conn i { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 3px rgba(52,211,153,.18); }
+.conn.down i { background: #f87171; box-shadow: 0 0 0 3px rgba(248,113,113,.18); }
+main { min-width: 0; padding: 26px 32px 64px; max-width: 1480px; width: 100%; }
+.page-hd { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+.page-hd h1 { font-size: 22px; margin: 0; letter-spacing: -.2px; } .page-hd p { margin: 3px 0 0; color: var(--muted); }
 .spacer { flex: 1; }
-.toplinks { display: flex; gap: 14px; font-size: 13px; }
-main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 60px; }
-h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 0; } h3 { font-size: 14px; margin: 0 0 8px; }
-.sub { color: var(--muted); margin: 0 0 18px; }
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; }
-.card > .hd { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.card > .bd { padding: 14px 16px; }
-.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.muted { color: var(--muted); } .mono { font-family: var(--mono); font-size: 12.5px; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.b-ok { background: var(--ok-bg); color: var(--ok); } .b-bad { background: var(--bad-bg); color: var(--bad); }
-.b-warn { background: var(--warn-bg); color: var(--warn); } .b-info { background: var(--info-bg); color: var(--info); }
-.b-idle { background: var(--idle-bg); color: var(--idle); }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: currentColor; margin-right: 6px; }
-.pulse { animation: pulse 1.6s infinite; } @keyframes pulse { 50% { opacity: .35; } }
-button, .btn { font: inherit; font-weight: 500; border: 1px solid var(--border); background: var(--panel); color: var(--text);
-  padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-button:hover { background: var(--panel-2); } button:disabled { opacity: .5; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-button.danger { color: var(--bad); border-color: var(--bad); } button.danger:hover { background: var(--bad-bg); }
-button.sm { padding: 3px 9px; font-size: 12.5px; }
-input[type=text], select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border);
-  border-radius: 6px; padding: 6px 9px; }
-textarea { width: 100%; font-family: var(--mono); font-size: 12.5px; min-height: 90px; }
-label.chk { display: inline-flex; gap: 6px; align-items: center; margin-right: 16px; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.tile { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; }
-.tile .k { color: var(--muted); font-size: 12px; } .tile .v { font-size: 20px; font-weight: 650; margin-top: 2px; }
-.steps { display: flex; gap: 0; flex-wrap: wrap; }
-.step { padding: 3px 10px; font-size: 12px; border: 1px solid var(--border); margin-left: -1px; color: var(--muted); background: var(--panel); }
-.step:first-child { border-radius: 6px 0 0 6px; } .step:last-child { border-radius: 0 6px 6px 0; }
-.step.done { color: var(--ok); } .step.cur { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
-.devices { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-.dev { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel-2); min-width: 0; }
-.dev .s { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.dev .m { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.card-hd { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.card-hd h2 { font-size: 14.5px; margin: 0; font-weight: 650; } .card-hd .sub { color: var(--muted); font-size: 12.5px; }
+.card-bd { padding: 16px 18px; }
+.grid { display: grid; gap: 16px; } .g-32 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } .g-23 { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+@media (max-width: 1100px) { .g-32, .g-23 { grid-template-columns: 1fr; } }
+.mb { margin-bottom: 16px; }
+.muted { color: var(--muted); } .faint { color: var(--faint); } .mono { font-family: var(--mono); font-size: 12.5px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.kpi { padding: 15px 16px; display: flex; gap: 13px; align-items: flex-start; }
+.ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none; } .ic svg { width: 19px; height: 19px; }
+.kpi .k { color: var(--muted); font-size: 12.5px; font-weight: 500; } .kpi .v { font-size: 24px; font-weight: 700; letter-spacing: -.4px; line-height: 1.2; margin-top: 2px; }
+.kpi .s { color: var(--muted); font-size: 12px; margin-top: 1px; }
+.t-accent { background: var(--accent-soft); color: var(--accent); } .t-ok { background: var(--ok-soft); color: var(--ok); }
+.t-bad { background: var(--bad-soft); color: var(--bad); } .t-warn { background: var(--warn-soft); color: var(--warn); }
+.t-info { background: var(--info-soft); color: var(--info); } .t-skip { background: var(--skip-soft); color: var(--skip); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 650; white-space: nowrap; letter-spacing: .2px; }
+.pill .d { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pulse { animation: pulse 1.5s ease-in-out infinite; } @keyframes pulse { 50% { opacity: .3; } }
+.btn { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-weight: 550; font-size: 13px; border: 1px solid var(--border-2); background: var(--panel); color: var(--text);
+  padding: 7px 13px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--panel-2); text-decoration: none; } .btn:disabled { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; } .btn.primary:hover { background: var(--accent-2); }
+.btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); } .btn.danger:hover { background: var(--bad-soft); }
+.btn.sm { padding: 5px 10px; font-size: 12.5px; } .btn.ghost { border-color: transparent; background: transparent; }
+input[type=text], select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border-2); border-radius: 8px; padding: 7px 10px; }
+input[type=text]:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 0; border-color: var(--accent); }
+textarea { width: 100%; font-family: var(--mono); font-size: 12.5px; min-height: 96px; }
+label.chk { display: inline-flex; gap: 7px; align-items: center; margin-right: 14px; cursor: pointer; }
+.stepper { display: flex; align-items: flex-start; overflow-x: auto; padding: 2px 0 4px; }
+.st { flex: 1; min-width: 86px; position: relative; text-align: center; }
+.stepper.compact .st { min-width: 0; } .stepper.compact .st .t { font-size: 10.5px; } .stepper.compact .st .n { font-size: 11.5px; }
+.stepper.compact .st::before { left: calc(-50% + 14px); right: calc(50% + 14px); top: 12px; } .stepper.compact .st .b { width: 26px; height: 26px; }
+.st::before { content: ""; position: absolute; top: 14px; left: calc(-50% + 17px); right: calc(50% + 17px); height: 2px; background: var(--border-2); }
+.st:first-child::before { display: none; } .st.done::before, .st.cur::before, .st.bad::before { background: var(--accent); }
+.st .b { width: 30px; height: 30px; border-radius: 50%; margin: 0 auto 6px; display: grid; place-items: center; background: var(--panel-3); color: var(--faint); border: 2px solid var(--border-2); position: relative; z-index: 1; }
+.st .b svg { width: 14px; height: 14px; }
+.st.done .b { background: var(--accent); border-color: var(--accent); color: #fff; }
+.st.cur .b { background: var(--panel); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent); }
+.st.bad .b { background: var(--bad); border-color: var(--bad); color: #fff; }
+.st .n { font-size: 12.5px; font-weight: 600; color: var(--text-2); } .st .t { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+.st.todo .n { color: var(--faint); font-weight: 500; }
+.hero { overflow: hidden; }
+.hero-top { padding: 18px 20px 16px; display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent); }
+.hero-top h2 { margin: 0; font-size: 18px; letter-spacing: -.2px; } .hero-top .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+.timer { text-align: right; } .timer .v { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.5px; line-height: 1.1; } .timer .k { color: var(--muted); font-size: 12px; }
+.metrics { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; border-bottom: 1px solid var(--border); }
+.metrics > div { padding: 14px 20px; border-right: 1px solid var(--border); } .metrics > div:last-child { border-right: 0; }
+@media (max-width: 900px) { .metrics { grid-template-columns: 1fr 1fr; } .metrics > div { border-bottom: 1px solid var(--border); } }
+.metrics .k { color: var(--muted); font-size: 12px; font-weight: 500; } .metrics .v { font-size: 22px; font-weight: 700; letter-spacing: -.3px; }
+.metrics .v small { font-size: 13px; color: var(--muted); font-weight: 500; }
+.prog { height: 8px; background: var(--panel-3); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+.prog > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), #22d3ee); transition: width .6s ease; }
+.prog.indet > i { width: 35% !important; animation: indet 1.6s ease-in-out infinite; } @keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+.section { padding: 16px 20px; border-bottom: 1px solid var(--border); } .section:last-child { border-bottom: 0; }
+.section h3 { font-size: 13px; margin: 0 0 12px; color: var(--text-2); font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.devgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.dev { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px 10px 14px; background: var(--panel-2); position: relative; overflow: hidden; min-width: 0; }
+.dev::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--skip); }
+.dev.busy::before { background: var(--info); } .dev.busy { background: color-mix(in srgb, var(--info) 7%, var(--panel-2)); }
+.dev .top { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.dev .top .d { width: 7px; height: 7px; border-radius: 50%; background: var(--skip); } .dev.busy .top .d { background: var(--info); }
+.dev .m { font-weight: 600; font-size: 13.5px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev .f { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 0 16px; overflow-x: auto; }
+.tabs button { font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent; padding: 11px 12px 9px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; white-space: nowrap; }
+.tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.tabs .cnt { background: var(--bad-soft); color: var(--bad); border-radius: 99px; font-size: 11px; padding: 0 7px; }
+.log { background: var(--log-bg); color: var(--log-text); font-family: var(--mono); font-size: 12px; line-height: 1.55; height: 420px; overflow: auto;
+  padding: 12px 14px; border-radius: 10px; white-space: pre-wrap; word-break: break-all; border: 1px solid #1a2133; }
+.log .f { color: #ff8d8d; } .log .w { color: #f3c470; } .log .i { color: #86c5ff; } .log .ts { color: #59647c; }
+.logbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.feed { max-height: 440px; overflow: auto; }
+.feed .it { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
+.feed .it:last-child { border-bottom: 0; } .feed .tm { font-family: var(--mono); font-size: 11.5px; color: var(--faint); padding-top: 2px; }
+.feed .tn { font-family: var(--mono); font-size: 12.5px; font-weight: 600; word-break: break-all; } .feed .ms { color: var(--muted); font-size: 12.5px; margin-top: 2px; word-break: break-word; }
+.tl { list-style: none; margin: 0; padding: 0; }
+.tl li { position: relative; padding: 0 0 14px 22px; font-size: 13px; }
+.tl li::before { content: ""; position: absolute; left: 5px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.tl li::after { content: ""; position: absolute; left: 8.5px; top: 17px; bottom: -2px; width: 1px; background: var(--border-2); }
+.tl li:last-child::after { display: none; } .tl li.bad::before { background: var(--bad); } .tl li.ok::before { background: var(--ok); }
+.tl .w { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
 table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; cursor: default; white-space: nowrap; }
-th.sort { cursor: pointer; } td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+thead th { font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; background: var(--panel-2); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+th.sort { cursor: pointer; user-select: none; } th.sort:hover { color: var(--text); }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: 0; }
 tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel-2); }
-.scroll { overflow-x: auto; }
-.log { background: var(--log-bg); color: var(--log-text); font-family: var(--mono); font-size: 12px; line-height: 1.5;
-  height: 380px; overflow: auto; padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
-.log .f { color: #ff8a8a; } .log .w { color: #f5c26b; } .log .i { color: #8cc8ff; }
-.bar-o { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; min-width: 120px; }
-.bar-i { height: 100%; background: var(--accent); }
-.plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-.plan { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; background: var(--panel); }
-.plan.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-.plan .t { font-weight: 600; } .plan .d { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
-.empty { text-align: center; padding: 40px 16px; color: var(--muted); }
-.toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 8px;
-  max-width: min(420px, calc(100vw - 32px)); z-index: 20; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
-.grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
-.tl { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow: auto; }
-.tl li { padding: 4px 0; border-bottom: 1px dashed var(--border); font-size: 13px; display: flex; gap: 10px; }
-.tl li span:first-child { color: var(--muted); font-family: var(--mono); font-size: 12px; min-width: 64px; }
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.seg button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12.5px; } .seg button.on { background: var(--panel-2); font-weight: 650; }
-code { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
-pre.cmd { font-family: var(--mono); font-size: 12px; background: var(--panel-2); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; }
-@media (max-width: 640px) { .toplinks { display: none; } th, td { padding: 6px; } }
+.tw { overflow: auto; }
+.sbar { display: flex; height: 7px; border-radius: 99px; overflow: hidden; background: var(--panel-3); min-width: 90px; }
+.sbar i { display: block; height: 100%; } .sbar .p { background: var(--ok); } .sbar .x { background: var(--bad); } .sbar .s { background: var(--skip); }
+.donut-wrap { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.legend { display: grid; gap: 8px; min-width: 170px; flex: 1; } .legend div { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; } .legend b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.recent .it { display: grid; grid-template-columns: minmax(0, 1fr) 130px 92px; gap: 14px; align-items: center; padding: 10px 18px; border-top: 1px solid var(--border); cursor: pointer; }
+.recent .it:hover { background: var(--panel-2); }
+.recent .nm { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .recent .sb { color: var(--faint); font-size: 12px; }
+.empty-hero { text-align: center; padding: 32px 20px; }
+.empty-hero .big { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 12px; display: grid; place-items: center; background: var(--ok-soft); color: var(--ok); }
+.empty-hero .big svg { width: 26px; height: 26px; } .empty-hero h2 { margin: 0 0 4px; font-size: 18px; }
+.quick { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+.empty { text-align: center; padding: 34px 16px; color: var(--muted); }
+.plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.plan { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; background: var(--panel); transition: border-color .15s, box-shadow .15s; }
+.plan:hover { border-color: var(--border-2); box-shadow: var(--shadow); }
+.plan.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.plan .t { font-weight: 650; } .plan .d { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; background: var(--panel-3); color: var(--text-2); }
+.seg { display: inline-flex; border: 1px solid var(--border-2); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; border: 0; background: var(--panel); color: var(--muted); padding: 5px 11px; font-size: 12.5px; cursor: pointer; font-weight: 550; }
+.seg button + button { border-left: 1px solid var(--border-2); } .seg button.on { background: var(--accent-soft); color: var(--accent); }
+code { font-family: var(--mono); font-size: 12px; background: var(--panel-3); padding: 1px 6px; border-radius: 5px; }
+pre.cmd { font-family: var(--mono); font-size: 12px; background: var(--log-bg); color: var(--log-text); padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; margin: 12px 0 0; }
+.toast { position: fixed; right: 20px; bottom: 20px; background: var(--panel); color: var(--text); border: 1px solid var(--border-2); padding: 12px 16px; border-radius: 10px;
+  max-width: min(440px, calc(100vw - 40px)); z-index: 50; box-shadow: var(--shadow-lg); display: flex; gap: 10px; align-items: center; }
+.alert { padding: 11px 14px; border-radius: 10px; display: flex; gap: 10px; align-items: flex-start; font-size: 13px; margin: 14px 20px 0; }
+.alert.bad { background: var(--bad-soft); color: var(--bad); } .alert.warn { background: var(--warn-soft); color: var(--warn); }
+.chart { width: 100%; height: auto; display: block; overflow: visible; } .chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+.skeleton { height: 120px; border-radius: 12px; background: linear-gradient(90deg, var(--panel-2), var(--panel-3), var(--panel-2)); background-size: 200% 100%; animation: sk 1.2s linear infinite; }
+@keyframes sk { to { background-position: -200% 0; } }
+.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 10px; font-size: 12.5px; margin-top: 12px; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  aside { height: auto; flex-direction: row; align-items: center; padding: 8px 10px; z-index: 10; overflow-x: auto; }
+  .logo { padding: 0 8px 0 0; } .logo small, .logo b, .navlabel, .side-foot, #sidelinks { display: none; }
+  aside a.nav { padding: 7px 10px; } aside a.nav span { display: none; }
+  main { padding: 18px 16px 48px; }
+  .recent .it { grid-template-columns: minmax(0, 1fr) 92px; } .recent .it .sbar { display: none; }
+  .timer { text-align: left; }
+}
 </style>
 </head>
 <body>
-<header><div class="bar">
-  <div class="brand">xTS Agent<small id="host"></small></div>
-  <nav id="nav">
-    <a href="#/live" data-v="live">Live</a><a href="#/launch" data-v="launch">Launch</a>
-    <a href="#/runs" data-v="runs">Runs</a><a href="#/devices" data-v="devices">Devices</a>
-  </nav>
-  <div class="spacer"></div>
-  <div class="toplinks" id="toplinks"></div>
-</div></header>
+<div class="app">
+<aside>
+  <div class="logo"><div class="mark"><svg class="i" viewBox="0 0 24 24"><path d="M4 12h3l3-8 4 16 3-8h3"/></svg></div><div><b>xTS Agent</b><small>Execution console</small></div></div>
+  <div class="navlabel">Execution</div>
+  <a class="nav" href="#/live" data-v="live"><svg class="i" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Live</span><em class="count" id="activeCount" hidden></em></a>
+  <a class="nav" href="#/launch" data-v="launch"><svg class="i" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg><span>Launch</span></a>
+  <a class="nav" href="#/runs" data-v="runs"><svg class="i" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Runs</span></a>
+  <a class="nav" href="#/devices" data-v="devices"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><span>Devices</span></a>
+  <div id="sidelinks"></div>
+  <div class="side-foot"><div class="faint">Host</div><div class="host" id="host">–</div><div class="conn" id="conn"><i></i><span>Live updates</span></div></div>
+</aside>
 <main id="view"></main>
+</div>
 <script>
 "use strict";
-// ---------------------------------------------------------------- basics
+// ================================================================ basics
 const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ICONS = {
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>', stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>', check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>', alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  device: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>', layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  retry: '<path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>', file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+  ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', chart: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+  brain: '<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"/>',
+  terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>', list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>', shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', flag: '<path d="M4 22V4a1 1 0 0 1 1-1h12l-2 5 2 5H5"/>',
+};
+const ic = (n) => `<svg class="i" viewBox="0 0 24 24">${ICONS[n] || ""}</svg>`;
 let TOKEN = "";
 try { TOKEN = sessionStorage.getItem("xts-ui-token") || ""; } catch (e) {}
 (function takeToken() {
   const m = location.hash.match(/token=([^&]+)/);
-  if (m) { TOKEN = decodeURIComponent(m[1]); try { sessionStorage.setItem("xts-ui-token", TOKEN); } catch (e) {}
-    history.replaceState(null, "", location.pathname + "#/live"); }
+  if (m) { TOKEN = decodeURIComponent(m[1]); try { sessionStorage.setItem("xts-ui-token", TOKEN); } catch (e) {} history.replaceState(null, "", location.pathname + "#/live"); }
 })();
-const hdrs = () => (TOKEN ? { Authorization: "Bearer " + TOKEN } : {});
 const fileHref = (u) => (!u ? "" : TOKEN ? u + (u.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(TOKEN) : u);
 async function api(path, opts = {}) {
-  const init = { headers: { ...hdrs() } };
-  if (opts.body !== undefined) {
-    init.method = "POST"; init.body = JSON.stringify(opts.body);
-    init.headers["Content-Type"] = "application/json"; init.headers["X-XTS-UI"] = "1";
-  }
-  const r = await fetch(path, init);
+  const init = { headers: TOKEN ? { Authorization: "Bearer " + TOKEN } : {} };
+  if (opts.body !== undefined) { init.method = "POST"; init.body = JSON.stringify(opts.body); init.headers["Content-Type"] = "application/json"; init.headers["X-XTS-UI"] = "1"; }
+  let r;
+  try { r = await fetch(path, init); setConn(true); } catch (e) { setConn(false); throw new Error("Console unreachable"); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || r.status + " " + r.statusText);
   return data;
 }
-function toast(msg, ms = 4000) {
-  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
-  document.body.appendChild(t); setTimeout(() => t.remove(), ms);
+function setConn(ok) { const c = $("#conn"); if (c) { c.classList.toggle("down", !ok); c.lastElementChild.textContent = ok ? "Live updates" : "Disconnected"; } }
+function toast(msg, ms = 4000, kind = "ok") {
+  const t = document.createElement("div"); t.className = "toast";
+  t.innerHTML = `<span style="color:var(--${kind === "bad" ? "bad" : "ok"})">${ic(kind === "bad" ? "alert" : "check")}</span><span></span>`;
+  t.lastElementChild.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), ms);
 }
+const now = () => Date.now() / 1000;
 const fmtTime = (s) => (s ? new Date(s * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "–");
-const fmtClock = (s) => (s ? new Date(s * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "");
-function fmtDur(sec) {
+const fmtClock = (s) => (s ? new Date(s * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+function ago(s) { if (!s) return "–"; const d = now() - s; return d < 60 ? "just now" : d < 3600 ? Math.round(d / 60) + " min ago" : d < 86400 ? Math.round(d / 3600) + " h ago" : Math.round(d / 86400) + " d ago"; }
+function fmtDur(sec, clock) {
   if (sec == null || isNaN(sec)) return "–"; sec = Math.max(0, Math.round(sec));
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  if (clock) return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0");
   return h ? `${h}h ${String(m).padStart(2, "0")}m` : m ? `${m}m ${String(s).padStart(2, "0")}s` : `${s}s`;
 }
 const num = (v) => (v == null ? "–" : Number(v).toLocaleString());
-function badge(status) {
+const pct = (a, b) => (b ? Math.round((1000 * a) / b) / 10 : null);
+// Pass rate for display: 1 failure in 7,151 is 99.99%, never "100%"
+function rate(p, f) {
+  p = p || 0; f = f || 0; if (!(p + f)) return null;
+  const r = (100 * p) / (p + f);
+  if (!f) return 100;
+  return r >= 99.9 ? Math.min(99.99, Math.floor(r * 100) / 100) : Math.floor(r * 10) / 10;
+}
+function tone(status) {
   const s = String(status || "").toUpperCase();
-  const cls = /PASS|DONE|COMPLETE/.test(s) ? "b-ok" : /FAIL|ERROR|INTERRUPTED/.test(s) ? "b-bad"
-    : /RUNNING|RETRY|RCA|TRIAGE|REPORT/.test(s) ? "b-info" : /INCOMPLETE|CANCEL|WARN|QUARANT/.test(s) ? "b-warn" : "b-idle";
-  const live = /RUNNING|RETRYING/.test(s) ? '<span class="dot pulse"></span>' : "";
-  return `<span class="badge ${cls}">${live}${esc(s || "–")}</span>`;
+  return /PASS|DONE|COMPLETE|FREE/.test(s) ? "ok" : /FAIL|ERROR|INTERRUPT|OFFLINE|UNAUTH/.test(s) ? "bad" : /RUNNING|RETRY|RCA|TRIAGE|REPORT|IN USE/.test(s) ? "info" : /INCOMPLETE|CANCEL|WARN|QUARANT|BOOT/.test(s) ? "warn" : "skip";
+}
+function pill(status, label) {
+  const s = String(status || "–").toUpperCase();
+  return `<span class="pill t-${tone(s)}"><span class="d ${/RUNNING|RETRY/.test(s) ? "pulse" : ""}"></span>${esc(label || s)}</span>`;
+}
+const kpi = (t, icon, label, v, s) => `<div class="card kpi"><div class="ic t-${t}">${ic(icon)}</div><div style="min-width:0"><div class="k">${label}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ""}</div></div>`;
+function sbar(p, f, s) { const t = (p || 0) + (f || 0) + (s || 0); if (!t) return '<div class="sbar"></div>';
+  return `<div class="sbar" title="${num(p)} passed · ${num(f)} failed · ${num(s)} skipped"><i class="p" style="width:${(100 * (p || 0)) / t}%"></i><i class="x" style="width:${f ? Math.max(2, (100 * f) / t) : 0}%"></i><i class="s" style="width:${(100 * (s || 0)) / t}%"></i></div>`; }
+function donut(p, f, s, size = 150) {
+  p = p || 0; f = f || 0; s = s || 0;
+  const t = p + f + s, r = 54, c = 2 * Math.PI * r; let off = 0;
+  const seg = (v, col) => { if (!v) return ""; const len = Math.max((v / t) * c, 2.5); const out = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="var(--${col})" stroke-width="15" stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)"/>`; off += len; return out; };
+  const pr = rate(p, f);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 140 140" role="img" aria-label="Pass rate ${pr ?? "unknown"}%" style="flex:none">
+    <circle cx="70" cy="70" r="${r}" fill="none" stroke="var(--panel-3)" stroke-width="15"/>${t ? seg(p, "ok") + seg(f, "bad") + seg(s, "skip") : ""}
+    <text x="70" y="69" text-anchor="middle" style="font-size:${pr != null && String(pr).length > 4 ? 18 : 22}px;font-weight:700;fill:var(--text)">${pr == null ? "–" : pr + "%"}</text>
+    <text x="70" y="88" text-anchor="middle" style="font-size:11px;fill:var(--muted)">pass rate</text></svg>`;
+}
+function trendChart(rows, H = 150, W = 640) {
+  rows = rows.filter((r) => r.pass != null && (r.pass || r.fail)).slice(0, 24).reverse();
+  if (rows.length < 2) return '<div class="empty" style="padding:28px">The trend appears after two finished runs.</div>';
+  W = Math.max(320, Math.round(W)); const L = 46, R = 14, T = 12, B = 24, n = rows.length, step = (W - L - R) / n, bw = Math.min(24, step * 0.55);
+  const rates = rows.map((r) => rate(r.pass, r.fail) ?? 0);
+  const lo = Math.max(0, Math.floor(Math.min(...rates) - 0.5)), maxF = Math.max(1, ...rows.map((r) => r.fail || 0));
+  const y = (v) => T + (H - T - B) * (1 - (v - lo) / ((100 - lo) || 1));
+  const pts = rows.map((r, i) => [L + step * i + step / 2, y(rates[i]), rates[i], r]);
+  const bars = pts.map(([x, , , r]) => { const h = ((r.fail || 0) / maxF) * (H - T - B) * 0.5;
+    return `<rect x="${x - bw / 2}" y="${H - B - h}" width="${bw}" height="${r.fail ? Math.max(h, 2) : 0}" rx="3" fill="var(--bad)" opacity=".45"><title>${num(r.fail)} failed</title></rect>`; }).join("");
+  const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const grid = [lo, (lo + 100) / 2, 100].map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border)" stroke-dasharray="3 4"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${(Math.round(v * 100) / 100)}%</text>`).join("");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${grid}${bars}
+    <path d="${line} L${pts[n - 1][0]} ${H - B} L${pts[0][0]} ${H - B}Z" fill="var(--accent)" opacity=".08"/>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>
+    ${pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.6" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"><title>${esc(p[3].plan)} · ${fmtTime(p[3].started_at)} · ${p[2]}% pass · ${num(p[3].fail)} failed</title></circle>`).join("")}
+    <text x="${L}" y="${H - 6}">${esc(fmtTime(rows[0].started_at))}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${esc(fmtTime(rows[n - 1].started_at))}</text></svg>
+    <div class="row muted" style="font-size:12px;margin-top:8px;gap:16px"><span><i style="display:inline-block;width:12px;height:3px;background:var(--accent);vertical-align:middle;margin-right:6px;border-radius:2px"></i>Pass rate</span>
+    <span><i style="display:inline-block;width:9px;height:9px;background:var(--bad);opacity:.5;border-radius:2px;vertical-align:middle;margin-right:6px"></i>Failed tests</span></div>`;
 }
 
-// ---------------------------------------------------------------- router
+// ================================================================ router
 let timers = [];
 const every = (fn, ms) => { fn(); timers.push(setInterval(fn, ms)); };
-function clearTimers() { timers.forEach(clearInterval); timers = []; }
+const clearTimers = () => { timers.forEach(clearInterval); timers = []; };
 const views = {};
 function route() {
   clearTimers();
-  const [, name = "live", arg = ""] = (location.hash || "#/live").split("/");
-  document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === (name === "run" ? "runs" : name)));
-  (views[name] || views.live)(decodeURIComponent(arg));
+  const parts = (location.hash || "#/live").slice(2).split("/");
+  const name = parts[0] || "live", arg = decodeURIComponent(parts.slice(1).join("/"));
+  $$("aside a.nav[data-v]").forEach((a) => a.classList.toggle("on", a.dataset.v === (name === "run" ? "runs" : name)));
+  window.scrollTo(0, 0);
+  (views[name] || views.live)(arg);
 }
 window.addEventListener("hashchange", route);
-
 async function loadOverview() {
   try {
     const o = await api("/api/overview");
-    $("#host").textContent = "· " + o.host;
-    $("#toplinks").innerHTML = [
-      o.dashboard && `<a href="${esc(fileHref(o.dashboard))}" target="_blank" rel="noopener">Trends</a>`,
-      o.latest_triage && `<a href="${esc(fileHref(o.latest_triage))}" target="_blank" rel="noopener">Latest triage</a>`,
-      o.latest_report && `<a href="${esc(fileHref(o.latest_report))}" target="_blank" rel="noopener">Latest report</a>`,
-    ].filter(Boolean).join("");
-  } catch (e) { if (/token/.test(e.message)) $("#view").innerHTML = `<div class="card"><div class="bd empty">This console needs an access token. Open it with <code>#token=…</code> in the URL.</div></div>`; }
+    $("#host").textContent = o.host;
+    const L = (u, icon, label) => (u ? `<a class="nav" href="${esc(fileHref(u))}" target="_blank" rel="noopener">${ic(icon)}<span>${label}</span></a>` : "");
+    const links = L(o.dashboard, "chart", "Trends") + L(o.latest_triage, "brain", "Latest triage") + L(o.latest_report, "file", "Latest report");
+    $("#sidelinks").innerHTML = links ? `<div class="navlabel">Reports</div>${links}` : "";
+  } catch (e) {
+    if (/token/.test(e.message)) $("#view").innerHTML = `<div class="card"><div class="empty">This console needs an access token. Open it with <code>#token=…</code> in the URL.</div></div>`;
+  }
 }
+function setActiveCount(runs) { const n = runs.filter((r) => r.state === "running").length, el = $("#activeCount"); el.hidden = !n; el.textContent = n; }
 
-// ---------------------------------------------------------------- live
-const PHASES = ["running", "rca", "triage", "reports", "done"];
-function phaseSteps(phase) {
-  const i = PHASES.indexOf(phase);
-  const names = { running: "Execute", rca: "RCA", triage: "Triage", reports: "Reports", done: "Done" };
-  if (phase === "cancelled" || phase === "error") return badge(phase);
-  return `<div class="steps">${PHASES.map((p, j) => `<span class="step ${j < i || phase === "done" ? "done" : j === i ? "cur" : ""}">${names[p]}</span>`).join("")}</div>`;
+// ================================================================ live
+const STEPS = [["alloc", "Allocate", "device"], ["running", "Execute", "play"], ["retry", "Retry", "retry"], ["rca", "RCA", "search"], ["triage", "Triage", "brain"], ["reports", "Reports", "file"], ["done", "Done", "flag"]];
+function stepper(r, compact) {
+  const tl = r.timeline || [], ev = (re) => tl.find((t) => re.test(t.event));
+  const retrying = r.suites.some((s) => s.status === "RETRYING");
+  const retried = retrying || tl.some((t) => / retry \d/.test(t.event));
+  const steps = STEPS.filter(([k]) => k !== "retry" || retried);
+  const hasLog = r.suites.some((s) => s.progress && s.progress.has_log);
+  let cur = r.phase;
+  if (r.state === "running" && r.phase === "running") cur = retrying ? "retry" : hasLog ? "running" : "alloc";
+  const ended = r.phase === "done", aborted = r.phase === "cancelled" || r.phase === "error" || r.state === "interrupted";
+  let idx = ended ? steps.length : steps.findIndex(([k]) => k === cur);
+  if (aborted) idx = Math.max(1, steps.findIndex(([k]) => k === (retried ? "retry" : "running")));
+  const times = { alloc: ev(/^started/), running: ev(/^started/), retry: ev(/ retry \d/), rca: ev(/^rca$/), triage: ev(/^triage$/), reports: ev(/^reports$/), done: ev(/^done$/) };
+  return `<div class="stepper ${compact ? "compact" : ""}">${steps.map(([k, label, icon], i) => {
+    const cls = aborted && i === idx ? "bad" : i < idx ? "done" : i === idx ? "cur" : "todo";
+    const t = times[k], glyph = cls === "done" ? "check" : cls === "bad" ? "x" : icon;
+    const name = aborted && i === idx ? (r.phase === "cancelled" ? "Cancelled" : r.state === "interrupted" ? "Interrupted" : "Error") : label;
+    return `<div class="st ${cls}"><div class="b">${ic(glyph)}</div><div class="n">${name}</div><div class="t">${cls !== "todo" && t ? fmtClock(t.at) : "&nbsp;"}</div></div>`;
+  }).join("")}</div>`;
 }
-const logState = {};
+let HIST = [];
+const devSeen = {};
+const expectedModules = (r) => { const prev = HIST.find((h) => h.plan === r.plan && h.modules_total); return prev ? prev.modules_total : null; };
 views.live = function () {
-  $("#view").innerHTML = `<h1>Live execution</h1><p class="sub">Every <code>xts-agent run</code> on this host, whether started here, from the CLI or from CI. Updates every 3 seconds.</p><div id="live"></div>`;
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Live execution</h1><p>Every <code>xts-agent run</code> on this host, started here, from a shell or from CI.</p></div><div class="spacer"></div>
+    <a class="btn primary" href="#/launch">${ic("play")} New run</a></div>
+    <div class="kpis" id="kpis">${'<div class="card skeleton" style="height:86px"></div>'.repeat(4)}</div><div id="active"></div><div id="below"></div>`;
+  api("/api/runs").then((h) => { HIST = h; }).catch(() => {});
   every(renderLive, 3000);
+  every(renderKpis, 10000);
+  timers.push(setInterval(() => $$("[data-since]").forEach((el) => { el.textContent = fmtDur(now() - +el.dataset.since, el.dataset.clock === "1"); }), 1000));
 };
+async function renderKpis() {
+  let devs = [], runs = HIST;
+  try { [devs, runs] = await Promise.all([api("/api/devices"), api("/api/runs")]); HIST = runs; } catch (e) { /* keep last */ }
+  if (!$("#kpis")) return;
+  const on = devs.filter((d) => d.state === "device"), busy = on.filter((d) => d.leased_by).length, q = devs.filter((d) => d.quarantine).length;
+  const last = runs.find((r) => r.pass != null && (r.pass || r.fail)), week = runs.filter((r) => r.started_at && now() - r.started_at < 7 * 86400);
+  const lr = last ? rate(last.pass, last.fail) : null, nActive = $$("#active .hero").length;
+  $("#kpis").innerHTML =
+    kpi(on.length ? "ok" : "warn", "device", "Devices online", `${on.length}<span class="muted" style="font-size:15px;font-weight:500"> / ${devs.length}</span>`, `${on.length - busy} free · ${busy} in use${q ? ` · <b style="color:var(--warn)">${q} quarantined</b>` : ""}`) +
+    kpi("accent", "activity", "Active runs", nActive, nActive ? "refreshing every 3 s" : "idle, ready to launch") +
+    kpi(lr == null ? "skip" : lr === 100 ? "ok" : lr >= 99 ? "warn" : "bad", "check", "Last pass rate", lr == null ? "–" : lr + "%", last ? `<span class="ell" style="display:block">${esc(last.plan)} · ${ago(last.started_at)}</span>` : "no runs yet") +
+    kpi(last && last.fail ? "bad" : "ok", "alert", "Last run failures", last ? num(last.fail) : "–", last && last.triage_groups != null ? `in ${num(last.triage_groups)} triage group${last.triage_groups === 1 ? "" : "s"}` : `${week.length} runs in 7 days`);
+}
 async function renderLive() {
   let runs;
-  try { runs = await api("/api/live"); } catch (e) { $("#live").innerHTML = `<div class="card"><div class="bd empty">${esc(e.message)}</div></div>`; return; }
+  try { runs = await api("/api/live"); } catch (e) { if ($("#active")) $("#active").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+  setActiveCount(runs);
+  const host = $("#active"); if (!host) return;
   const active = runs.filter((r) => r.state === "running" || r.state === "interrupted");
-  const recent = runs.filter((r) => !active.includes(r)).sort((a, b) => (b.finished_at || b.started_at || 0) - (a.finished_at || a.started_at || 0))[0];
-  const host = $("#live"); if (!host) return;
-  if (!active.length) {
-    host.innerHTML = `<div class="card"><div class="bd empty"><div style="font-size:15px;color:var(--text);margin-bottom:6px">No run in progress</div>
-      Start one from <a href="#/launch">Launch</a>, or run <code>xts-agent run --plan …</code> in a shell; it appears here within seconds.</div></div>
-      ${recent ? `<h3 style="margin-top:22px">Last run</h3>${runCard(recent, false)}` : ""}`;
-    return;
-  }
-  // Keep open log panels across refreshes: update cards in place
+  if (!active.length) { if (!host.dataset.idle) { host.dataset.idle = "1"; renderIdle(runs); } return; }
+  if (host.dataset.idle) { delete host.dataset.idle; host.innerHTML = ""; $("#below").innerHTML = ""; renderKpis(); }
   for (const r of active) {
     let el = document.getElementById("run-" + r.key);
-    if (!el) { el = document.createElement("div"); el.id = "run-" + r.key; host.appendChild(el);
-      el.innerHTML = runCard(r, true); bindRunCard(el, r); }
-    else updateRunCard(el, r);
+    if (!el) { el = document.createElement("div"); el.id = "run-" + r.key; el.className = "mb"; host.appendChild(el); el.innerHTML = heroCard(r); bindHero(el, r); }
+    else updateHero(el, r);
   }
   [...host.children].forEach((c) => { if (!active.some((r) => "run-" + r.key === c.id)) c.remove(); });
 }
+function agg(r) {
+  const a = { done: 0, started: 0, fails: 0, quiet: 0, busy: 0, devs: 0, live: false };
+  for (const s of r.suites) { const p = s.progress || {};
+    a.done += p.modules_completed || 0; a.started += p.modules_started || 0; a.fails += p.failures || 0; a.quiet = Math.max(a.quiet, p.quiet_secs || 0);
+    a.busy += Object.keys(p.current || {}).length; a.devs += (s.devices || []).length; a.live = a.live || !!p.has_log; }
+  return a;
+}
+function heroCard(r) {
+  const a = agg(r), exp = expectedModules(r);
+  const hb = r.heartbeat_at ? Math.round(now() - r.heartbeat_at) : null, stale = r.state === "running" && hb != null && hb > 120;
+  const flags = Object.entries(r.flags || {}).filter(([, v]) => v).map(([k]) => k.replace("_", "-"));
+  const width = exp ? Math.min(100, (100 * a.done) / exp) : null;
+  const label = r.state === "interrupted" ? "INTERRUPTED" : r.suites.some((s) => s.status === "RETRYING") ? "RETRYING" : r.phase === "running" ? "RUNNING" : r.phase.toUpperCase();
+  return `<div class="card hero">
+    <div class="hero-top"><div style="min-width:0;flex:1"><div class="row"><span data-f="pill">${pill(label)}</span><h2>${esc(r.plan)}</h2></div>
+        <div class="meta">${ic("clock")} ${fmtTime(r.started_at)} &nbsp;·&nbsp; <span class="mono">${esc(r.run_id || r.key)}</span> &nbsp;·&nbsp; pid ${esc(r.pid || "–")} &nbsp;·&nbsp; ${esc(r.user || "")}@${esc(r.host || "")}
+        ${flags.map((f) => ` <span class="tag">${esc(f)}</span>`).join("")}</div></div>
+      <div class="timer"><div class="k">Elapsed</div><div class="v" data-since="${r.started_at || now()}" data-clock="1">${fmtDur(now() - (r.started_at || now()), true)}</div></div>
+      <div class="row" data-f="actions">${r.state === "running" ? `<button class="btn danger sm" data-act="stop">${ic("stop")} Stop</button><button class="btn sm ghost" data-act="force" title="Second signal: kill TradeFed and exit now" style="color:var(--bad)">Force</button>` : ""}
+        <a class="btn sm" href="#/run/${encodeURIComponent(r.run_id || r.key)}">Details</a></div></div>
+    <div data-f="alerts">${r.state === "interrupted" ? `<div class="alert bad">${ic("alert")}<div>The agent process is gone but the run never finished. Continue it from <a href="#/launch">Launch</a> with <b>Resume</b>, or <code>xts-agent run --plan … --resume</code>.</div></div>` : ""}
+    ${stale ? `<div class="alert warn">${ic("alert")}<div>No heartbeat for ${fmtDur(hb)}. The agent may be finishing a phase, or stuck.</div></div>` : ""}
+    ${r.error ? `<div class="alert bad">${ic("alert")}<div>${esc(r.error)}</div></div>` : ""}</div>
+    <div class="section" data-f="stepper">${stepper(r)}</div>
+    <div class="metrics" data-f="metrics">
+      <div><div class="k">Modules finished</div><div class="v">${num(a.done)} <small>${exp ? `of ~${num(exp)} · estimate from the last run` : `· ${num(a.started)} started`}</small></div>
+        <div class="prog ${width == null ? "indet" : ""}"><i style="width:${width ?? 0}%"></i></div></div>
+      <div><div class="k">Test failures so far</div><div class="v" style="color:${a.fails ? "var(--bad)" : "inherit"}">${num(a.fails)}</div></div>
+      <div><div class="k">Devices busy</div><div class="v">${num(a.busy)} <small>/ ${num(a.devs)}</small></div></div>
+      <div><div class="k">Log quiet</div><div class="v" style="color:${a.quiet > 900 ? "var(--warn)" : "inherit"}">${a.live ? fmtDur(a.quiet) : "–"}</div></div></div>
+    <div class="section"><h3>${ic("device")} Devices</h3><div class="devgrid" data-f="devices">${deviceTiles(r)}</div></div>
+    ${r.suites.length > 1 ? `<div class="section"><h3>${ic("layers")} Suites</h3><div class="tw"><table><thead><tr><th>Suite</th><th>Status</th><th class="n">Modules done / started</th><th class="n">Failures</th><th>Result</th></tr></thead><tbody data-f="suites">${suiteRows(r)}</tbody></table></div></div>` : ""}
+    <div class="tabs"><button class="on" data-tab="console">${ic("terminal")} TradeFed console</button><button data-tab="fails">${ic("alert")} Failures <span class="cnt" data-f="failcnt">0</span></button><button data-tab="timeline">${ic("list")} Timeline</button></div>
+    <div class="section" data-pane="console"><div class="logbar">${r.suites.length > 1 ? `<select data-f="logsuite">${r.suites.map((s) => `<option>${esc(s.name)}</option>`).join("")}</select>` : ""}
+        <div class="seg"><button class="on" data-l="all">All</button><button data-l="test">Test events</button><button data-l="err">Errors</button></div>
+        <input type="text" data-f="grep" placeholder="Filter lines" style="flex:1;min-width:160px"><label class="chk"><input type="checkbox" data-f="follow" checked> Follow</label></div>
+      <div class="log" data-f="log"><span class="ts">Waiting for TradeFed output…</span></div></div>
+    <div class="section" data-pane="fails" hidden><div class="feed" data-f="feed"></div></div>
+    <div class="section" data-pane="timeline" hidden><ul class="tl" data-f="timeline">${timeline(r)}</ul></div>
+  </div>`;
+}
 function suiteRows(r) {
-  return r.suites.map((s) => {
-    const p = s.progress || {};
-    const quiet = p.quiet_secs || 0;
-    const retry = s.status === "RETRYING" ? ` <span class="muted">attempt ${esc(s.retry_attempt)}</span>` : s.retry_count ? ` <span class="muted">${esc(s.retry_count)} retries</span>` : "";
-    const counts = s.pass_count != null ? `${num(s.pass_count)} pass · <b style="color:var(--bad)">${num(s.fail_count)}</b> fail` : "";
-    return `<tr><td><b>${esc(s.name)}</b></td><td>${badge(s.status)}${retry}</td>
-      <td class="n">${num(p.modules_completed)} / ${num(p.modules_started)}</td>
-      <td class="n">${num(p.failures)}</td><td>${counts}</td>
-      <td class="n ${quiet > 900 ? "" : "muted"}" ${quiet > 900 ? 'style="color:var(--warn)"' : ""}>${p.heartbeat_at ? fmtDur(quiet) : "–"}</td>
-      <td class="n">${fmtDur(p.elapsed_secs)}</td></tr>`;
-  }).join("");
+  return r.suites.map((s) => { const p = s.progress || {};
+    return `<tr><td><b>${esc(s.name)}</b></td><td>${pill(s.status)}${s.status === "RETRYING" ? ` <span class="muted">attempt ${esc(s.retry_attempt)}</span>` : ""}</td>
+      <td class="n">${num(p.modules_completed)} / ${num(p.modules_started)}</td><td class="n">${num(p.failures)}</td>
+      <td>${s.pass_count != null ? sbar(s.pass_count, s.fail_count, s.skip_count) : '<span class="muted">–</span>'}</td></tr>`; }).join("");
 }
 function deviceTiles(r) {
-  const tiles = [];
+  const out = [];
   for (const s of r.suites) {
     const running = r.state === "running" && /RUNNING|RETRYING/.test(s.status || "");
     const cur = running ? (s.progress || {}).current || {} : {};
-    for (const d of s.devices) {
+    for (const d of s.devices || []) {
       const mod = cur[d];
-      tiles.push(`<div class="dev"><div class="s">${esc(d)} · ${esc(s.name)}</div>
-        <div class="m" title="${esc(mod || "")}">${mod ? esc(mod) : `<span class="muted">${running ? "idle / between modules" : "released"}</span>`}</div></div>`);
+      if (mod) { if (!devSeen[d] || devSeen[d].module !== mod) devSeen[d] = { module: mod, since: now() }; } else delete devSeen[d];
+      out.push(`<div class="dev ${mod ? "busy" : ""}"><div class="top"><span class="d ${mod ? "pulse" : ""}"></span>${esc(d)}<span class="spacer"></span>${esc(s.name.toUpperCase())}</div>
+        <div class="m" title="${esc(mod || "")}">${mod ? esc(mod) : `<span class="faint">${running ? "Waiting for a module" : "Released"}</span>`}</div>
+        <div class="f">${mod ? `running for <span data-since="${devSeen[d].since}">${fmtDur(now() - devSeen[d].since)}</span>` : "&nbsp;"}</div></div>`);
     }
   }
-  return tiles.join("") || '<div class="muted">Devices are being allocated…</div>';
+  return out.join("") || '<div class="muted">Allocating devices…</div>';
 }
-function runCard(r, live) {
-  const hb = r.heartbeat_at ? Math.round(Date.now() / 1000 - r.heartbeat_at) : null;
-  const stale = r.state === "running" && hb != null && hb > 120;
-  const flags = Object.entries(r.flags || {}).filter(([, v]) => v).map(([k]) => k.replace("_", "-")).join(", ");
-  return `<div class="card">
-    <div class="hd"><h2>${esc(r.plan)}</h2>${badge(r.state === "running" ? r.phase === "running" ? "RUNNING" : r.phase : r.overall_status || r.state)}
-      <span class="muted mono">${esc(r.run_id || r.key)}</span><div class="spacer"></div>
-      ${live && r.state === "running" ? `<button class="danger sm" data-act="stop">Stop</button><button class="danger sm" data-act="force" title="Second signal: kill TradeFed and exit now">Force stop</button>` : ""}
-      <a class="btn sm" href="#/run/${encodeURIComponent(r.run_id || r.key)}">Details</a></div>
-    <div class="bd">
-      <div class="row" style="justify-content:space-between;margin-bottom:12px">${phaseSteps(r.phase)}
-        <span class="muted" data-f="meta">Started ${fmtTime(r.started_at)} · pid ${esc(r.pid || "–")} · ${esc(r.user || "")}@${esc(r.host || "")}${flags ? " · " + esc(flags) : ""}
-        ${stale ? ' · <b style="color:var(--warn)">no heartbeat for ' + fmtDur(hb) + "</b>" : ""}</span></div>
-      ${r.state === "interrupted" ? `<p style="color:var(--bad);margin:0 0 12px">The agent process is gone but the run never finished. Continue it with <code>xts-agent run --plan … --resume</code> or <b>Launch → Resume</b>.</p>` : ""}
-      ${r.error ? `<p style="color:var(--bad);margin:0 0 12px">${esc(r.error)}</p>` : ""}
-      <div class="scroll"><table><thead><tr><th>Suite</th><th>Status</th><th class="n">Modules done / started</th><th class="n">Test failures</th><th>Result</th><th class="n">Log quiet</th><th class="n">Elapsed</th></tr></thead>
-      <tbody data-f="suites">${suiteRows(r)}</tbody></table></div>
-      <h3 style="margin-top:16px">Devices</h3><div class="devices" data-f="devices">${deviceTiles(r)}</div>
-      ${live ? `<div class="grid2" style="margin-top:16px">
-        <div><div class="row" style="margin-bottom:8px"><h3 style="margin:0">TradeFed console</h3><div class="spacer"></div>
-          <select data-f="logsuite">${r.suites.map((s) => `<option>${esc(s.name)}</option>`).join("")}</select>
-          <label class="chk"><input type="checkbox" data-f="onlyfail"> failures only</label>
-          <label class="chk"><input type="checkbox" data-f="follow" checked> follow</label></div>
-          <div class="log" data-f="log"><span class="muted">Waiting for TradeFed output…</span></div></div>
-        <div><h3>Timeline</h3><ul class="tl" data-f="timeline">${timeline(r)}</ul></div></div>` : ""}
-    </div></div>`;
+function timeline(r) {
+  return (r.timeline || []).slice().reverse().map((t) => `<li class="${/FAIL|error|cancel/i.test(t.event) ? "bad" : /PASS|done/.test(t.event) ? "ok" : ""}"><div>${esc(t.event)}</div><div class="w">${fmtTime(t.at)}</div></li>`).join("") || '<li class="muted">–</li>';
 }
-const timeline = (r) => (r.timeline || []).slice().reverse().map((t) => `<li><span>${fmtClock(t.at)}</span><span>${esc(t.event)}</span></li>`).join("") || '<li class="muted">–</li>';
-function updateRunCard(el, r) {
-  const card = runCard(r, true), tmp = document.createElement("div"); tmp.innerHTML = card;
-  for (const f of ["suites", "devices", "timeline", "meta"]) { const a = $(`[data-f=${f}]`, el), b = $(`[data-f=${f}]`, tmp); if (a && b) a.innerHTML = b.innerHTML; }
-  const hdA = $(".hd", el), hdB = $(".hd", tmp); if (hdA && hdB && hdA.innerHTML !== hdB.innerHTML) { hdA.innerHTML = hdB.innerHTML; bindButtons(el, r); }
-  const stA = $(".steps", el), stB = $(".steps", tmp); if (stA && stB) stA.outerHTML = stB.outerHTML;
+function updateHero(el, r) {
   el._run = r;
+  const tmp = document.createElement("div"); tmp.innerHTML = heroCard(r);
+  for (const f of ["pill", "alerts", "stepper", "metrics", "devices", "suites", "timeline"]) { const a = $(`[data-f=${f}]`, el), b = $(`[data-f=${f}]`, tmp); if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML; }
+  const aA = $("[data-f=actions]", el), aB = $("[data-f=actions]", tmp); if (aA && aB && aA.innerHTML !== aB.innerHTML) { aA.innerHTML = aB.innerHTML; bindButtons(el); }
 }
-function bindButtons(el, r) {
-  el.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", async () => {
+function bindButtons(el) {
+  $$("[data-act]", el).forEach((b) => b.addEventListener("click", async () => {
     const force = b.dataset.act === "force";
-    if (!confirm(force ? "Force stop: TradeFed is killed and the agent exits immediately. Continue?" :
-      "Stop this run? TradeFed is asked to stop and writes a partial result; you can resume it later.")) return;
-    try { await api(`/api/runs/${encodeURIComponent((el._run || r).key)}/stop`, { body: { force } }); toast("Stop signal sent"); }
-    catch (e) { toast("Stop failed: " + e.message); }
+    if (!confirm(force ? "Force stop: TradeFed is killed and the agent exits immediately. Continue?" : "Stop this run? TradeFed is asked to stop and writes a partial result; you can resume it later.")) return;
+    try { await api(`/api/runs/${encodeURIComponent(el._run.key)}/stop`, { body: { force } }); toast("Stop signal sent. The run writes its checkpoint and reports."); }
+    catch (e) { toast("Stop failed: " + e.message, 6000, "bad"); }
   }));
 }
-function bindRunCard(el, r) {
-  el._run = r; bindButtons(el, r);
-  const key = r.key, st = logState[key] = logState[key] || { offset: -1, suite: r.suites[0] && r.suites[0].name, lines: [] };
-  const logEl = $("[data-f=log]", el), sel = $("[data-f=logsuite]", el), only = $("[data-f=onlyfail]", el);
-  if (sel) sel.addEventListener("change", () => { st.suite = sel.value; st.offset = -1; st.lines = []; logEl.textContent = ""; });
-  if (only) only.addEventListener("change", () => paint());
-  // Red: a test failure or an error-level line. TradeFed logs many harmless
-  // "Adb Shell Command exited with status: FAILED" warnings during setup.
-  const FAIL_RE = /ModuleListener: \[.*(FAILURE|FAILED)|\sE\/|Exception:|Caused by:/;
-  function cls(line) { return FAIL_RE.test(line) ? "f" : /\sW\//.test(line) ? "w" : /ModuleListener|ITestSuite|Running module|ModuleDefinition/.test(line) ? "i" : ""; }
+const logState = {};
+// Red only for test failures and error-level lines: TradeFed logs many harmless
+// "Adb Shell Command exited with status: FAILED" warnings during device setup.
+const FAIL_RE = /ModuleListener: \[.*(FAILURE|FAILED)|\sE\/|Exception:|Caused by:/;
+const TEST_RE = /ModuleListener|ITestSuite|ModuleDefinition: Running module|ShardListener/;
+const FEED_RE = /^(\S+ \S+) I\/ModuleListener: \[\d+\/\d+\] (\S+) (\S+#\S+) FAILURE: ?(.*)$/;
+function bindHero(el, r) {
+  el._run = r; bindButtons(el);
+  $$("[data-tab]", el).forEach((b) => b.addEventListener("click", () => {
+    $$("[data-tab]", el).forEach((x) => x.classList.toggle("on", x === b));
+    $$("[data-pane]", el).forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.tab; });
+  }));
+  const st = logState[r.key] = logState[r.key] || { offset: -1, suite: r.suites[0] && r.suites[0].name, lines: [], feed: [], level: "all" };
+  const logEl = $("[data-f=log]", el), sel = $("[data-f=logsuite]", el), grep = $("[data-f=grep]", el);
+  if (sel) { sel.value = st.suite || ""; sel.addEventListener("change", () => { st.suite = sel.value; st.offset = -1; st.lines = []; st.feed = []; paint(); }); }
+  $$("[data-l]", el).forEach((b) => b.addEventListener("click", () => { st.level = b.dataset.l; $$("[data-l]", el).forEach((x) => x.classList.toggle("on", x === b)); paint(); }));
+  grep.addEventListener("input", () => paint());
+  const cls = (l) => (FAIL_RE.test(l) ? "f" : /\sW\//.test(l) ? "w" : TEST_RE.test(l) ? "i" : "");
+  const line = (l) => { const m = l.match(/^(\d\d-\d\d \d\d:\d\d:\d\d)(.*)$/), c = cls(l), body = m ? `<span class="ts">${esc(m[1])}</span>${esc(m[2])}` : esc(l); return c ? `<span class="${c}">${body}</span>` : body; };
   function paint() {
-    const lines = only && only.checked ? st.lines.filter((l) => FAIL_RE.test(l)) : st.lines;
-    logEl.innerHTML = lines.slice(-1500).map((l) => { const c = cls(l); return c ? `<span class="${c}">${esc(l)}</span>` : esc(l); }).join("\n");
+    const q = grep.value.toLowerCase();
+    let lines = st.level === "err" ? st.lines.filter((l) => FAIL_RE.test(l)) : st.level === "test" ? st.lines.filter((l) => TEST_RE.test(l) || FAIL_RE.test(l)) : st.lines;
+    if (q) lines = lines.filter((l) => l.toLowerCase().includes(q));
+    logEl.innerHTML = lines.slice(-1500).map(line).join("\n") || '<span class="ts">No matching lines yet.</span>';
     if ($("[data-f=follow]", el).checked) logEl.scrollTop = logEl.scrollHeight;
+    $("[data-f=failcnt]", el).textContent = st.feed.length;
+    $("[data-f=feed]", el).innerHTML = st.feed.length ? st.feed.slice().reverse().slice(0, 300).map((f) => `<div class="it"><div class="tm">${esc(f.t.slice(6))}</div><div><div class="tn">${esc(f.test)}</div>
+        <div class="ms">${esc(f.msg || "(no message)")} <span class="faint mono">· ${esc(f.dev)}</span></div></div></div>`).join("")
+      : `<div class="empty">${ic("check")} No test failures in this session yet.</div>`;
   }
   async function pull() {
     if (!document.body.contains(el) || !st.suite) return;
     try {
-      const d = await api(`/api/runs/${encodeURIComponent((el._run || r).key)}/log?suite=${encodeURIComponent(st.suite)}&offset=${st.offset}`);
-      if (d.text) { const parts = d.text.split("\n"); st.lines.push(...parts.filter((l, i) => l || i < parts.length - 1)); if (st.lines.length > 4000) st.lines.splice(0, st.lines.length - 4000); paint(); }
+      const d = await api(`/api/runs/${encodeURIComponent(el._run.key)}/log?suite=${encodeURIComponent(st.suite)}&offset=${st.offset}`);
+      if (d.text) {
+        const parts = d.text.split("\n"), fresh = parts.filter((l, i) => l || i < parts.length - 1);
+        for (const l of fresh) { const m = l.match(FEED_RE); if (m) st.feed.push({ t: m[1], dev: m[2], test: m[3], msg: m[4] }); }
+        st.lines.push(...fresh); if (st.lines.length > 5000) st.lines.splice(0, st.lines.length - 5000); paint();
+      }
       st.offset = d.offset;
     } catch (e) { /* no log yet */ }
   }
-  timers.push(setInterval(pull, 2000)); pull();
+  paint(); timers.push(setInterval(pull, 2000)); pull();
+}
+function renderIdle(runs) {
+  const last = runs.filter((r) => r.state !== "running").sort((a, b) => (b.finished_at || b.started_at || 0) - (a.finished_at || a.started_at || 0))[0];
+  $("#active").innerHTML = `<div class="card mb"><div class="empty-hero"><div class="big">${ic("check")}</div><h2>No run in progress</h2>
+    <div class="muted">Any <code>xts-agent run</code> on this host shows up here within seconds. Start one:</div><div class="quick" id="quick"></div></div></div>`;
+  api("/api/plans").then((plans) => {
+    const pick = plans.filter((p) => p.profile === "development" && p.suites.some((s) => s.include_filters.length)).slice(0, 3);
+    $("#quick").innerHTML = pick.map((p) => `<a class="btn" href="#/launch/${encodeURIComponent(p.file)}">${ic("play")} ${esc(p.name)}</a>`).join("") + `<a class="btn primary" href="#/launch">Choose a plan</a>`;
+  }).catch(() => {});
+  const lastCard = (r) => {
+    const t = r.totals || {}, devs = new Set(r.suites.flatMap((s) => s.devices || [])).size;
+    const mods = r.suites.reduce((a, s) => [a[0] + (s.modules_done || 0), a[1] + (s.modules_total || 0)], [0, 0]);
+    const dur = t.duration ?? (r.finished_at && r.started_at ? r.finished_at - r.started_at : null), ts = r.triage_summary;
+    const html = (r.links.reports || []).find((u) => u.endsWith(".html"));
+    return `<div class="card"><div class="card-hd"><h2>Last run</h2>${pill(r.overall_status || r.state)}<span class="spacer"></span><a class="btn sm" href="#/run/${encodeURIComponent(r.run_id || r.key)}">Open run</a></div>
+      <div class="card-bd"><div style="font-weight:650;font-size:15px">${esc(r.plan)}</div>
+        <div class="muted" style="font-size:12.5px;margin-bottom:16px">${fmtTime(r.started_at)} · ${fmtDur(dur)} · ${devs} device${devs === 1 ? "" : "s"}${mods[1] ? ` · ${num(mods[0])}/${num(mods[1])} modules` : ""}</div>
+        <div class="donut-wrap">${donut(t.pass, t.fail, t.skip)}<div class="legend">
+          <div><i style="background:var(--ok)"></i>Passed<b>${num(t.pass)}</b></div><div><i style="background:var(--bad)"></i>Failed<b>${num(t.fail)}</b></div>
+          <div><i style="background:var(--skip)"></i>Skipped<b>${num(t.skip)}</b></div>${ts ? `<div><i style="background:var(--accent)"></i>Triage groups<b>${num(ts.groups)}</b></div>` : ""}</div></div>
+        <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">${stepper(r, true)}</div>
+        <div class="row" style="margin-top:14px">${r.links.triage_html ? `<a class="btn sm primary" href="${esc(fileHref(r.links.triage_html))}" target="_blank" rel="noopener">${ic("brain")} Triage page</a>` : ""}
+          ${html ? `<a class="btn sm" href="${esc(fileHref(html))}" target="_blank" rel="noopener">${ic("file")} HTML report</a>` : ""}</div></div></div>`;
+  };
+  $("#below").innerHTML = `<div class="grid g-23">${last ? lastCard(last) : '<div class="card"><div class="empty">No runs yet.</div></div>'}
+    <div class="card"><div class="card-hd"><h2>Recent runs</h2><span class="sub">pass rate and failed tests per run</span><span class="spacer"></span><a href="#/runs" class="btn sm ghost">All runs</a></div>
+      <div class="card-bd" id="trend"><div class="skeleton"></div></div><div class="recent" id="recent"></div></div></div>`;
+  api("/api/runs").then((rows) => {
+    HIST = rows; $("#trend").innerHTML = trendChart(rows, 160, $("#trend").clientWidth - 36);
+    $("#recent").innerHTML = rows.slice(0, 6).map((r) => `<div class="it" data-k="${esc(r.key)}"><div style="min-width:0"><div class="nm">${esc(r.plan)}</div><div class="sb">${fmtTime(r.started_at)} · ${fmtDur(r.duration)} · ${num(r.fail)} failed</div></div>
+      ${sbar(r.pass, r.fail, r.skip)}<div style="text-align:right">${pill(r.status)}</div></div>`).join("");
+    $$("#recent .it").forEach((it) => it.addEventListener("click", () => { location.hash = "#/run/" + encodeURIComponent(it.dataset.k); }));
+  }).catch(() => {});
 }
 
-// ---------------------------------------------------------------- launch
-views.launch = async function () {
-  $("#view").innerHTML = `<h1>Launch a run</h1><p class="sub">Starts <code>xts-agent run</code> as its own process: closing this page or restarting the console never stops it.</p>
-    <div class="card"><div class="hd"><h2>1. Test plan</h2><span class="muted">from config/test_plans</span></div><div class="bd"><div class="plans" id="plans">Loading…</div></div></div>
-    <div class="card"><div class="hd"><h2>2. Scope and options</h2></div><div class="bd" id="opts"></div></div>
-    <div class="card"><div class="hd"><h2>3. Devices</h2><div class="spacer"></div><a href="#/devices">Manage devices</a></div><div class="bd" id="devsum">Checking adb…</div></div>
-    <div class="row"><button class="primary" id="go" disabled>Start run</button><span class="muted" id="gohint"></span></div>`;
+// ================================================================ launch
+views.launch = async function (preselect) {
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Launch a run</h1><p>Starts <code>xts-agent run</code> as its own process: closing this page or restarting the console never stops it.</p></div></div>
+    <div class="grid g-32"><div style="min-width:0">
+      <div class="card mb"><div class="card-hd"><h2>1 · Test plan</h2><span class="sub">config/test_plans</span><span class="spacer"></span><input type="text" id="pq" placeholder="Search plans" style="width:200px"></div><div class="card-bd"><div class="plans" id="plans"><div class="skeleton"></div></div></div></div>
+      <div class="card mb"><div class="card-hd"><h2>2 · Scope and options</h2></div><div class="card-bd" id="opts"></div></div></div>
+    <div style="min-width:0"><div class="card" style="position:sticky;top:20px"><div class="card-hd"><h2>3 · Devices</h2><span class="spacer"></span><a href="#/devices" class="btn sm ghost">Manage</a></div><div class="card-bd" id="devsum"><div class="skeleton" style="height:90px"></div></div>
+      <div class="card-bd" style="border-top:1px solid var(--border)"><button class="btn primary" id="go" disabled style="width:100%;justify-content:center;padding:10px">${ic("play")} Start run</button>
+      <div class="muted" id="gohint" style="text-align:center;margin-top:8px;font-size:12.5px">Pick a plan.</div><pre class="cmd" id="cmd" hidden></pre></div></div></div></div>`;
   let plans = [], sel = null;
   try { plans = await api("/api/plans"); } catch (e) { $("#plans").textContent = e.message; return; }
+  if (preselect) { const i = plans.findIndex((p) => p.file === preselect); if (i >= 0) sel = i; }
   const render = () => {
-    $("#plans").innerHTML = plans.map((p, i) => `<div class="plan ${sel === i ? "sel" : ""}" data-i="${i}"><div class="t">${esc(p.name)}</div>
-      <div class="d">${esc(p.file)} · ${esc(p.profile)}${p.ai_rca ? " · AI RCA" : ""}</div>
-      <div class="d">${p.suites.map((s) => esc(s.name.toUpperCase()) + (s.include_filters.length ? ` (${s.include_filters.length} module${s.include_filters.length > 1 ? "s" : ""})` : " (all)")).join(", ")}</div></div>`).join("");
-    document.querySelectorAll(".plan").forEach((el) => el.addEventListener("click", () => { sel = +el.dataset.i; render(); renderOpts(); }));
+    const q = ($("#pq").value || "").toLowerCase();
+    $("#plans").innerHTML = plans.map((p, i) => ({ p, i })).filter(({ p }) => !q || (p.name + p.file + (p.description || "")).toLowerCase().includes(q)).map(({ p, i }) => `<div class="plan ${sel === i ? "sel" : ""}" data-i="${i}">
+      <div class="t">${esc(p.name)}</div><div class="d mono">${esc(p.file)}</div>
+      <div class="row" style="gap:5px;margin-top:9px"><span class="tag" style="${p.profile === "certification" ? "background:var(--warn-soft);color:var(--warn)" : ""}">${esc(p.profile)}</span>${p.ai_rca ? '<span class="tag" style="background:var(--accent-soft);color:var(--accent)">AI RCA</span>' : ""}
+        ${p.suites.map((s) => `<span class="tag">${esc(s.name.toUpperCase())}${s.include_filters.length ? ` · ${s.include_filters.length} mod` : ""}</span>`).join("")}</div></div>`).join("") || '<div class="muted">No plan matches.</div>';
+    $$(".plan").forEach((el) => el.addEventListener("click", () => { sel = +el.dataset.i; render(); renderOpts(); }));
   };
+  $("#pq").addEventListener("input", render);
   const renderOpts = () => {
     const p = plans[sel]; if (!p) { $("#opts").innerHTML = '<span class="muted">Pick a plan first.</span>'; return; }
     const single = p.suites.filter((s) => s.enabled !== false).length === 1;
-    $("#opts").innerHTML = `${p.description ? `<p style="margin-top:0">${esc(p.description)}</p>` : ""}
-      <div class="scroll"><table><thead><tr><th>Suite</th><th>TradeFed plan</th><th>Modules</th><th>Shards</th><th>Retries</th></tr></thead><tbody>
-      ${p.suites.map((s) => `<tr><td>${esc(s.name)}</td><td class="mono">${esc(s.plan)}</td><td>${s.include_filters.length ? esc(s.include_filters.join(", ")) : "all"}${s.exclude_filters ? ` <span class="muted">(${s.exclude_filters} excluded)</span>` : ""}</td><td>${esc(s.shard_count || 1)}</td><td>${esc(s.max_retries ?? "–")}</td></tr>`).join("")}</tbody></table></div>
-      <h3 style="margin-top:14px">Only these modules <span class="muted" style="font-weight:400">(optional, one per line: <code>CtsBionicTestCases</code> or <code>CtsFoo android.foo.BarTest#testX</code>)</span></h3>
-      <textarea id="mods" ${single ? "" : "disabled"} placeholder="${single ? "Leave empty to run the plan as configured" : "Module selection needs a plan with one enabled suite"}"></textarea>
-      ${p.profile === "certification" ? '<p class="muted">A certification plan narrowed to some modules runs as a development run; certification refuses filtered plans.</p>' : ""}
-      <div style="margin-top:12px"><label class="chk"><input type="checkbox" id="retry" checked> Auto-retry failures</label>
-      <label class="chk"><input type="checkbox" id="resume"> Resume the last interrupted run of this plan</label>
-      <label class="chk"><input type="checkbox" id="dry"> Dry run</label>
-      <label class="chk">AI RCA <select id="ai"><option value="">plan default (${p.ai_rca ? "on" : "off"})</option><option value="1">on</option><option value="0">off</option></select></label></div>
-      <pre class="cmd" id="cmd"></pre>`;
+    $("#opts").innerHTML = `${p.description ? `<p style="margin-top:0" class="muted">${esc(p.description)}</p>` : ""}
+      <div class="tw" style="border:1px solid var(--border);border-radius:10px"><table><thead><tr><th>Suite</th><th>TradeFed plan</th><th>Modules</th><th class="n">Shards</th><th class="n">Retries</th></tr></thead><tbody>
+      ${p.suites.map((s) => `<tr><td><b>${esc(s.name)}</b></td><td class="mono">${esc(s.plan)}</td><td>${s.include_filters.length ? esc(s.include_filters.join(", ")) : '<span class="muted">all</span>'}${s.exclude_filters ? ` <span class="muted">(${s.exclude_filters} excluded)</span>` : ""}</td><td class="n">${esc(s.shard_count || 1)}</td><td class="n">${esc(s.max_retries ?? "–")}</td></tr>`).join("")}</tbody></table></div>
+      <div style="margin-top:16px"><div style="font-weight:600;margin-bottom:6px">Only these modules <span class="muted" style="font-weight:400">· optional, one per line</span></div>
+      <textarea id="mods" ${single ? "" : "disabled"} placeholder="${single ? "CtsBionicTestCases\nCtsCarTestCases android.car.cts.CarPropertyManagerTest#testX\n\nLeave empty to run the plan as configured" : "Module selection needs a plan with one enabled suite"}"></textarea></div>
+      ${p.profile === "certification" ? `<div class="alert warn" style="margin:10px 0 0">${ic("alert")}<div>A certification plan narrowed to some modules runs as a development run: certification refuses filtered plans.</div></div>` : ""}
+      <div style="margin-top:14px" class="row"><label class="chk"><input type="checkbox" id="retry" checked> Auto-retry failures</label>
+      <label class="chk"><input type="checkbox" id="resume"> Resume last interrupted run</label><label class="chk"><input type="checkbox" id="dry"> Dry run</label>
+      <label class="chk">AI RCA <select id="ai"><option value="">plan default (${p.ai_rca ? "on" : "off"})</option><option value="1">on</option><option value="0">off</option></select></label></div>`;
     const upd = () => {
       const mods = ($("#mods").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
-      $("#cmd").textContent = `xts-agent run --plan ${mods.length || $("#ai").value ? "results/ui_plans/" + p.file.replace(".yaml", ".<run>.yaml") : "config/test_plans/" + p.file}` +
-        ($("#retry").checked ? " --auto-retry" : "") + ($("#resume").checked ? " --resume" : "") + ($("#dry").checked ? " --dry-run" : "") +
-        (mods.length ? `\n# include_filters: ${mods.join(", ")}` : "");
+      $("#cmd").hidden = false;
+      $("#cmd").textContent = `$ xts-agent run --plan ${mods.length || $("#ai").value ? "results/ui_plans/" + p.file.replace(".yaml", ".<run>.yaml") : "config/test_plans/" + p.file}` +
+        ($("#retry").checked ? " --auto-retry" : "") + ($("#resume").checked ? " --resume" : "") + ($("#dry").checked ? " --dry-run" : "") + (mods.length ? `\n# include_filters: ${mods.join(", ")}` : "");
     };
     ["#mods", "#retry", "#resume", "#dry", "#ai"].forEach((s) => $(s).addEventListener("input", upd)); upd();
-    $("#go").disabled = false; $("#gohint").textContent = "";
+    $("#go").disabled = false; $("#gohint").textContent = p.name;
   };
   render(); renderOpts();
-  $("#gohint").textContent = "Pick a plan.";
   api("/api/devices").then((ds) => {
     const on = ds.filter((d) => d.state === "device"), busy = on.filter((d) => d.leased_by), q = ds.filter((d) => d.quarantine);
-    $("#devsum").innerHTML = `<div class="tiles"><div class="tile"><div class="k">Online</div><div class="v">${on.length}</div></div>
-      <div class="tile"><div class="k">Free</div><div class="v">${on.length - busy.length}</div></div>
-      <div class="tile"><div class="k">Leased by another run</div><div class="v">${busy.length}</div></div>
-      <div class="tile"><div class="k">Quarantined</div><div class="v">${q.length}</div></div></div>
-      <p class="muted" style="margin-bottom:0">The agent health-checks and leases every free device with the same build, then shards across them. A device leased by another run is skipped, never shared.</p>`;
+    const builds = [...new Set(on.map((d) => d.fingerprint).filter(Boolean))];
+    const row = (t, l, v) => `<div class="row" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span class="row" style="gap:9px"><span class="pill t-${t}" style="padding:3px"><span class="d"></span></span>${l}</span><b>${v}</b></div>`;
+    $("#devsum").innerHTML = row("ok", "Online", on.length) + row("info", "Free to allocate", on.length - busy.length) + row("skip", "In use by another run", busy.length) + row("warn", "Quarantined", q.length) +
+      `<div class="muted" style="font-size:12.5px;margin-top:12px">${builds.length > 1 ? `<b style="color:var(--warn)">${builds.length} different builds online.</b> A suite only shards across devices with the same build.` : builds.length ? "All online devices run the same build." : "No device online."} Devices are health-checked and leased per run, never shared.</div>`;
   }).catch((e) => { $("#devsum").textContent = e.message; });
   $("#go").addEventListener("click", async () => {
     const p = plans[sel]; if (!p) return;
@@ -368,64 +613,67 @@ views.launch = async function () {
     if ($("#ai").value) body.ai_rca = $("#ai").value === "1";
     $("#go").disabled = true;
     try { const r = await api("/api/launch", { body }); toast(`Started ${r.run_id} (pid ${r.pid})`); location.hash = "#/live"; }
-    catch (e) { toast("Launch failed: " + e.message, 7000); $("#go").disabled = false; }
+    catch (e) { toast("Launch failed: " + e.message, 7000, "bad"); $("#go").disabled = false; }
   });
 };
 
-// ---------------------------------------------------------------- runs
+// ================================================================ runs
 views.runs = async function () {
-  $("#view").innerHTML = `<h1>Runs</h1><p class="sub">Finished and interrupted runs on this host, newest first. Older runs come from the results database.</p>
-    <div class="card"><div class="hd"><input type="text" id="q" placeholder="Filter by plan, run id, device, status" style="flex:1;min-width:200px">
-      <select id="st"><option value="">All statuses</option><option>PASSED</option><option>FAILED</option><option>INCOMPLETE</option><option>CANCELLED</option><option>INTERRUPTED</option></select></div>
-    <div class="scroll"><table><thead><tr><th>Started</th><th>Plan</th><th>Status</th><th class="n">Pass</th><th class="n">Fail</th><th class="n">Skip</th><th class="n">Duration</th><th>Devices</th><th>Results</th></tr></thead><tbody id="rows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody></table></div></div>`;
-  let rows = [];
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Runs</h1><p>Finished, cancelled and interrupted runs on this host. Older runs come from the results database.</p></div></div>
+    <div class="kpis" id="rk">${'<div class="card skeleton" style="height:86px"></div>'.repeat(4)}</div>
+    <div class="card mb"><div class="card-hd"><h2>Pass rate over time</h2><span class="sub">last 24 runs</span></div><div class="card-bd" id="trend"><div class="skeleton"></div></div></div>
+    <div class="card"><div class="card-hd"><div class="row" style="flex:1;gap:8px"><span class="muted">${ic("search")}</span><input type="text" id="q" placeholder="Filter by plan, run id, device, status" style="flex:1;min-width:200px;border:0;padding-left:0;outline:0"></div>
+      <div class="seg" id="st"><button class="on" data-s="">All</button><button data-s="PASSED">Passed</button><button data-s="FAILED">Failed</button><button data-s="INCOMPLETE|CANCEL|INTERRUPT">Other</button></div></div>
+    <div class="tw"><table><thead><tr><th>Run</th><th>Status</th><th>Result</th><th class="n">Pass</th><th class="n">Fail</th><th class="n">Skip</th><th class="n">Duration</th><th class="n">Devices</th><th>Open</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="9"><div class="skeleton" style="height:60px"></div></td></tr></tbody></table></div></div>`;
+  let rows = [], st = "";
   try { rows = await api("/api/runs"); } catch (e) { $("#rows").innerHTML = `<tr><td colspan="9">${esc(e.message)}</td></tr>`; return; }
+  $("#trend").innerHTML = trendChart(rows, 190, $("#trend").clientWidth - 36);
+  const week = rows.filter((r) => r.started_at && now() - r.started_at < 7 * 86400), passed = rows.filter((r) => /PASS/.test(r.status)).length;
+  const tests = rows.reduce((a, r) => a + (r.pass || 0) + (r.fail || 0) + (r.skip || 0), 0), devHours = rows.reduce((a, r) => a + ((r.duration || 0) * (r.devices || []).length) / 3600, 0);
+  $("#rk").innerHTML = kpi("accent", "layers", "Runs", num(rows.length), `${week.length} in the last 7 days`) + kpi(passed ? "ok" : "warn", "check", "Clean runs", num(passed), `${pct(passed, rows.length) ?? 0}% with no failures`) +
+    kpi("info", "activity", "Tests executed", num(tests), "across all runs") + kpi("skip", "clock", "Device hours", num(Math.round(devHours * 10) / 10), "duration × devices");
   const paint = () => {
-    const q = $("#q").value.toLowerCase(), st = $("#st").value;
-    const vis = rows.filter((r) => (!st || String(r.status).toUpperCase().includes(st)) &&
-      (!q || [r.plan, r.run_id, r.status, (r.devices || []).join(" "), (r.suites || []).join(" ")].join(" ").toLowerCase().includes(q)));
-    $("#rows").innerHTML = vis.map((r) => `<tr class="click" data-k="${esc(r.key)}"><td>${fmtTime(r.started_at)}</td>
-      <td><b>${esc(r.plan)}</b><div class="muted mono">${esc(r.run_id || (r.suites || []).join(", "))}</div></td><td>${badge(r.status)}</td>
-      <td class="n">${num(r.pass)}</td><td class="n" ${r.fail ? 'style="color:var(--bad);font-weight:600"' : ""}>${num(r.fail)}</td><td class="n">${num(r.skip)}</td>
-      <td class="n">${fmtDur(r.duration)}</td><td>${(r.devices || []).length}</td>
-      <td>${r.report_url ? `<a href="${esc(fileHref(r.report_url))}" target="_blank" rel="noopener">Report</a>` : ""} ${r.triage_url ? `<a href="${esc(fileHref(r.triage_url))}" target="_blank" rel="noopener">Triage${r.triage_groups != null ? " (" + r.triage_groups + ")" : ""}</a>` : ""}</td></tr>`).join("")
-      || '<tr><td colspan="9" class="empty">No runs match.</td></tr>';
-    document.querySelectorAll("tr.click").forEach((tr) => tr.addEventListener("click", (ev) => { if (ev.target.tagName !== "A") location.hash = "#/run/" + encodeURIComponent(tr.dataset.k); }));
+    const q = $("#q").value.toLowerCase(), re = st ? new RegExp(st) : null;
+    const vis = rows.filter((r) => (!re || re.test(String(r.status).toUpperCase())) && (!q || [r.plan, r.run_id, r.status, (r.devices || []).join(" "), (r.suites || []).join(" ")].join(" ").toLowerCase().includes(q)));
+    $("#rows").innerHTML = vis.map((r) => `<tr class="click" data-k="${esc(r.key)}"><td><div style="font-weight:600">${esc(r.plan)}</div><div class="muted" style="font-size:12px">${fmtTime(r.started_at)}${r.run_id ? ` · <span class="mono">${esc(r.run_id)}</span>` : ""}</div></td>
+      <td>${pill(r.status)}</td><td style="width:160px">${sbar(r.pass, r.fail, r.skip)}</td>
+      <td class="n">${num(r.pass)}</td><td class="n" ${r.fail ? 'style="color:var(--bad);font-weight:650"' : ""}>${num(r.fail)}</td><td class="n muted">${num(r.skip)}</td>
+      <td class="n">${fmtDur(r.duration)}</td><td class="n">${(r.devices || []).length}</td>
+      <td><div class="row" style="gap:6px;flex-wrap:nowrap">${r.triage_url ? `<a class="btn sm" href="${esc(fileHref(r.triage_url))}" target="_blank" rel="noopener" title="Triage page">${ic("brain")} Triage</a>` : ""}${r.report_url ? `<a class="btn sm" href="${esc(fileHref(r.report_url))}" target="_blank" rel="noopener" title="HTML report">${ic("file")}</a>` : ""}</div></td></tr>`).join("")
+      || '<tr><td colspan="9"><div class="empty">No runs match.</div></td></tr>';
+    $$("tr.click").forEach((tr) => tr.addEventListener("click", (ev) => { if (!ev.target.closest("a")) location.hash = "#/run/" + encodeURIComponent(tr.dataset.k); }));
   };
-  $("#q").addEventListener("input", paint); $("#st").addEventListener("change", paint); paint();
+  $("#q").addEventListener("input", paint);
+  $$("#st button").forEach((b) => b.addEventListener("click", () => { st = b.dataset.s; $$("#st button").forEach((x) => x.classList.toggle("on", x === b)); paint(); }));
+  paint();
 };
 
 views.run = async function (key) {
-  $("#view").innerHTML = `<p><a href="#/runs">← Runs</a></p><div id="detail" class="muted">Loading run… (a full CTS result takes a few seconds to read the first time)</div>`;
+  $("#view").innerHTML = `<div class="row" style="margin-bottom:12px"><a href="#/runs" class="btn sm ghost">← All runs</a></div><div id="detail"><div class="skeleton" style="height:140px;margin-bottom:16px"></div><div class="muted">Reading results. A full CTS result takes a few seconds the first time.</div></div>`;
   let r;
-  try { r = await api("/api/runs/" + encodeURIComponent(key)); } catch (e) { $("#detail").textContent = e.message; return; }
-  const t = r.totals || {};
-  const sumOf = (f) => r.suites.reduce((a, s) => a + ((s.result && s.result.summary && s.result.summary[f]) || 0), 0);
+  try { r = await api("/api/runs/" + encodeURIComponent(key)); } catch (e) { $("#detail").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+  const t = r.totals || {}, sumOf = (f) => r.suites.reduce((a, s) => a + ((s.result && s.result.summary && s.result.summary[f]) || 0), 0);
   const pass = t.pass ?? sumOf("pass"), fail = t.fail ?? sumOf("fail"), skip = t.skip ?? sumOf("skip");
   const devs = [...new Set(r.suites.flatMap((s) => s.devices || []))];
   const dur = t.duration ?? (r.finished_at && r.started_at ? r.finished_at - r.started_at : null);
+  const mods = r.suites.reduce((a, s) => { const res = s.result || {}; return [a[0] + (res.modules_done || 0), a[1] + (res.modules_total || 0), a[2] + (res.modules || []).filter((m) => !m.done).length]; }, [0, 0, 0]);
   const ts = r.triage_summary;
-  $("#detail").className = "";
-  $("#detail").innerHTML = `<div class="row" style="margin-bottom:6px"><h1 style="margin:0">${esc(r.plan)}</h1>${badge(r.overall_status || r.state)}
-      ${r.state === "running" ? '<a class="btn sm" href="#/live">Watch live</a>' : ""}<div class="spacer"></div>
-      <button class="sm" id="xjson">Export JSON</button><button class="sm" id="xcsv">Export modules CSV</button></div>
-    <p class="sub mono">${esc(r.run_id || r.key)}${r.host ? " · " + esc(r.user) + "@" + esc(r.host) : ""}</p>
-    <div class="tiles" style="margin-bottom:16px">
-      <div class="tile"><div class="k">Started</div><div class="v" style="font-size:15px">${fmtTime(r.started_at)}</div></div>
-      <div class="tile"><div class="k">Duration</div><div class="v">${fmtDur(dur)}</div></div>
-      <div class="tile"><div class="k">Passed</div><div class="v" style="color:var(--ok)">${num(pass)}</div></div>
-      <div class="tile"><div class="k">Failed</div><div class="v" style="color:var(--bad)">${num(fail)}</div></div>
-      <div class="tile"><div class="k">Skipped</div><div class="v">${num(skip)}</div></div>
-      <div class="tile"><div class="k">Devices</div><div class="v">${devs.length}</div></div>
-      ${ts ? `<div class="tile"><div class="k">Triage groups</div><div class="v">${num(ts.groups)}</div></div>` : ""}</div>
-    <div class="grid2"><div class="card"><div class="hd"><h2>Results</h2></div><div class="bd">
-      ${(r.links.reports || []).map((u) => `<div><a href="${esc(fileHref(u))}" target="_blank" rel="noopener">${esc(u.split("/").pop())}</a></div>`).join("") || '<span class="muted">No report written (yet).</span>'}
-      ${r.links.triage_html ? `<div style="margin-top:8px"><b><a href="${esc(fileHref(r.links.triage_html))}" target="_blank" rel="noopener">Triage page: failure groups, owners, AI root cause</a></b></div>` : ""}
-      ${ts ? `<p class="muted" style="margin-bottom:0">${num(ts.failures)} failures in ${num(ts.groups)} groups, ${num(ts.actionable_groups)} actionable, ${num(ts.known_groups)} known issues.</p>` : ""}
-      ${r.suites.map((s) => s.results_dir ? `<div class="muted mono" style="margin-top:8px">${esc(s.name)} TradeFed results: ${esc(s.results_dir)}</div>` : "").join("")}
-    </div></div>
-    <div class="card"><div class="hd"><h2>Timeline</h2></div><div class="bd"><ul class="tl">${timeline(r)}</ul></div></div></div>
-    ${r.suites.map((s, i) => suiteDetail(s, i)).join("")}`;
+  $("#detail").innerHTML = `<div class="page-hd"><div><div class="row">${pill(r.overall_status || r.state)}<h1>${esc(r.plan)}</h1></div>
+      <p><span class="mono">${esc(r.run_id || r.key)}</span>${r.host ? ` · ${esc(r.user)}@${esc(r.host)}` : ""} · ${fmtTime(r.started_at)}</p></div><div class="spacer"></div>
+      ${r.state === "running" ? `<a class="btn primary" href="#/live">${ic("activity")} Watch live</a>` : ""}
+      ${r.links.triage_html ? `<a class="btn primary" href="${esc(fileHref(r.links.triage_html))}" target="_blank" rel="noopener">${ic("brain")} Triage page</a>` : ""}
+      <button class="btn" id="xjson">${ic("download")} JSON</button><button class="btn" id="xcsv">${ic("download")} CSV</button></div>
+    <div class="kpis">${kpi("info", "clock", "Duration", fmtDur(dur), `${devs.length} device${devs.length === 1 ? "" : "s"}`)}${kpi("ok", "check", "Passed", num(pass), (rate(pass, fail) ?? "–") + "% pass rate")}
+      ${kpi(fail ? "bad" : "ok", "x", "Failed", num(fail), ts ? `${num(ts.groups)} triage group${ts.groups === 1 ? "" : "s"} · ${num(ts.actionable_groups)} actionable` : "tests")}
+      ${kpi(mods[2] ? "warn" : "skip", "layers", "Modules", `${num(mods[0])}<span class="muted" style="font-size:15px;font-weight:500"> / ${num(mods[1])}</span>`, mods[2] ? `<b style="color:var(--warn)">${mods[2]} incomplete</b>` : "all complete")}</div>
+    <div class="grid g-32 mb"><div class="card"><div class="card-hd"><h2>Pipeline</h2></div><div class="card-bd">${stepper(r)}
+        <div class="row" style="margin-top:16px">${(r.links.reports || []).map((u) => `<a class="btn sm" href="${esc(fileHref(u))}" target="_blank" rel="noopener">${ic("file")} ${esc(u.split(".").pop().toUpperCase())}</a>`).join("")}</div>
+        ${r.suites.map((s) => (s.results_dir ? `<div class="muted mono" style="margin-top:12px;font-size:12px">${esc(s.name)} · ${esc(s.results_dir)}</div>` : "")).join("")}</div></div>
+      <div class="card"><div class="card-hd"><h2>Result</h2></div><div class="card-bd"><div class="donut-wrap">${donut(pass, fail, skip, 140)}<div class="legend">
+        <div><i style="background:var(--ok)"></i>Passed<b>${num(pass)}</b></div><div><i style="background:var(--bad)"></i>Failed<b>${num(fail)}</b></div><div><i style="background:var(--skip)"></i>Skipped<b>${num(skip)}</b></div></div></div></div></div></div>
+    ${r.suites.map((s, i) => suiteDetail(s, i)).join("")}
+    ${(r.timeline || []).length ? `<div class="card"><div class="card-hd"><h2>Timeline</h2></div><div class="card-bd"><ul class="tl">${timeline(r)}</ul></div></div>` : ""}`;
   r.suites.forEach((s, i) => bindSuite(s, i));
   const dl = (name, text, type) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   $("#xjson").addEventListener("click", () => dl(`${r.run_id || r.key}.json`, JSON.stringify(r, null, 2), "application/json"));
@@ -437,20 +685,22 @@ views.run = async function (key) {
 };
 function suiteDetail(s, i) {
   const res = s.result;
-  if (!res) return `<div class="card"><div class="hd"><h2>${esc(s.name)}</h2>${badge(s.status)}</div><div class="bd muted">No test_result.xml${s.error ? ": " + esc(s.error) : " yet"}.</div></div>`;
-  if (res.error) return `<div class="card"><div class="hd"><h2>${esc(s.name)}</h2></div><div class="bd">${esc(res.error)}</div></div>`;
-  const di = res.device_info || {};
-  const incomplete = res.modules.filter((m) => !m.done).length;
-  return `<div class="card"><div class="hd"><h2>${esc(s.name)}</h2>${badge(s.status)}
-      <span class="muted">${num(res.modules_done)} / ${num(res.modules_total)} modules done${incomplete ? `, <b style="color:var(--warn)">${incomplete} incomplete</b>` : ""} · ${Math.max((res.devices || []).length, (s.devices || []).length)} devices · ${esc(di.build_fingerprint || s.fingerprint || "")}</span></div>
-    <div class="bd"><div class="row" style="margin-bottom:10px"><h3 style="margin:0">Modules</h3><div class="spacer"></div>
-      <div class="seg" id="mf${i}"><button class="on" data-m="all">All</button><button data-m="fail">With failures</button><button data-m="inc">Incomplete</button></div>
-      <input type="text" id="mq${i}" placeholder="Filter modules"></div>
-    <div class="scroll" style="max-height:460px;overflow:auto"><table><thead><tr><th class="sort" data-s="name">Module</th><th>ABI</th><th class="n sort" data-s="pass">Passed</th><th class="n sort" data-s="fail">Failed</th>
-      <th class="n sort" data-s="skip">Skipped</th><th class="n sort" data-s="total">Total</th><th>Done</th><th class="n sort" data-s="runtime_secs">Runtime</th><th>Reason</th></tr></thead><tbody id="mt${i}"></tbody></table></div>
-    <h3 style="margin-top:18px">Failed tests ${res.failed_truncated ? `<span class="muted" style="font-weight:400">(first ${res.failed_tests.length}; open the triage page for all)</span>` : ""}</h3>
-    <div class="scroll" style="max-height:420px;overflow:auto"><table><thead><tr><th>Module</th><th>Test</th><th>Message</th></tr></thead><tbody>
-      ${res.failed_tests.map((f) => `<tr><td class="mono">${esc(f.module)}</td><td class="mono">${esc(f.test)}</td><td>${esc(f.message)}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No failed tests.</td></tr>'}
+  if (!res) return `<div class="card mb"><div class="card-hd"><h2>${esc(s.name.toUpperCase())}</h2>${pill(s.status)}</div><div class="empty">No test_result.xml${s.error ? ": " + esc(s.error) : " yet"}.</div></div>`;
+  if (res.error) return `<div class="card mb"><div class="card-hd"><h2>${esc(s.name.toUpperCase())}</h2></div><div class="card-bd">${esc(res.error)}</div></div>`;
+  const di = res.device_info || {}, fp = di.build_fingerprint || s.fingerprint || "";
+  const failing = res.modules.filter((m) => m.fail).sort((a, b) => b.fail - a.fail).slice(0, 8), maxF = Math.max(1, ...failing.map((m) => m.fail));
+  return `<div class="card mb"><div class="card-hd"><h2>${esc(s.name.toUpperCase())}</h2>${pill(s.status)}<span class="sub">${num(res.modules_done)} / ${num(res.modules_total)} modules · ${Math.max((res.devices || []).length, (s.devices || []).length)} devices</span>
+      <span class="spacer"></span><span class="mono faint ell" style="max-width:520px" title="${esc(fp)}">${esc(fp)}</span></div>
+    ${failing.length ? `<div class="card-bd" style="border-bottom:1px solid var(--border)"><div style="font-weight:600;margin-bottom:12px;font-size:13px">Modules with the most failures</div>
+      ${failing.map((m) => `<div class="row" style="flex-wrap:nowrap;margin-bottom:7px"><span class="mono ell" style="width:260px;flex:none" title="${esc(m.name)}">${esc(m.name)}</span>
+        <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(100 * m.fail) / maxF}%;background:var(--bad);opacity:.7;border-radius:4px"></div></div><b style="width:52px;text-align:right">${num(m.fail)}</b></div>`).join("")}</div>` : ""}
+    <div class="card-bd"><div class="row" style="margin-bottom:12px"><div class="seg" id="mf${i}"><button class="on" data-m="all">All modules</button><button data-m="fail">With failures</button><button data-m="inc">Incomplete</button></div>
+      <span class="spacer"></span><input type="text" id="mq${i}" placeholder="Filter modules" style="width:220px"></div>
+    <div class="tw" style="max-height:480px;border:1px solid var(--border);border-radius:10px"><table><thead><tr><th class="sort" data-s="name">Module</th><th>ABI</th><th>Result</th><th class="n sort" data-s="pass">Passed</th><th class="n sort" data-s="fail">Failed</th>
+      <th class="n sort" data-s="skip">Skipped</th><th class="n sort" data-s="total">Total</th><th>State</th><th class="n sort" data-s="runtime_secs">Runtime</th><th>Reason</th></tr></thead><tbody id="mt${i}"></tbody></table></div>
+    <div style="font-weight:600;margin:20px 0 10px">Failed tests <span class="muted" style="font-weight:400">· ${res.failed_truncated ? `first ${res.failed_tests.length}; all of them are grouped on the triage page` : res.failed_tests.length}</span></div>
+    <div class="tw" style="max-height:440px;border:1px solid var(--border);border-radius:10px"><table><thead><tr><th>Test</th><th>Message</th></tr></thead><tbody>
+      ${res.failed_tests.map((f) => `<tr><td style="min-width:260px"><div class="mono" style="font-weight:600">${esc(f.test.split("#")[1] || f.test)}</div><div class="muted mono" style="font-size:11.5px">${esc(f.test.split("#")[0])} · ${esc(f.module)}</div></td><td style="color:var(--text-2)">${esc(f.message)}</td></tr>`).join("") || `<tr><td colspan="2"><div class="empty">${ic("check")} No failed tests.</div></td></tr>`}
     </tbody></table></div></div></div>`;
 }
 function bindSuite(s, i) {
@@ -460,41 +710,58 @@ function bindSuite(s, i) {
     const q = ($("#mq" + i).value || "").toLowerCase();
     const rows = res.modules.filter((m) => (mode === "all" || (mode === "fail" ? m.fail > 0 : !m.done)) && (!q || m.name.toLowerCase().includes(q)))
       .sort((a, b) => (sortKey === "name" ? a.name.localeCompare(b.name) * -dir : (a[sortKey] - b[sortKey]) * dir));
-    $("#mt" + i).innerHTML = rows.slice(0, 2000).map((m) => `<tr><td class="mono">${esc(m.name)}</td><td class="mono muted">${esc(m.abi)}</td><td class="n">${num(m.pass)}</td>
-      <td class="n" ${m.fail ? 'style="color:var(--bad);font-weight:600"' : ""}>${num(m.fail)}</td><td class="n">${num(m.skip)}</td><td class="n">${num(m.total)}</td>
-      <td>${m.done ? '<span class="badge b-ok">done</span>' : '<span class="badge b-warn">incomplete</span>'}</td><td class="n">${fmtDur(m.runtime_secs)}</td><td class="muted">${esc(m.reason)}</td></tr>`).join("")
-      || '<tr><td colspan="9" class="muted">No modules match.</td></tr>';
+    $("#mt" + i).innerHTML = rows.slice(0, 2000).map((m) => `<tr><td class="mono" style="font-weight:600">${esc(m.name)}</td><td class="mono muted">${esc(m.abi)}</td><td style="width:130px">${sbar(m.pass, m.fail, m.skip)}</td><td class="n">${num(m.pass)}</td>
+      <td class="n" ${m.fail ? 'style="color:var(--bad);font-weight:650"' : ""}>${num(m.fail)}</td><td class="n muted">${num(m.skip)}</td><td class="n">${num(m.total)}</td>
+      <td>${m.done ? pill("DONE", "done") : pill("INCOMPLETE", "incomplete")}</td><td class="n">${fmtDur(m.runtime_secs)}</td><td class="muted">${esc(m.reason)}</td></tr>`).join("")
+      || '<tr><td colspan="10"><div class="empty">No modules match.</div></td></tr>';
   };
-  $("#mf" + i).querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.m; $("#mf" + i).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); paint(); }));
+  $$("#mf" + i + " button").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.m; $$("#mf" + i + " button").forEach((x) => x.classList.toggle("on", x === b)); paint(); }));
   $("#mq" + i).addEventListener("input", paint);
-  $("#mt" + i).closest("table").querySelectorAll("th.sort").forEach((th) => th.addEventListener("click", () => { dir = sortKey === th.dataset.s ? -dir : -1; sortKey = th.dataset.s; paint(); }));
+  $$("th.sort", $("#mt" + i).closest("table")).forEach((th) => th.addEventListener("click", () => { dir = sortKey === th.dataset.s ? -dir : -1; sortKey = th.dataset.s; paint(); }));
   paint();
 }
 
-// ---------------------------------------------------------------- devices
+// ================================================================ devices
 views.devices = function () {
-  $("#view").innerHTML = `<div class="row"><div><h1>Devices</h1><p class="sub">What <code>adb</code> sees on this host, who holds each device, and the quarantine list.</p></div><div class="spacer"></div><button id="rf">Refresh</button></div>
-    <div class="card"><div class="scroll"><table><thead><tr><th>Serial</th><th>State</th><th>Model</th><th>Build</th><th>Fingerprint</th><th>In use by</th><th>Quarantine</th></tr></thead><tbody id="drows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody></table></div></div>
-    <p class="muted">A run leases each device it uses, so two runs never share one. Devices that fail repeatedly (reboot not coming back, offline mid-suite) are quarantined and skipped until released or the quarantine expires.</p>`;
-  const paint = async (refresh) => {
-    let ds; try { ds = await api("/api/devices" + (refresh ? "?refresh=1" : "")); } catch (e) { $("#drows").innerHTML = `<tr><td colspan="7">${esc(e.message)}</td></tr>`; return; }
-    if (!$("#drows")) return;
-    $("#drows").innerHTML = ds.map((d) => `<tr><td class="mono">${esc(d.serial)}</td>
-      <td>${d.state === "device" ? (d.booted ? '<span class="badge b-ok">online</span>' : '<span class="badge b-warn">booting</span>') : badge(d.state)}</td>
-      <td>${esc(d.model || "")}</td><td>${esc(d.build_type || "")}</td><td class="mono muted" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.fingerprint || "")}">${esc(d.fingerprint || "")}</td>
-      <td class="muted" style="font-size:12.5px">${d.leased_by ? esc(d.leased_by.replace(/ since=.*/, "")) : "free"}</td>
-      <td>${d.quarantine ? `<span class="badge b-warn" title="${esc(d.quarantine)}">quarantined</span> <button class="sm" data-rel="${esc(d.serial)}">Release</button>` : ""}</td></tr>`).join("")
-      || '<tr><td colspan="7" class="empty">No devices. Check <code>adb devices</code> on this host.</td></tr>';
-    document.querySelectorAll("[data-rel]").forEach((b) => b.addEventListener("click", async () => {
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Devices</h1><p>What <code>adb</code> sees on this host, who holds each device, and the quarantine list.</p></div><div class="spacer"></div>
+    <div class="seg" id="dv"><button class="on" data-v="cards">Cards</button><button data-v="table">Table</button></div><button class="btn" id="rf">${ic("refresh")} Refresh</button></div>
+    <div class="kpis" id="dk">${'<div class="card skeleton" style="height:76px"></div>'.repeat(4)}</div><div id="dlist"><div class="skeleton"></div></div>
+    <p class="muted" style="margin-top:16px;font-size:12.5px">A run leases each device it uses, so two runs never share one. Devices that fail repeatedly (reboot not coming back, offline mid-suite) are quarantined and skipped until released or the quarantine expires.</p>`;
+  let mode = "cards", last = [];
+  const state = (d) => (d.quarantine ? "Quarantined" : d.state !== "device" ? d.state.toUpperCase() : !d.booted ? "Booting" : d.leased_by ? "In use" : "Free");
+  const holder = (d) => { const m = (d.leased_by || "").match(/pid=(\d+).*?user=(\S+).*?job=(\S+)/); return m ? `pid ${m[1]} · ${m[2]}${m[3] !== "-" ? " · job " + m[3] : ""}` : d.leased_by; };
+  const draw = () => {
+    const ds = last, on = ds.filter((d) => d.state === "device");
+    $("#dk").innerHTML = kpi("ok", "device", "Online", on.length) + kpi("info", "activity", "In use", on.filter((d) => d.leased_by).length) +
+      kpi("skip", "check", "Free", on.filter((d) => !d.leased_by && !d.quarantine).length) + kpi("warn", "shield", "Quarantined", ds.filter((d) => d.quarantine).length);
+    if (!ds.length) { $("#dlist").innerHTML = `<div class="card"><div class="empty">${ic("device")} No devices. Check <code>adb devices</code> on this host.</div></div>`; return; }
+    if (mode === "cards") {
+      $("#dlist").innerHTML = `<div class="devgrid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">${ds.map((d) => { const s = state(d);
+        return `<div class="card" style="padding:14px 16px"><div class="row" style="flex-wrap:nowrap"><div class="ic t-${tone(s)}" style="width:36px;height:36px">${ic("device")}</div>
+          <div style="min-width:0;flex:1"><div class="mono" style="font-weight:650;font-size:13px">${esc(d.serial)}</div><div class="muted ell" style="font-size:12.5px">${esc(d.model || "–")}</div></div>${pill(s, s)}</div>
+          <div class="kv"><span class="muted">Build type</span><span>${esc(d.build_type || "–")}</span>
+            <span class="muted">Fingerprint</span><span class="mono ell" style="font-size:11.5px" title="${esc(d.fingerprint || "")}">${esc(d.fingerprint || "–")}</span>
+            <span class="muted">Held by</span><span>${d.leased_by ? esc(holder(d)) : '<span class="faint">nobody</span>'}</span>
+            ${d.quarantine ? `<span class="muted">Quarantine</span><span style="color:var(--warn)">${esc(d.quarantine)}</span>` : ""}</div>
+          ${d.quarantine ? `<button class="btn sm" style="margin-top:12px" data-rel="${esc(d.serial)}">${ic("shield")} Release from quarantine</button>` : ""}</div>`; }).join("")}</div>`;
+    } else {
+      $("#dlist").innerHTML = `<div class="card"><div class="tw"><table><thead><tr><th>Serial</th><th>State</th><th>Model</th><th>Build</th><th>Fingerprint</th><th>Held by</th><th></th></tr></thead><tbody>
+        ${ds.map((d) => { const s = state(d); return `<tr><td class="mono">${esc(d.serial)}</td><td>${pill(s, s)}</td><td>${esc(d.model || "")}</td><td>${esc(d.build_type || "")}</td>
+          <td class="mono muted ell" style="max-width:340px;font-size:11.5px" title="${esc(d.fingerprint || "")}">${esc(d.fingerprint || "")}</td><td class="muted">${d.leased_by ? esc(holder(d)) : "–"}</td>
+          <td>${d.quarantine ? `<button class="btn sm" data-rel="${esc(d.serial)}">Release</button>` : ""}</td></tr>`; }).join("")}</tbody></table></div></div>`;
+    }
+    $$("[data-rel]").forEach((b) => b.addEventListener("click", async () => {
       if (!confirm("Release " + b.dataset.rel + " from quarantine? It will be allocated to runs again.")) return;
-      try { await api(`/api/devices/${encodeURIComponent(b.dataset.rel)}/release`, { body: {} }); toast("Released"); paint(true); } catch (e) { toast(e.message); }
+      try { await api(`/api/devices/${encodeURIComponent(b.dataset.rel)}/release`, { body: {} }); toast("Released"); load(true); } catch (e) { toast(e.message, 6000, "bad"); }
     }));
   };
-  $("#rf").addEventListener("click", () => paint(true));
-  every(() => paint(false), 10000);
+  const load = async (refresh) => { try { last = await api("/api/devices" + (refresh ? "?refresh=1" : "")); } catch (e) { if ($("#dlist")) $("#dlist").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; } if ($("#dlist")) draw(); };
+  $$("#dv button").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.v; $$("#dv button").forEach((x) => x.classList.toggle("on", x === b)); draw(); }));
+  $("#rf").addEventListener("click", () => load(true));
+  every(() => load(false), 10000);
 };
 
-loadOverview(); route();
+loadOverview(); api("/api/live").then(setActiveCount).catch(() => {}); route();
 </script>
 </body>
 </html>

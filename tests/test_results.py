@@ -140,3 +140,20 @@ class SuiteStatusTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModuleFailedAttributeTests(unittest.TestCase):
+    def test_tradefed_failed_attribute_is_read(self):
+        import tempfile
+        from pathlib import Path
+
+        from xts_agent.results.result_parser import ResultParser
+
+        xml = ('<?xml version="1.0"?><Result suite_name="CTS"><Summary pass="1" failed="1" modules_done="1" modules_total="1"/>'
+               '<Module name="CtsCar" abi="x86_64" done="true" pass="1" failed="1" runtime="5"><TestCase name="a.B">'
+               '<Test result="pass" name="t1"/><Test result="fail" name="t2"><Failure message="m"/></Test></TestCase></Module></Result>')
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "test_result.xml"
+            p.write_text(xml, encoding="utf-8")
+            (mod,) = ResultParser().parse_xml(p).modules
+        self.assertEqual((mod.pass_count, mod.fail_count), (1, 1))

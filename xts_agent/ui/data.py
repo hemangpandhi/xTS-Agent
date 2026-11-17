@@ -220,6 +220,8 @@ class RunsView:
                     "results_dir": r["results_dir"],
                     "report": "",
                     "triage_html": "",
+                    "modules_done": r["modules_done"],
+                    "modules_total": r["modules_total"],
                 }
             )
         return out
@@ -273,13 +275,18 @@ class RunsView:
         for m in parsed.modules:
             total = len(m.test_cases) or (m.pass_count + m.fail_count)
             skipped = sum(1 for t in m.test_cases if t.result not in ("PASS", "FAIL"))
+            if m.test_cases:  # authoritative: module attributes are not refreshed by every retry
+                m_pass = sum(1 for t in m.test_cases if t.result == "PASS")
+                m_fail = sum(1 for t in m.test_cases if t.result == "FAIL")
+            else:
+                m_pass, m_fail = m.pass_count, m.fail_count
             modules.append(
                 {
                     "abi": m.abi,
                     "name": m.name,
                     "done": m.done,
-                    "pass": m.pass_count,
-                    "fail": m.fail_count,
+                    "pass": m_pass,
+                    "fail": m_fail,
                     "skip": skipped,
                     "total": total,
                     "runtime_secs": round((m.runtime or 0) / 1000),
@@ -366,6 +373,8 @@ def _history_row(view: Dict[str, Any]) -> Dict[str, Any]:
         "report": html_reports[0] if html_reports else "",
         "triage_html": view.get("triage_html", ""),
         "triage_groups": (view.get("triage_summary") or {}).get("groups"),
+        "modules_done": total("_", "modules_done"),
+        "modules_total": total("_", "modules_total"),
     }
 
 

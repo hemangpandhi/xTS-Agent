@@ -179,7 +179,8 @@ class ResultParser:
                 name=mod.attrib.get("name", "Unknown"),
                 done=mod.attrib.get("done", "true").lower() == "true",
                 pass_count=int(mod.attrib.get("pass", 0)),
-                fail_count=int(mod.attrib.get("fail", 0)),
+                # TradeFed writes "failed"; "fail" kept for older/hand-made XML
+                fail_count=int(mod.attrib.get("failed", mod.attrib.get("fail", 0))),
                 runtime=int(mod.attrib.get("runtime", 0) or 0),
                 abi=mod.attrib.get("abi", ""),
             )
