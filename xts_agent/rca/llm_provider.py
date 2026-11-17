@@ -268,6 +268,27 @@ class FallbackProvider(LLMProvider):
 
 
 def get_llm_provider(config) -> LLMProvider:
+    """Provider for ``config`` (an AiRcaConfig); with ``openai_fallbacks`` a FallbackProvider chain."""
+    primary = _single_provider(config)
+    fallbacks = list(getattr(config, "openai_fallbacks", None) or [])
+    if not fallbacks:
+        return primary
+    import dataclasses
+
+    chain = [primary]
+    for fb in fallbacks:
+        chain.append(_single_provider(dataclasses.replace(
+            config,
+            provider="openai_compatible",
+            openai_base_url=str(fb.get("base_url") or config.openai_base_url),
+            openai_model=str(fb.get("model") or ""),
+            openai_extra_body=dict(fb.get("extra_body") or {}),
+            openai_fallbacks=[],
+        )))
+    return FallbackProvider(chain)
+
+
+def _single_provider(config) -> LLMProvider:
     provider = str(config.provider).lower()
     base_url = str(getattr(config, "openai_base_url", "") or "")
     external = provider in EXTERNAL_PROVIDERS or (

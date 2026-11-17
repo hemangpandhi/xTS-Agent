@@ -294,6 +294,10 @@ class AiRcaConfig:
     openai_model: str = ""
     openai_api_key: str = ""
     openai_extra_body: Dict[str, Any] = field(default_factory=dict)
+    # Tried in order when the endpoint above is down or errors:
+    # [{base_url, model, extra_body}]; each must be on-prem too unless
+    # allow_external_providers is true.
+    openai_fallbacks: List[Dict[str, Any]] = field(default_factory=list)
     llama_model_path: str = ""
     llama_n_ctx: int = 16384
     llama_n_gpu_layers: int = -1

@@ -452,6 +452,23 @@ signature and labels each group:
 
 Output: `results/triage/triage_*.json` and a triage table in the HTML report.
 
+**Accuracy is measured, not assumed.** The "AI agreement" shown on the triage
+page compares the AI with the known issues of the same run (a consistency
+check). For a real number, score the rule classifier and the AI against
+held-out labels that come from outside the run (closed Jira tickets with a
+confirmed root cause; schema in `config/triage_labels.example.yaml`):
+
+```bash
+xts-agent eval-triage --plan P --results-dir /opt/xts/android-cts/results/<session_dir> \
+  --labels config/triage_labels.yaml
+```
+
+Known issues are switched off and history is not recorded during the scored
+pass, so neither the grouping nor the LLM prompt can see the answer; labels that
+are also configured known issues are reported as leaked and the command exits 3.
+It prints accuracy and per-class precision/recall/F1 for `rule` and `ai`, the
+disagreements, and writes `results/triage/eval_*.json`.
+
 ```bash
 # Seed history from past TradeFed results (oldest first is handled for you)
 xts-agent triage --import-history /opt/xts/android-cts/results/2026.10.04_16.16.31.269_4285
@@ -493,16 +510,25 @@ get your security/legal sign-off before enabling it.
 | `openai_compatible` | Any chat-completions server: Ollama, vLLM, llama.cpp server, LM Studio (on-prem, no opt-in) or OpenAI / Gemini's OpenAI endpoint / OpenRouter (hosted, opt-in) | Shared lab LLM server, or a hosted model for a demo |
 | `gemini` | Google API (opt-in) | Hosted |
 
-Example with a local Ollama server and the AOSP/OEM source indexed for retrieval:
+Example with a local vLLM server, an Ollama fallback and the AOSP/OEM source
+indexed for retrieval:
 
 ```yaml
 ai_rca:
   enabled: true
   provider: openai_compatible
-  openai_base_url: "http://127.0.0.1:11434/v1"
-  openai_model: "qwen2.5-coder:32b"
+  openai_base_url: "http://127.0.0.1:8011/v1"
+  openai_model: "coder"                       # e.g. Qwen3.8-27B-FP8 on an RTX 6000 Ada
+  openai_extra_body: {chat_template_kwargs: {enable_thinking: false}}
+  openai_fallbacks:                           # tried in order when the server above is down
+    - {base_url: "http://127.0.0.1:11434/v1", model: "qwen2.5-coder:32b"}
   source_code_paths: ["/mnt/aosp/frameworks/base/services/core", "/mnt/aosp/vendor"]
 ```
+
+Every endpoint in the chain is subject to the same on-prem rule. A server that
+is down or erroring is not retried once per group: after 3 consecutive provider
+failures the remaining groups are skipped and reported in the log
+(`provider_errors`, `skipped`), so a dead LLM costs seconds, not hours.
 
 Build the index once with `xts-agent index-code --plan P`, then every triage adds
 to each failure group a root cause, a category, a confidence, a suggested fix and
@@ -558,6 +584,7 @@ Details, safety model and catalog format: [docs/FIX_LOOP.md](docs/FIX_LOOP.md).
 | `analyze --plan P [--rca] [--classify-failures]` | RCA and triage on the latest results |
 | `report --plan P --format html,json,junit` | Regenerate reports |
 | `triage --results-dir D [--report]` / `--import-history D` | Triage any TradeFed results dir (optionally with HTML/JSON/JUnit reports); seed history |
+| `eval-triage --results-dir D --labels L` | Measure rule and AI classification accuracy against held-out labels |
 | `dashboard --plan P` | Regenerate the trends dashboard |
 | `index-code --plan P` | Build the local source index for AI RCA |
 | `device-check --min-devices N` | Fail unless N devices are online |

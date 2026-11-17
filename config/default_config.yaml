@@ -172,9 +172,18 @@ ai_rca:
   # llama.cpp server, LM Studio) on this host or a private network need no
   # opt-in; a hosted endpoint (OpenAI, Gemini's OpenAI API, OpenRouter) is
   # external and requires allow_external_providers: true. Key: XTS_LLM_API_KEY.
-  openai_base_url: "http://127.0.0.1:11434/v1"
-  openai_model: "qwen2.5-coder:32b"     # local Ollama on this host (GPU); never leaves the machine
+  # This lab: vLLM on the RTX 6000 Ada serving Qwen3.8-27B-FP8 as "coder"
+  # (start: PORT=8011 /mnt/OEM/llm-env/serve_qwen.sh). Never leaves the machine.
+  openai_base_url: "http://127.0.0.1:8011/v1"
+  openai_model: "coder"
   openai_api_key: "${XTS_LLM_API_KEY:-}"
+  openai_extra_body:
+    chat_template_kwargs: {enable_thinking: false}   # Qwen3 reasoning off: JSON answers only
+  # Tried in order when the server above is down (all on-prem). After 3
+  # consecutive failures the remaining groups are skipped instead of timing out.
+  openai_fallbacks:
+    - base_url: "http://127.0.0.1:11434/v1"
+      model: "qwen2.5-coder:32b"        # Ollama; fits the GPU only when vLLM is not running
 
   # Llama.cpp (Direct GGUF) Configuration
   llama_model_path: "/usr/share/ollama/.ollama/models/blobs/sha256-ac3d1ba8aa77755dab3806d9024e9c385ea0d5b412d6bdf9157f8a4a7e9fc0d9"
@@ -218,16 +227,10 @@ fix_loop:
   flaky_retries: 1
   run_timeout_hours: 1.0
   use_llm: true                         # local LLM from ai_rca (never external unless allowed there)
-  # Optional: a different on-host OpenAI-compatible server for the loop.
-  # This lab: vLLM on the RTX 6000 Ada serving Qwen3.8-27B-FP8 as "coder".
-  llm_base_url: "http://127.0.0.1:8011/v1"
-  llm_model: "coder"
-  llm_extra_body:
-    chat_template_kwargs: {enable_thinking: false}
+  # Optional overrides of the ai_rca endpoint for the loop (llm_base_url,
+  # llm_model, llm_extra_body, llm_fallbacks). Unset: same server and
+  # fallback chain as ai_rca above.
   llm_timeout_secs: 600                 # calls are serialized; a shared server may queue them
-  llm_fallbacks:                        # tried in order if the server above is down (all on-prem)
-    - base_url: "http://127.0.0.1:11434/v1"
-      model: "qwen2.5-coder:32b"        # Ollama; fully on the GPU when vLLM is not running
   # Revive a hung DUT ({serial}, {cvd_instance} for Cuttlefish adb ports 6520+).
   # This lab: restart one Cuttlefish instance of the 8-instance group, keeping its data.
   restart_command: "env HOME=/tmp/cvd_cluster_home /mnt/aosp-17-master/out/host/linux-x86/bin/restart_cvd -instance_num={cvd_instance} -boot_timeout=600"

@@ -244,6 +244,55 @@ def dashboard(plan: str, config_path: Optional[str]):
     click.echo(f"Dashboard: {path}")
 
 
+@main.command("eval-triage")
+@click.option("--plan", required=True)
+@click.option("--config", "config_path", default=None)
+@click.option("--results-dir", "results_dirs", multiple=True, required=True,
+              help="TradeFed result dirs to triage and score (repeatable)")
+@click.option("--labels", "labels_file", required=True,
+              help="Held-out labels (known_issues.yaml schema: id, classification, match, source)")
+@click.option("--suite", default="CTS", show_default=True)
+@click.option("--no-held-out", is_flag=True,
+              help="Keep config known issues on during the scored triage (labels may then be visible)")
+@click.option("--top", default=20, show_default=True, help="Disagreements to print")
+def eval_triage(plan, config_path, results_dirs, labels_file, suite, no_held_out, top):
+    """Measure rule and AI classification accuracy against held-out human labels.
+
+    Labels come from outside the run (closed Jira tickets, a reviewer's sheet),
+    never from the triage output being scored. Known issues are disabled for
+    the scored pass so the answer is not in the prompt; history is not recorded.
+    """
+    from xts_agent.triage.evaluation import evaluate
+    from xts_agent.triage.known_issues import KnownIssueDB
+
+    orchestrator = _build_orchestrator(plan, config_path)
+    orchestrator._initialize()
+    labels = KnownIssueDB.load(labels_file)
+    if not labels.issues:
+        click.echo(f"No labels in {labels_file}", err=True)
+        sys.exit(2)
+    configured = KnownIssueDB.load(orchestrator.plan.triage.known_issues_file)
+    result = orchestrator.plan_result_from_results_dirs(suite, list(results_dirs))
+    engine = orchestrator.triage_engine()
+    if not no_held_out:
+        engine.known_issues = KnownIssueDB([])
+    rca_report = None
+    if orchestrator.plan.post_execution.rca.enabled:
+        rca_report = orchestrator._run_rca(result, probe_devices=False)
+    report = engine.triage(result, rca_report, record_history=False)
+    orchestrator._run_group_ai(report, results=result)
+    ev = evaluate(report, labels, labels_file=labels_file,
+                  known_issues=None if no_held_out else configured)
+    from datetime import datetime
+
+    path = ev.save(orchestrator._results_dir / "triage" / f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+    click.echo(ev.text())
+    click.echo(f"eval report: {path}")
+    if not ev.held_out:
+        click.echo("WARNING: some labels are also configured known issues; this is not a held-out score", err=True)
+        sys.exit(3)
+
+
 @main.command("index-code")
 @click.option("--plan", default="config/test_plans/full_certification.yaml")
 @click.option("--config", "config_path", default=None)
@@ -417,20 +466,10 @@ def fix_loop(plan, config_path, tests, from_results, top, serials, spares, max_i
                 openai_model=fl.llm_model or ai_cfg.openai_model,
                 openai_extra_body=fl.llm_extra_body or ai_cfg.openai_extra_body,
             )
+        if fl.llm_fallbacks:
+            ai_cfg = dataclasses.replace(ai_cfg, openai_fallbacks=list(fl.llm_fallbacks))
         try:
-            provider = get_llm_provider(ai_cfg)
-            if fl.llm_fallbacks:
-                from xts_agent.rca.llm_provider import FallbackProvider
-
-                chain = [provider] + [
-                    get_llm_provider(dataclasses.replace(
-                        ai_cfg, provider="openai_compatible",
-                        openai_base_url=fb.get("base_url", ai_cfg.openai_base_url),
-                        openai_model=fb.get("model", ""), openai_extra_body=fb.get("extra_body") or {},
-                    ))
-                    for fb in fl.llm_fallbacks
-                ]
-                provider = FallbackProvider(chain)
+            provider = get_llm_provider(ai_cfg)  # FallbackProvider chain when fallbacks are set
         except Exception as exc:
             click.echo(f"LLM unavailable ({exc}); continuing with rules only", err=True)
     catalog = RemediationCatalog.load(fl.remediations_file)

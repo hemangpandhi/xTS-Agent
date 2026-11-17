@@ -531,6 +531,58 @@ class GroupAiTests(unittest.TestCase):
             self.assertEqual((stats["cached"], provider.generate.call_count), (1, 2))
             self.assertTrue(again.groups[0].ai["cached"])
 
+    def test_dead_llm_endpoint_trips_circuit_breaker(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        names = [chr(ord("a") + i) for i in range(8)]
+        report = JiraFilerTests._report(None, [(n, "NEW", False, "") for n in names])
+        provider = MagicMock(model_id="openai:coder")
+        provider.generate.return_value = "Failed to generate RCA using coder: ConnectionError"
+        stats = GroupAIAnalyzer(provider, max_groups=8).analyze(report)
+        # 3 consecutive failures, then the remaining 5 groups are skipped, not timed out one by one
+        self.assertEqual(provider.generate.call_count, GroupAIAnalyzer.MAX_CONSECUTIVE_ERRORS)
+        self.assertEqual((stats["provider_errors"], stats["skipped"], stats["unparseable"]), (3, 5, 0))
+        self.assertTrue(all(g.ai is None for g in report.groups))
+        provider.unload.assert_called_once()  # VRAM released even on abort
+
+    def test_transient_llm_errors_do_not_trip_breaker(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        report = JiraFilerTests._report(None, [(n, "NEW", False, "") for n in "abcde"])
+        provider = MagicMock(model_id="openai:coder")
+        ok = '{"root_cause": "r", "classification": "PRODUCT_BUG", "confidence": 0.8}'
+        provider.generate.side_effect = ["Failed to generate: Timeout", ok, "Failed to generate: Timeout",
+                                         "Failed to generate: Timeout", ok]
+        stats = GroupAIAnalyzer(provider, max_groups=5).analyze(report)
+        self.assertEqual((stats["analyzed"], stats["provider_errors"], stats["skipped"]), (2, 3, 0))
+
+    def test_openai_fallbacks_build_a_provider_chain(self):
+        from xts_agent.config_loader import AiRcaConfig
+        from xts_agent.rca.llm_provider import (
+            ExternalProviderNotAllowed,
+            FallbackProvider,
+            OpenAICompatibleProvider,
+            get_llm_provider,
+        )
+
+        cfg = AiRcaConfig(
+            provider="openai_compatible", openai_base_url="http://127.0.0.1:8011/v1", openai_model="coder",
+            openai_extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            openai_fallbacks=[{"base_url": "http://127.0.0.1:11434/v1", "model": "qwen2.5-coder:32b"}],
+        )
+        prov = get_llm_provider(cfg)
+        self.assertIsInstance(prov, FallbackProvider)
+        self.assertEqual([p.model for p in prov.providers], ["coder", "qwen2.5-coder:32b"])
+        self.assertTrue(all(isinstance(p, OpenAICompatibleProvider) for p in prov.providers))
+        self.assertEqual(prov.providers[0].extra_body, {"chat_template_kwargs": {"enable_thinking": False}})
+        self.assertEqual(prov.providers[1].extra_body, {})
+        self.assertIsInstance(get_llm_provider(AiRcaConfig(provider="openai_compatible", openai_model="m")),
+                              OpenAICompatibleProvider)
+        # a hosted fallback is still refused without the opt-in
+        cfg.openai_fallbacks = [{"base_url": "https://api.openai.com/v1", "model": "gpt"}]
+        with self.assertRaises(ExternalProviderNotAllowed):
+            get_llm_provider(cfg)
+
     def test_retrieved_source_is_in_prompt_and_recorded_as_code_refs(self):
         from xts_agent.triage.ai_rca import GroupAIAnalyzer
 
@@ -585,10 +637,14 @@ class GroupAiTests(unittest.TestCase):
 
         report = JiraFilerTests._report(None, [("a", "NEW", False, "")])
         provider = MagicMock(model_id="m")
-        provider.generate.return_value = "Failed to generate RCA using llama.cpp: boom"
+        provider.generate.return_value = "Sure, here is my analysis: it is probably flaky."
         stats = GroupAIAnalyzer(provider).analyze(report)
-        self.assertEqual(stats["unparseable"], 1)
+        self.assertEqual((stats["unparseable"], stats["provider_errors"]), (1, 0))
         self.assertIsNone(report.groups[0].ai)
+        # a provider error string is counted separately from a bad answer
+        provider.generate.return_value = "Failed to generate RCA using llama.cpp: boom"
+        stats = GroupAIAnalyzer(provider).analyze(JiraFilerTests._report(None, [("b", "NEW", False, "")]))
+        self.assertEqual((stats["unparseable"], stats["provider_errors"]), (0, 1))
 
     def test_chunk_ids_are_stable(self):
         from xts_agent.rca.code_indexer import CHUNK_LINES, OEMCodeIndexer
@@ -658,3 +714,59 @@ class GroupAiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TriageEvalTests(unittest.TestCase):
+    def _labels(self, tmp, entries):
+        import yaml
+
+        p = Path(tmp) / "labels.yaml"
+        p.write_text(yaml.safe_dump({"issues": entries}), encoding="utf-8")
+        return p
+
+    def test_scores_rule_and_ai_against_held_out_labels(self):
+        from xts_agent.triage.evaluation import evaluate
+        from xts_agent.triage.known_issues import KnownIssueDB
+
+        report = JiraFilerTests._report(None, [
+            ("a", "NEW", False, ""), ("b", "NEW", False, ""), ("c", "NEW", False, ""), ("d", "NEW", False, ""),
+        ])
+        for tg, cls, ai in zip(report.groups, ["PRODUCT_BUG", "FLAKY_TEST", "FLAKY_TEST", "ENVIRONMENT_ISSUE"],
+                               ["PRODUCT_BUG", "PRODUCT_BUG", None, "ENVIRONMENT_ISSUE"]):
+            tg.classification = cls
+            tg.ai = {"classification": ai, "confidence": 0.9} if ai else None
+        with tempfile.TemporaryDirectory() as tmp:
+            labels = KnownIssueDB.load(self._labels(tmp, [
+                {"id": "LBL-1", "classification": "PRODUCT_BUG", "match": {"signature": "a"}},
+                {"id": "LBL-2", "classification": "ENVIRONMENT_ISSUE", "match": {"signature": "b"}},
+                {"id": "LBL-3", "classification": "FLAKY_TEST", "match": {"signature": "c"}},
+                {"id": "LBL-9", "classification": "TEST_BUG", "match": {"signature": "nothing"}},
+            ]))
+        ev = evaluate(report, labels, labels_file="labels.yaml", known_issues=KnownIssueDB([]))
+        self.assertTrue(ev.held_out)
+        self.assertEqual((ev.groups_labelled, ev.groups_total, ev.unmatched_labels), (3, 4, ["LBL-9"]))
+        self.assertEqual((ev.rule.scored, ev.rule.correct), (3, 2))        # b: FLAKY vs ENV wrong
+        self.assertEqual((ev.ai.scored, ev.ai.correct), (2, 1))            # c not analysed: not scored
+        self.assertEqual(ev.rule.per_class()["FLAKY_TEST"], {"support": 1, "precision": 0.5, "recall": 1.0, "f1": 0.667})
+        self.assertEqual(ev.ai.confusion, {"PRODUCT_BUG": {"PRODUCT_BUG": 1}, "ENVIRONMENT_ISSUE": {"PRODUCT_BUG": 1}})
+        text = ev.text()
+        self.assertIn("rule  accuracy 67% (2/3", text)
+        self.assertIn("ai    accuracy 50% (1/2", text)
+        self.assertIn("disagreements", text)
+        d = ev.to_dict()
+        self.assertEqual(d["coverage"]["groups"], "3/4")
+
+    def test_labels_that_are_also_known_issues_are_flagged_as_leaked(self):
+        from xts_agent.triage.evaluation import evaluate
+        from xts_agent.triage.known_issues import KnownIssueDB
+
+        report = JiraFilerTests._report(None, [("a", "NEW", False, "")])
+        report.groups[0].classification = "PRODUCT_BUG"
+        with tempfile.TemporaryDirectory() as tmp:
+            labels = KnownIssueDB.load(self._labels(tmp, [
+                {"id": "KI-0001", "classification": "PRODUCT_BUG", "match": {"signature": "a"}},
+            ]))
+        ev = evaluate(report, labels, known_issues=labels)
+        self.assertFalse(ev.held_out)
+        self.assertEqual(ev.leaked_labels, ["KI-0001"])
+        self.assertIn("not held out", ev.text())

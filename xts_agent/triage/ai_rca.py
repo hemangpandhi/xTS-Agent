@@ -106,6 +106,15 @@ def load_json_object(text: str) -> Any:
         return json.loads(body.replace("\\'", "'"))
 
 
+def provider_failed(raw: Optional[str]) -> bool:
+    """True when the provider reported an error instead of an answer.
+
+    Providers never raise: OpenAICompatibleProvider / GeminiProvider /
+    FallbackProvider return a "Failed to generate ..." or "Error: ..." string.
+    """
+    return not raw or raw.startswith(("Failed to generate", "Error:"))
+
+
 def parse_ai_json(text: str) -> Optional[Dict[str, Any]]:
     """Extract and validate the model's JSON object; None if unusable."""
     try:
@@ -168,6 +177,10 @@ class GroupAIAnalyzer:
         self._file_map: Optional[Dict[str, List[Path]]] = None
 
     MAX_CHUNKS = 4
+    # Circuit breaker: a dead or hung LLM endpoint must not cost one timeout
+    # per group (200 groups x 180 s). After this many consecutive provider
+    # failures the remaining groups are skipped and reported in the stats.
+    MAX_CONSECUTIVE_ERRORS = 3
     EVAL_RESERVE = 2  # known, human-classified groups analysed per run even when the cap is full
     PROMPT_VERSION = "v5"
 
@@ -636,8 +649,9 @@ class GroupAIAnalyzer:
         )
 
     def analyze(self, report: TriageReport) -> Dict[str, int]:
-        stats = {"analyzed": 0, "cached": 0, "unparseable": 0}
+        stats = {"analyzed": 0, "cached": 0, "unparseable": 0, "provider_errors": 0, "skipped": 0}
         model = getattr(self.provider, "model_id", "") or type(self.provider).__name__
+        consecutive_errors = 0
         # Actionable groups first. Known issues with a human classification are
         # the eval set for AI agreement, so at least EVAL_RESERVE of them (largest
         # first) are always analysed too; spare slots under the cap add more.
@@ -648,7 +662,7 @@ class GroupAIAnalyzer:
             if not tg.actionable and tg.known and tg.known.issue.classification
         ][:eval_slots]
         try:
-            for tg in targets:
+            for i, tg in enumerate(targets):
                 sig = tg.group.signature
                 cached = self.cache.get(sig, model) if self.cache else None
                 if cached:
@@ -677,6 +691,20 @@ class GroupAIAnalyzer:
                     self.prompt(tg, report.fingerprint, chunks, run_context=run_ctx, logcat=logcat),
                     json_mode=True,
                 )
+                if provider_failed(raw):
+                    stats["provider_errors"] += 1
+                    consecutive_errors += 1
+                    if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
+                        stats["skipped"] = len(targets) - i - 1
+                        logger.error(
+                            "LLM %s failed %d times in a row (%s); skipping the remaining %d group(s)",
+                            model, consecutive_errors, (raw or "no response")[:120], stats["skipped"],
+                        )
+                        break
+                    continue
+                consecutive_errors = 0
+                # The model that actually answered (FallbackProvider may have switched)
+                model = getattr(self.provider, "model_id", "") or model
                 result = parse_ai_json(raw or "")
                 if result is None:
                     logger.warning("AI output for group %s was not valid JSON; ignored", sig)

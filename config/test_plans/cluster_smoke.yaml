@@ -1,0 +1,24 @@
+name: "Cluster Smoke"
+description: "Multi-device orchestration check: three CTS modules sharded across every healthy Cuttlefish DUT, then triage with AI RCA"
+profile: development
+devices:
+  min_devices: 2
+suites:
+  - name: cts
+    priority: 100
+    plan: cts
+    enabled: true
+    include_filters:
+      - CtsBionicTestCases
+      - CtsCarTestCases
+      - CtsTelecomTestCases
+    sharding:
+      enabled: true
+      shard_count: auto
+    retry:
+      max_retries: 1
+      strategy: RETRY_ANY_FAILURE
+
+ai_rca:
+  enabled: true
+  max_groups: 10

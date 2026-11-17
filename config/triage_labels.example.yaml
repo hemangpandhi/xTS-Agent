@@ -1,0 +1,22 @@
+# Held-out labels for `xts-agent eval-triage --labels <file>`.
+#
+# Same schema as known_issues.yaml, but these must come from OUTSIDE the run
+# being scored: closed Jira tickets with a confirmed root cause and fix, or a
+# reviewer's sheet. Do not copy known_issues.yaml here (eval refuses ids that
+# are also configured known issues) and do not write labels by reading the
+# triage page of the run you are about to score: that is the circular
+# "100 % agreement" this command exists to replace.
+#
+#   classification: PRODUCT_BUG | TEST_BUG | ENVIRONMENT_ISSUE | FLAKY_TEST | INFRA_ISSUE
+#   source:         where the label came from, e.g. "jira:AAOS-1234 (fixed in abc123)"
+#   match:          signature | message_regex | test_regex | module_regex (all given must match)
+#
+# Copy to config/triage_labels.yaml (git-ignored) and fill from your tickets.
+issues: []
+#  - id: LBL-0001
+#    title: "Dialer role unset on auto Cuttlefish breaks CtsTelecom SelfManagedConnectionTest"
+#    classification: PRODUCT_BUG
+#    source: "jira:AAOS-1234 (fix: device/google/cuttlefish overlay config_defaultDialer)"
+#    match:
+#      test_regex: "CtsTelecomTestCases .*SelfManagedConnectionTest"
+#      message_regex: "IndexOutOfBoundsException"
