@@ -65,7 +65,30 @@ SERVED_SUFFIXES = {".html", ".json", ".xml", ".css", ".js", ".png", ".svg", ".tx
 # Module or "Module class#method" include filters, as TradeFed takes them
 _FILTER_RE = re.compile(r"^[A-Za-z0-9_.$#\[\]-]+( [A-Za-z0-9_.$#\[\]-]+){0,2}$")
 _SERIAL_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-MAX_MODULES = 200
+MAX_MODULES = 500
+_PLAN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,59}$")
+CUSTOM_PLAN_MARKER = "# created by xts-agent ui"
+
+
+def _clean_filters(items: Any) -> List[str]:
+    out = [str(m).strip() for m in (items or []) if str(m).strip()]
+    if len(out) > MAX_MODULES:
+        raise ValueError(f"at most {MAX_MODULES} modules")
+    bad = [m for m in out if not _FILTER_RE.match(m)]
+    if bad:
+        raise ValueError(f"invalid module filter(s): {', '.join(bad[:3])}")
+    return [_abi_first(m) for m in out]
+
+
+_ABI_NAMES = {"x86_64", "x86", "arm64-v8a", "armeabi-v7a", "riscv64"}
+
+
+def _abi_first(flt: str) -> str:
+    """TradeFed reads "[abi] module [test]"; fix "module abi [test]" typed the other way round."""
+    parts = flt.split(" ")
+    if len(parts) >= 2 and parts[1] in _ABI_NAMES and parts[0] not in _ABI_NAMES:
+        parts[0], parts[1] = parts[1], parts[0]
+    return " ".join(parts)
 
 
 class UiConfig:
@@ -127,20 +150,20 @@ class UiApp:
     def build_launch(self, body: Dict[str, Any]) -> Tuple[List[str], Path, str]:
         """Validated command, console log and run id for a launch request."""
         plan_path = self._plan_path(str(body.get("plan") or ""))
-        modules = [str(m).strip() for m in (body.get("modules") or []) if str(m).strip()]
-        if len(modules) > MAX_MODULES:
-            raise ValueError(f"at most {MAX_MODULES} modules")
-        bad = [m for m in modules if not _FILTER_RE.match(m)]
-        if bad:
-            raise ValueError(f"invalid module filter(s): {', '.join(bad[:3])}")
+        modules = _clean_filters(body.get("modules"))
+        suite_modules = {}
+        for suite, items in (body.get("suite_modules") or {}).items():
+            cleaned = _clean_filters(items)
+            if cleaned:
+                suite_modules[str(suite).lower()] = cleaned
         ai = body.get("ai_rca")
         arch = str(body.get("arch") or "")
         if arch and arch not in host_settings.ARCHES:
             raise ValueError(f"architecture must be one of {', '.join(host_settings.ARCHES)}")
         stamp = time.strftime("%Y%m%d%H%M%S")
         run_id = f"ui-{stamp}-{os.getpid() % 10000:04d}"
-        if modules or ai is not None or arch:
-            plan_path = self._derived_plan(plan_path, modules, ai, run_id, arch)
+        if modules or suite_modules or ai is not None or arch:
+            plan_path = self._derived_plan(plan_path, modules, ai, run_id, arch, suite_modules)
         cmd = [self.cfg.python, "-m", "xts_agent.cli", "run", "--plan", str(plan_path)]
         if self.cfg.defaults_path:
             cmd += ["--config", self.cfg.defaults_path]
@@ -153,14 +176,28 @@ class UiApp:
         log = self.cfg.results_dir / "logs" / f"{run_id}.console.log"
         return cmd, log, run_id
 
-    def _derived_plan(self, base: Path, modules: List[str], ai: Any, run_id: str, arch: str = "") -> Path:
+    def _derived_plan(self, base: Path, modules: List[str], ai: Any, run_id: str, arch: str = "",
+                      suite_modules: Optional[Dict[str, List[str]]] = None) -> Path:
         data = yaml.safe_load(base.read_text(encoding="utf-8")) or {}
+        enabled = [s for s in data.get("suites") or [] if isinstance(s, dict) and s.get("enabled", True)]
+        suite_modules = dict(suite_modules or {})
         if modules:
-            enabled = [s for s in data.get("suites") or [] if isinstance(s, dict) and s.get("enabled", True)]
             if len(enabled) != 1:
                 raise ValueError("module selection needs a plan with exactly one enabled suite")
-            enabled[0]["include_filters"] = modules
-            data["name"] = f"{data.get('name') or base.stem} [{len(modules)} module{'s' * (len(modules) > 1)}]"
+            suite_modules[str(enabled[0].get("name", "")).lower()] = modules
+        if suite_modules:
+            names = {str(s.get("name", "")).lower(): s for s in enabled}
+            unknown = sorted(set(suite_modules) - set(names))
+            if unknown:
+                raise ValueError(f"suite(s) not in this plan: {', '.join(unknown)}")
+            for suite, items in suite_modules.items():
+                names[suite]["include_filters"] = items
+            # Only the suites with a selection run; the others are switched off for this run
+            for s in enabled:
+                if str(s.get("name", "")).lower() not in suite_modules:
+                    s["enabled"] = False
+            total = sum(len(v) for v in suite_modules.values())
+            data["name"] = f"{data.get('name') or base.stem} [{total} module{'s' * (total > 1)}]"
             if data.get("profile") == "certification":
                 # A filtered certification plan is refused by design; run it as development
                 data["profile"] = "development"
@@ -311,6 +348,123 @@ class UiApp:
         out["runs_use"] = usable
         return out
 
+    def _package_for(self, suite: str, arch: str) -> Tuple[str, str]:
+        """(package path, java_home) for a suite on an architecture, from the effective settings."""
+        if suite not in host_settings.SUITES:
+            raise ValueError(f"unknown suite {suite!r}")
+        if arch and arch not in host_settings.ARCHES:
+            raise ValueError(f"unknown architecture {arch!r}")
+        eff = self.effective_defaults()
+        installs = eff.get("suite_installations") or {}
+        paths = eff.get("paths") or {}
+        pkg = host_settings.resolve_package_path(suite, arch, installs, paths.get("xts_packages_dir") or "/opt/xts")
+        info = host_settings.inspect_package(pkg, suite)
+        if not info["ok"]:
+            raise LookupError(f"{suite} for {arch or 'the default architecture'} is not installed at {pkg}: "
+                              f"{info['problems'][0]}. Set it in Settings.")
+        if arch and info["arch"] not in ("", "multi", arch):
+            raise LookupError(f"no {suite} package for {arch}: {pkg} is {info['arch']}. Add the {arch} "
+                              "package in Settings.")
+        return pkg, str(paths.get("java_home") or "")
+
+    def modules(self, suite: str, arch: str, refresh: bool = False) -> Dict[str, Any]:
+        from xts_agent.suites import catalog
+
+        pkg, java = self._package_for(suite, arch)
+        return catalog.list_modules(pkg, suite, self.cfg.results_dir / "ui_cache", java, refresh=refresh)
+
+    def tradefed_plans(self, suite: str, arch: str, refresh: bool = False) -> Dict[str, Any]:
+        from xts_agent.suites import catalog
+
+        pkg, java = self._package_for(suite, arch)
+        return catalog.list_plans(pkg, suite, self.cfg.results_dir / "ui_cache", java, refresh=refresh)
+
+    # ----------------------------------------------------------- plan editor
+
+    def _plan_file(self, name: str, must_exist: bool = False) -> Path:
+        stem = name[:-5] if name.endswith(".yaml") else name
+        if not _PLAN_NAME_RE.match(stem):
+            raise ValueError("file name: lower-case letters, digits, '-' and '_' only (max 60)")
+        path = self.cfg.plans_dir / f"{stem}.yaml"
+        if must_exist and not path.exists():
+            raise LookupError(f"no plan {path.name}")
+        return path
+
+    @staticmethod
+    def _is_custom(path: Path) -> bool:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return fh.readline().startswith(CUSTOM_PLAN_MARKER)
+        except OSError:
+            return False
+
+    def plan_source(self, name: str) -> Dict[str, Any]:
+        path = self._plan_file(name, must_exist=True)
+        text = path.read_text(encoding="utf-8")
+        return {"file": path.name, "custom": self._is_custom(path), "yaml": text,
+                "data": yaml.safe_load(text) or {}}
+
+    def validate_plan(self, text: str) -> Dict[str, Any]:
+        """Parse and load a plan exactly as a run would; raises ValueError with the reason."""
+        from xts_agent.config_loader import ConfigLoader
+
+        if len(text) > 200_000:
+            raise ValueError("plan is too large")
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"YAML error: {exc}") from None
+        if not isinstance(data, dict):
+            raise ValueError("a plan is a YAML mapping (name, suites, ...)")
+        suites = data.get("suites")
+        if not isinstance(suites, list) or not suites:
+            raise ValueError("a plan needs at least one suite")
+        for s in suites:
+            name = str((s or {}).get("name", "")).lower() if isinstance(s, dict) else ""
+            if name not in host_settings.SUITES:
+                raise ValueError(f"suite name must be one of {', '.join(host_settings.SUITES)} (got {name or 'nothing'})")
+            for f in list(s.get("include_filters") or []) + list(s.get("exclude_filters") or []):
+                if not _FILTER_RE.match(str(f)):
+                    raise ValueError(f"invalid filter {str(f)[:60]!r}")
+            if s.get("package_path") and not str(s["package_path"]).startswith("/"):
+                raise ValueError("package_path must be absolute")
+        tmp = self.cfg.results_dir / "ui_plans" / f"validate-{os.getpid()}-{threading.get_ident()}.yaml"
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(text, encoding="utf-8")
+        try:
+            plan = ConfigLoader(tmp, self.cfg.defaults_file).load_plan()
+        except Exception as exc:
+            raise ValueError(f"{type(exc).__name__}: {exc}"[:400]) from None
+        finally:
+            tmp.unlink(missing_ok=True)
+        return {"name": plan.name, "profile": plan.profile,
+                "suites": [{"name": s.name, "plan": s.plan, "package_path": s.package_path, "arch": s.arch,
+                            "include_filters": len(s.include_filters), "enabled": s.enabled} for s in plan.suites]}
+
+    def save_plan(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        path = self._plan_file(str(body.get("file") or ""))
+        text = str(body.get("yaml") or "")
+        if not text and isinstance(body.get("data"), dict):
+            text = yaml.safe_dump(body["data"], sort_keys=False)
+        text = "\n".join(ln for ln in text.splitlines() if not ln.startswith(CUSTOM_PLAN_MARKER)).strip() + "\n"
+        summary = self.validate_plan(text)
+        if path.exists() and not self._is_custom(path):
+            raise RuntimeError(f"{path.name} is a built-in plan; save your version under a new file name")
+        if path.exists() and not body.get("overwrite"):
+            raise RuntimeError(f"{path.name} already exists")
+        header = f"{CUSTOM_PLAN_MARKER} on {time.strftime('%Y-%m-%d %H:%M')}. Edit here or in the console.\n"
+        path.write_text(header + text, encoding="utf-8")
+        logger.info("UI saved plan %s", path)
+        return {"file": path.name, "saved": True, **summary}
+
+    def delete_plan(self, name: str) -> Dict[str, Any]:
+        path = self._plan_file(name, must_exist=True)
+        if not self._is_custom(path):
+            raise RuntimeError(f"{path.name} is a built-in plan and cannot be deleted from the console")
+        path.unlink()
+        logger.info("UI deleted plan %s", path)
+        return {"file": path.name, "deleted": True}
+
     def plans(self) -> List[Dict[str, Any]]:
         """Plans plus where each suite resolves for every architecture."""
         eff = self.effective_defaults()
@@ -319,6 +473,7 @@ class UiApp:
         cache: Dict[str, Dict[str, Any]] = {}
         out = list_plans(self.cfg.plans_dir)
         for plan in out:
+            plan["custom"] = self._is_custom(self.cfg.plans_dir / plan["file"])
             if plan.get("error"):
                 continue
             try:
@@ -336,8 +491,11 @@ class UiApp:
                     if path not in cache:
                         cache[path] = host_settings.inspect_package(path, str(s["name"]).lower())
                     info = cache[path]
-                    s["resolved"][arch] = {"path": path, "ok": info["ok"], "abis": info["abis"], "arch": info["arch"],
-                                           "pinned": bool(spec.get("package_path")), "problems": info["problems"]}
+                    problems = list(info["problems"])
+                    if info["ok"] and info["arch"] not in ("", "multi", arch):
+                        problems.append(f"this package is {info['arch']}, not {arch}")
+                    s["resolved"][arch] = {"path": path, "ok": not problems, "abis": info["abis"], "arch": info["arch"],
+                                           "pinned": bool(spec.get("package_path")), "problems": problems}
         return out
 
     def overview(self) -> Dict[str, Any]:
@@ -452,6 +610,15 @@ class Handler(BaseHTTPRequestHandler):
                     return self._error(404, "no log for this suite")
                 offset = int((query.get("offset") or ["-1"])[0])
                 return self._json(tail_file(log, offset))
+            if path in ("/api/modules", "/api/tradefed-plans"):
+                suite = (query.get("suite") or [""])[0].lower()
+                arch = (query.get("arch") or [""])[0]
+                refresh = bool(query.get("refresh"))
+                fn = app.modules if path == "/api/modules" else app.tradefed_plans
+                return self._json(fn(suite, arch, refresh))
+            m = re.match(r"^/api/plans/([A-Za-z0-9_.-]+)$", path)
+            if m:
+                return self._json(app.plan_source(m.group(1)))
             if path == "/api/plans":
                 return self._json(app.plans())
             if path == "/api/settings":
@@ -461,7 +628,9 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/files/"):
                 return self._file(path[len("/files/"):])
         except (ValueError, KeyError) as exc:
-            return self._error(400, str(exc))
+            return self._error(400, str(exc).strip("'\""))
+        except LookupError as exc:  # suite not installed, plan not found
+            return self._error(404, str(exc))
         return self._error(404, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -491,6 +660,28 @@ class Handler(BaseHTTPRequestHandler):
                 if kind not in ("xts_packages_dir", "java_home", "android_sdk", "adb_path"):
                     return self._error(400, "unknown kind")
                 return self._json(host_settings.check_tool_path(kind, value))
+            if path == "/api/plans/validate":
+                return self._json(app.validate_plan(str(body.get("yaml") or "")))
+            if path == "/api/plans/parse":
+                text = str(body.get("yaml") or "")
+                if len(text) > 200_000:
+                    return self._error(400, "plan is too large")
+                try:
+                    data = yaml.safe_load(text)
+                except yaml.YAMLError as exc:
+                    return self._error(400, f"YAML error: {exc}")
+                if not isinstance(data, dict):
+                    return self._error(400, "a plan is a YAML mapping (name, suites, ...)")
+                return self._json({"data": data})
+            if path == "/api/plans/render":
+                data = body.get("data")
+                if not isinstance(data, dict):
+                    return self._error(400, "data must be an object")
+                return self._json({"yaml": yaml.safe_dump(data, sort_keys=False, allow_unicode=True)})
+            if path == "/api/plans/save":
+                return self._json(app.save_plan(body))
+            if path == "/api/plans/delete":
+                return self._json(app.delete_plan(str(body.get("file") or "")))
             if path == "/api/settings/test-llm":
                 return self._json(app.test_llm(body))
             m = re.match(r"^/api/runs/([^/]+)/stop$", path)

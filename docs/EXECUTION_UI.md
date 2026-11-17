@@ -13,7 +13,7 @@ host setup and the validation stages, see [EXECUTION_GUIDE.md](EXECUTION_GUIDE.m
 | 3. Local LLM up (only for AI RCA) | `PORT=8011 /mnt/OEM/llm-env/serve_qwen.sh` | shell | `curl -s 127.0.0.1:8011/v1/models` lists `coder` |
 | 4. Open the console | `xts-agent ui` and browse to <http://127.0.0.1:8765/> | browser | The pages load |
 | 4a. First time on a host: Settings | **Settings**: unzip each suite, **Scan** its folder, **Use for x86_64/arm64**, check JDK, SDK and adb, test the LLM, **Save** | console | Every suite you need shows a green build badge for your device architecture |
-| 5. Launch | **Launch**: pick a plan and the device architecture, optionally list modules, tick auto-retry, **Start run** | console (or `xts-agent run --plan …` in a shell, or CI) | **Live** shows the run within seconds |
+| 5. Launch | **Launch**: pick a plan and the device architecture, optionally pick modules from the suite's own list, tick auto-retry, **Start run**. Reusable selections: **Plans → New plan** | console (or `xts-agent run --plan …` in a shell, or CI) | **Live** shows the run within seconds |
 | 6. Watch | **Live**: phase, per-suite status, the module each device is running, failures so far, TradeFed console | console | Heartbeat stays fresh; "Log quiet" stays low |
 | 7. Stop or resume if needed | **Stop** on the run card, later **Launch → Resume** (or `run --resume`) | console | Card shows `CANCELLED`; resume continues from the partial result |
 | 8. Review | **Runs → run**: totals, module table, failed tests, links to the HTML report and the **triage page** | console | Triage page groups the failures with owners and AI root cause |
@@ -64,16 +64,46 @@ the progress line in the job log stays at `ops.progress_interval_secs`.
 
 Lists every plan in `config/test_plans/`. Options:
 
-- **Only these modules**: one per line, as TradeFed include filters
-  (`CtsBionicTestCases`, or `CtsFoo android.foo.BarTest#testX`). The console
-  writes a derived plan to `results/ui_plans/` and runs that; the original plan
-  file is never changed. A certification plan narrowed this way runs as a
-  development run, because certification refuses filtered plans.
+- **Device architecture**: picks the suite packages (see Settings).
+- **Run only some modules**: the module list comes from the installed suite
+  itself (`<suite>-tradefed list modules`, about 4 seconds, then cached per
+  suite build; **Refresh** runs it again). Search it, tick modules, or use
+  **Select all shown** on a search such as `Car`. Each module shows its ABIs and
+  parameterised variants (secondary user, instant app). For a single test class
+  or method, or one ABI, open **Test classes, methods or one ABI…** and write a
+  TradeFed include filter per line, e.g.
+  `CtsCarTestCases android.car.cts.CarPropertyManagerTest#testGetProperty` or
+  `x86_64 CtsBionicTestCases`. With several suites in a plan, only the suites you
+  pick modules for run. The console writes a derived plan to
+  `results/ui_plans/` and runs that; the original plan is never changed. A
+  certification plan narrowed this way runs as a development run.
+- **Save selection as a new plan** opens the plan editor with the plan, the
+  modules and the options you chose, ready to name and save.
 - **Auto-retry**, **Resume**, **Dry run**, and **AI RCA** on or off.
 - The command it will run is shown before you start.
 
 A plan that is already running cannot be started twice. Device sharing between
 different plans is prevented by the agent's leases, as for CLI runs.
+
+### Plans
+
+Every plan in `config/test_plans/`, built-in and your own.
+
+- **New plan**: a name, a file name (`car_nightly` becomes
+  `config/test_plans/car_nightly.yaml`), description, profile, architecture,
+  minimum devices and AI root-cause analysis, then one or more suites. For each
+  suite: the TradeFed plan (suggestions come from `<suite>-tradefed list plans`),
+  shards, retries, timeout, the modules to include (same picker as Launch) and
+  modules to exclude.
+- **YAML** tab: the file exactly as it will be saved. Edit it directly, or
+  **Load file…** to bring in a plan file from your computer.
+- **Validate** loads the plan the way a run does and shows each suite's package
+  path; **Save plan** validates first, so a saved plan always loads.
+- Plans you create start with `# created by xts-agent ui`; only those can be
+  overwritten or deleted from the console. A built-in plan is read-only here:
+  **Duplicate as custom plan** and change the copy.
+- A saved plan appears on Launch at once and runs from the CLI and CI as well:
+  `xts-agent run --plan config/test_plans/car_nightly.yaml`.
 
 ### Runs and run detail
 
