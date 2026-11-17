@@ -770,3 +770,63 @@ class TriageEvalTests(unittest.TestCase):
         self.assertFalse(ev.held_out)
         self.assertEqual(ev.leaked_labels, ["KI-0001"])
         self.assertIn("not held out", ev.text())
+
+
+class ClassNormalisationTests(unittest.TestCase):
+    def test_model_synonyms_map_onto_the_enum(self):
+        from xts_agent.triage.ai_rca import normalize_classification, parse_ai_json
+
+        cases = {
+            "ENVIRONMENT_ISSUE": "ENVIRONMENT_ISSUE", "environment issue": "ENVIRONMENT_ISSUE",
+            "Test-Environment": "ENVIRONMENT_ISSUE", "CONFIGURATION_ISSUE": "ENVIRONMENT_ISSUE",
+            "flaky": "FLAKY_TEST", "INFRA_ISSUE": "INFRASTRUCTURE_FAILURE", "TEST_ISSUE": "TEST_BUG",
+            "CTS test bug": "TEST_BUG", "PLATFORM_BUG": "PRODUCT_BUG", "bug": "PRODUCT_BUG",
+            "ALIENS": "UNKNOWN", "": "UNKNOWN", None: "UNKNOWN",
+        }
+        for raw, want in cases.items():
+            self.assertEqual(normalize_classification(raw), want, raw)
+        out = parse_ai_json('{"root_cause": "x", "classification": "Test Environment", "confidence": 0.9}')
+        self.assertEqual((out["classification"], out["raw_classification"]), ("ENVIRONMENT_ISSUE", "Test Environment"))
+
+
+class UnclassifiedAnswerTests(unittest.TestCase):
+    def test_blank_classification_is_asked_once_more_and_not_cached_as_final(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        blank = '{"root_cause": "no dialer role holder", "classification": "", "confidence": 0.9}'
+        good = '{"root_cause": "no dialer role holder", "classification": "ENVIRONMENT_ISSUE", "confidence": 0.9}'
+        provider = MagicMock(model_id="openai:coder")
+        provider.generate.side_effect = [blank, good]
+        report = JiraFilerTests._report(None, [("a", "NEW", False, "")])
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "c.db")
+            GroupAIAnalyzer(provider, cache_db=db).analyze(report)
+            self.assertEqual(provider.generate.call_count, 2)
+            self.assertEqual(report.groups[0].ai["classification"], "ENVIRONMENT_ISSUE")
+            # twice blank: first answer kept, but a cached UNKNOWN is re-asked on the next run
+            provider.generate.side_effect = [blank, blank, good]
+            again = JiraFilerTests._report(None, [("b", "NEW", False, "")])
+            GroupAIAnalyzer(provider, cache_db=db).analyze(again)
+            self.assertEqual(again.groups[0].ai["classification"], "UNKNOWN")
+            third = JiraFilerTests._report(None, [("b", "NEW", False, "")])
+            stats = GroupAIAnalyzer(provider, cache_db=db).analyze(third)
+            self.assertEqual((stats["cached"], stats["analyzed"], third.groups[0].ai["classification"]),
+                             (0, 1, "ENVIRONMENT_ISSUE"))
+
+
+class MultipleFailureSignatureTests(unittest.TestCase):
+    def test_junit_multiple_failure_header_is_skipped(self):
+        from xts_agent.triage.signature import signature_parts
+
+        stack = ("There were 3 failures:\n"
+                 "  java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0\n"
+                 "\tat jdk.internal.util.Preconditions.outOfBounds(Preconditions.java:100)\n"
+                 "\tat android.telecom.cts.SelfManagedConnectionTest.setUp(SelfManagedConnectionTest.java:703)\n")
+        tc = _tc("android.telecom.cts.SelfManagedConnectionTest", "testA", stack, "x86_64 CtsTelecomTestCases")
+        exc, msg, frames = signature_parts(tc)
+        self.assertEqual(exc, "java.lang.IndexOutOfBoundsException")
+        self.assertIn("out of bounds", msg)
+        tc2 = _tc("a.B", "t", "There were 2 failures:\n  defaultTouchInputMethod\nexpected not to be empty\n\tat a.B.t(B.java:1)\n",
+                  "x86_64 M")
+        exc2, msg2, _ = signature_parts(tc2)
+        self.assertEqual((exc2, msg2), ("", "defaultTouchInputMethod"))

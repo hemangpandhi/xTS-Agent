@@ -60,7 +60,7 @@ FAKE_TRADEFED = textwrap.dedent('''\
         for i, name in enumerate(sessions):
             print(f"{{i}}        1     0     1 of 1            {{name}}")
         sys.exit(0)
-    retry = args[:2] == ["run", "retry"]
+    retry = args[:3] == ["run", "commandAndExit", "retry"]
     n = len(sessions) + 1
     session = results / f"2026.10.07_06.00.0{{n}}.000_{{n}}"
     session.mkdir(parents=True)
@@ -146,7 +146,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertIn("CtsCarHvacTestCases", run)
         self.assertEqual(run[run.index("-s") + 1], "hu-1")
         # Retry targets session 0 (the first run) and only its failures, on the same device
-        retry = next(c for c in calls if c[:2] == ["run", "retry"])
+        retry = next(c for c in calls if c[:3] == ["run", "commandAndExit", "retry"])
         self.assertEqual(retry[retry.index("--retry") + 1], "0")
         self.assertEqual(retry[retry.index("--retry-type") + 1], "FAILED")
         self.assertEqual(retry[retry.index("-s") + 1], "hu-1")

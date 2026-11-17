@@ -195,7 +195,10 @@ class TradefedRunner:
         retry_type: Optional[str] = "FAILED",
         device_serials: Optional[Sequence[str]] = None,
     ) -> List[str]:
-        cmd = self.resolve_command_prefix() + ["run", "retry", "--retry", str(session_id)]
+        # commandAndExit, like the main run: a bare "run retry" only schedules
+        # the invocation and the non-interactive console then exits, killing it
+        # before any test runs (observed: exit 0 after 13 s, no results dir)
+        cmd = self.resolve_command_prefix() + ["run", "commandAndExit", "retry", "--retry", str(session_id)]
         # TradeFed accepts FAILED or NOT_EXECUTED; omitting the flag retries both
         if retry_type and str(retry_type).upper() != "BOTH":
             cmd.extend(["--retry-type", str(retry_type).upper()])

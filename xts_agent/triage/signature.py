@@ -52,13 +52,31 @@ def normalize_message(message: str, limit: int = 160) -> str:
     return text.strip()[:limit]
 
 
+_MULTI_FAILURE_HEADER = re.compile(r"^\s*(Failure:\s*)?There (were|was) \d+ failures?:?\s*$")
+
+
+def _skip_multiple_failure_header(stack: str) -> str:
+    """Drop JUnit's "There were N failures:" header so the first real failure is the signature.
+
+    Otherwise every test that fails several assertions shares one meaningless
+    group ("There were <n> failures").
+    """
+    lines = stack.splitlines()
+    if lines and _MULTI_FAILURE_HEADER.match(lines[0]):
+        rest = [ln for ln in lines[1:] if ln.strip()]
+        if rest:
+            return "\n".join(ln.lstrip() if i == 0 else ln for i, ln in enumerate(rest))
+    return stack
+
+
 def signature_parts(tc: TestCaseResult, depth: int = 3) -> Tuple[str, str, List[str]]:
     """(exception type, normalised message, distinguishing frames)."""
-    stack = tc.stack_trace or ""
+    stack = _skip_multiple_failure_header(tc.stack_trace or "")
     first = stack.splitlines()[0] if stack.strip() else (tc.message or "")
     exc, _, msg = first.partition(":")
-    if not msg and " " in exc.strip():
-        # Message without an exception prefix (e.g. bare TradeFed error text)
+    if not msg and (" " in exc.strip() or "." not in exc):
+        # Message without an exception prefix (bare TradeFed error text, an
+        # assertion label such as "defaultTouchInputMethod"): not a class name
         exc, msg = "", first
     test_class = (tc.class_name or "").split("$")[0]
     frames: List[str] = []

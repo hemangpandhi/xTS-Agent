@@ -115,6 +115,32 @@ def provider_failed(raw: Optional[str]) -> bool:
     return not raw or raw.startswith(("Failed to generate", "Error:"))
 
 
+_CLASS_SYNONYMS = (
+    # (substring of the normalised model answer, canonical class); first match wins
+    ("FLAKY", "FLAKY_TEST"),
+    ("INFRA", "INFRASTRUCTURE_FAILURE"),
+    ("ENV", "ENVIRONMENT_ISSUE"),
+    ("CONFIG", "ENVIRONMENT_ISSUE"),
+    ("SETUP", "ENVIRONMENT_ISSUE"),
+    ("TEST", "TEST_BUG"),          # TEST_ISSUE, TEST_CODE_BUG, CTS_TEST_BUG
+    ("PRODUCT", "PRODUCT_BUG"),
+    ("PLATFORM", "PRODUCT_BUG"),
+    ("DEVICE", "PRODUCT_BUG"),
+    ("BUG", "PRODUCT_BUG"),
+)
+
+
+def normalize_classification(value: Any) -> str:
+    """Map the model's class to CLASSIFICATIONS; UNKNOWN when nothing fits."""
+    cls = re.sub(r"[\s\-/]+", "_", str(value or "").strip().upper())
+    if cls in CLASSIFICATIONS:
+        return cls
+    for needle, canonical in _CLASS_SYNONYMS:
+        if needle in cls:
+            return canonical
+    return "UNKNOWN"
+
+
 def parse_ai_json(text: str) -> Optional[Dict[str, Any]]:
     """Extract and validate the model's JSON object; None if unusable."""
     try:
@@ -123,14 +149,18 @@ def parse_ai_json(text: str) -> Optional[Dict[str, Any]]:
         return None
     if not isinstance(data, dict) or not data.get("root_cause"):
         return None
-    cls = str(data.get("classification", "")).upper().strip()
+    raw_cls = str(data.get("classification", "")).strip()
+    cls = normalize_classification(raw_cls)
+    if cls != raw_cls.upper():
+        logger.warning("AI classification %r mapped to %s", raw_cls[:40], cls)
     try:
         confidence = float(data.get("confidence", 0))
     except (TypeError, ValueError):
         confidence = 0.0
     return {
         "root_cause": str(data["root_cause"])[:1000],
-        "classification": cls if cls in CLASSIFICATIONS else "UNKNOWN",
+        "classification": cls,
+        "raw_classification": raw_cls[:40],
         "confidence": round(min(max(confidence, 0.0), 1.0), 2),
         "suggested_fix": str(data.get("suggested_fix", ""))[:2000],
         "evidence": str(data.get("evidence", ""))[:2000],
@@ -671,10 +701,10 @@ class GroupAIAnalyzer:
                     new_refs = [f"{c['file']}:{c['start_line']}" for c in exact_chunks if c.get("file")]
                     run_ctx = self.build_run_context(report, current_sig=sig)
                     signals = self._extract_structural_signals(tg, exact_chunks, run_ctx, "") if has_map else []
-                    needs_reanalysis = has_map and (
+                    needs_reanalysis = cached.get("classification") == "UNKNOWN" or (has_map and (
                         bool(signals and cached.get("signals") != signals)
                         or (cached.get("classification") == "PRODUCT_BUG" and cached.get("prompt_v") != self.PROMPT_VERSION)
-                    )
+                    ))
                     if not needs_reanalysis:
                         if has_map and new_refs != cached.get("code_refs", []):
                             cached["code_refs"] = new_refs
@@ -687,10 +717,8 @@ class GroupAIAnalyzer:
                 run_ctx = self.build_run_context(report, current_sig=sig)
                 logcat = self.retrieve_logcat(tg)
                 signals = self._extract_structural_signals(tg, chunks, run_ctx, logcat)
-                raw = self.provider.generate(
-                    self.prompt(tg, report.fingerprint, chunks, run_context=run_ctx, logcat=logcat),
-                    json_mode=True,
-                )
+                prompt = self.prompt(tg, report.fingerprint, chunks, run_context=run_ctx, logcat=logcat)
+                raw = self.provider.generate(prompt, json_mode=True)
                 if provider_failed(raw):
                     stats["provider_errors"] += 1
                     consecutive_errors += 1
@@ -706,6 +734,14 @@ class GroupAIAnalyzer:
                 # The model that actually answered (FallbackProvider may have switched)
                 model = getattr(self.provider, "model_id", "") or model
                 result = parse_ai_json(raw or "")
+                if result is not None and result["classification"] == "UNKNOWN":
+                    # Sampling noise: the model occasionally leaves the class blank
+                    # while the root cause is fine. One more draw is cheaper than
+                    # an UNKNOWN row on the page; the first answer stays if it repeats.
+                    logger.info("AI left group %s unclassified; asking once more", sig)
+                    again = parse_ai_json(self.provider.generate(prompt, json_mode=True) or "")
+                    if again is not None and again["classification"] != "UNKNOWN":
+                        result = again
                 if result is None:
                     logger.warning("AI output for group %s was not valid JSON; ignored", sig)
                     stats["unparseable"] += 1

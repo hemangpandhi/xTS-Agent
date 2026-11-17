@@ -532,7 +532,7 @@ class ResumeTests(unittest.TestCase):
 
             self.assertEqual(len(calls), 1, calls)  # CTS skipped, VTS continued once
             cmd = calls[0]
-            self.assertEqual(cmd[1:4], ["run", "retry", "--retry"])
+            self.assertEqual(cmd[1:5], ["run", "commandAndExit", "retry", "--retry"])
             self.assertEqual(cmd[cmd.index("--retry") + 1], "0")
             self.assertNotIn("--retry-type", cmd)  # incomplete => FAILED + NOT_EXECUTED
             required = dm.select_shard_pool.call_args_list[-1][0][2]
