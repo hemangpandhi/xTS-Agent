@@ -764,10 +764,16 @@ views.settings = async function () {
     $("#aist").innerHTML = '<span class="muted">Connecting…</span>';
     try {
       const r = await api("/api/settings/test-llm", { body: { base_url: state.ai.openai_base_url, model: state.ai.openai_model } });
-      if (!r.ok) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(r.error)}</span>`; return; }
+      // What runs would actually use when this server is down or lacks the model
+      const fbLine = () => {
+        if (!r.fallbacks) return "";
+        if (r.runs_use) return `<div style="margin-top:6px;color:var(--warn)">${ic("alert")} Runs fall back to <code>${esc(r.runs_use.model)}</code> at <code>${esc(r.runs_use.base_url)}</code>, which is reachable. AI analysis keeps working, on the fallback model.</div>`;
+        return `<div style="margin-top:6px;color:var(--bad)">${ic("alert")} ${r.fallbacks.length ? "No fallback is usable either" : "No fallback is configured"}: runs will skip AI analysis (rule-based triage still runs).</div>`;
+      };
+      if (!r.ok) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(r.error)}</span>${fbLine()}`; return; }
       $("#aimodels").innerHTML = r.models.map((m) => `<option value="${esc(m)}">`).join("");
       $("#aist").innerHTML = `<span style="color:var(--ok)">${ic("check")} Reachable · ${r.models.length} model${r.models.length === 1 ? "" : "s"}</span>` +
-        (r.model_found === false ? ` <span style="color:var(--warn)">· "${esc(state.ai.openai_model)}" is not one of them: ${esc(r.models.slice(0, 6).join(", "))}</span>` : r.model_found ? ` · model found` : "");
+        (r.model_found === false ? ` <span style="color:var(--warn)">· "${esc(state.ai.openai_model)}" is not one of them: ${esc(r.models.slice(0, 6).join(", "))}</span>` : r.model_found ? ` · model found` : "") + fbLine();
     } catch (e) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(e.message)}</span>`; }
   });
   // save

@@ -273,9 +273,20 @@ class UiApp:
         logger.info("Host settings saved to %s", self.cfg.settings_file)
         return self.settings()
 
-    def test_llm(self, body: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _probe_llm(base: str, model: str) -> Dict[str, Any]:
         import requests
 
+        try:
+            resp = requests.get(base + "/models", timeout=5)
+            resp.raise_for_status()
+            models = [m.get("id") for m in (resp.json().get("data") or []) if isinstance(m, dict)]
+        except Exception as exc:
+            return {"ok": False, "error": f"{type(exc).__name__}: cannot reach {base}/models"}
+        return {"ok": True, "models": models[:50], "model_found": (model in models) if model else None}
+
+    def test_llm(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Probe the endpoint and, when it is down, the configured fallbacks runs would use."""
         from xts_agent.rca.llm_provider import is_local_endpoint
 
         base = str(body.get("base_url") or "").rstrip("/")
@@ -283,14 +294,22 @@ class UiApp:
             raise ValueError("base URL must start with http:// or https://")
         if not is_local_endpoint(base):
             raise ValueError("only on-prem endpoints (this host or a private network) can be tested from here")
-        try:
-            resp = requests.get(base + "/models", timeout=5)
-            resp.raise_for_status()
-            models = [m.get("id") for m in (resp.json().get("data") or []) if isinstance(m, dict)]
-        except Exception as exc:
-            return {"ok": False, "error": f"{type(exc).__name__}: cannot reach {base}/models"}
         model = str(body.get("model") or "")
-        return {"ok": True, "models": models[:50], "model_found": (model in models) if model else None}
+        out = self._probe_llm(base, model)
+        if out["ok"] and out["model_found"] is not False:
+            return out
+        fallbacks = []
+        for fb in (self.effective_defaults().get("ai_rca") or {}).get("openai_fallbacks") or []:
+            fb_base = str(fb.get("base_url") or "").rstrip("/")
+            if not fb_base or not is_local_endpoint(fb_base):
+                continue
+            probe = self._probe_llm(fb_base, str(fb.get("model") or ""))
+            fallbacks.append({"base_url": fb_base, "model": fb.get("model", ""), "ok": probe["ok"],
+                              "model_found": probe.get("model_found"), "error": probe.get("error", "")})
+        out["fallbacks"] = fallbacks
+        usable = next((f for f in fallbacks if f["ok"] and f["model_found"] is not False), None)
+        out["runs_use"] = usable
+        return out
 
     def plans(self) -> List[Dict[str, Any]]:
         """Plans plus where each suite resolves for every architecture."""
