@@ -108,6 +108,7 @@ class TestPlanExecutor:
                 logger.info("Resuming %s from %s", plan.name, self.run_state.path)
             else:
                 self.run_state.start(plan.name, getattr(plan, "profile", "development"))
+            self.run_state.attach_process(auto_retry=auto_retry, resumed=self._resuming)
         suites = list(plan.suites)
         # Lower priority number runs first (cert plan: CTS=1 before CATBOX=6)
         suites.sort(key=lambda s: getattr(s, "priority", 100))
@@ -319,6 +320,7 @@ class TestPlanExecutor:
             if ops is not None:
                 runner.progress_interval_secs = ops.progress_interval_secs
                 runner.stall_warning_secs = ops.stall_warning_mins * 60
+                runner.status_interval_secs = getattr(ops, "status_interval_secs", 0)
             runner.on_progress = functools.partial(self._on_progress, name)
 
             if dry_run:
@@ -446,6 +448,8 @@ class TestPlanExecutor:
             self._checkpoint(suite_res)
 
             if auto_retry and self.retry_manager and suite_res.status != "PASSED" and not cancel.cancelled():
+                if self.run_state is not None:
+                    self.run_state.suite_retrying(name, suite_res.retry_count + 1)
                 suite_res = self.retry_manager.retry_suite_until_done(
                     runner=runner,
                     suite_result=suite_res,

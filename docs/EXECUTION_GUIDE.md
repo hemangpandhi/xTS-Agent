@@ -14,6 +14,10 @@ you should see, and what to do if you don't.
 | [C. OEM head unit](#stage-c-oem-head-unit) | OEM devices | Pilot on the target hardware; collect KPIs | 2–4 weeks |
 | [D. CI](#stage-d-gitlab-ci) | any | Nightly and on-demand runs from GitLab | ½ day |
 
+To start runs and watch them in a browser instead of the job log, use the web
+console (`xts-agent ui`); the day-to-day process is in
+[EXECUTION_UI.md](EXECUTION_UI.md).
+
 Record every result in the [sign-off sheet](#sign-off-sheet) at the end. Do not
 start stage C until stages A and B are signed off.
 

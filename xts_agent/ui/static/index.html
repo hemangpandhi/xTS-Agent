@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xTS Agent Console</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --border: #dfe3e8; --text: #1b1f24;
+  --muted: #5d6673; --accent: #2563eb; --accent-text: #ffffff;
+  --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2; --warn: #a16207; --warn-bg: #fef3c7;
+  --info: #1d4ed8; --info-bg: #dbeafe; --idle: #475569; --idle-bg: #e2e8f0;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --log-bg: #0f1419; --log-text: #d6dde6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2230; --border: #2d3440; --text: #e6edf3;
+    --muted: #8b96a5; --accent: #4f8cff; --ok: #4ade80; --ok-bg: #12301f; --bad: #f87171; --bad-bg: #3a1618;
+    --warn: #fbbf24; --warn-bg: #362a0c; --info: #93c5fd; --info-bg: #172a4a; --idle: #a3adbb; --idle-bg: #262d38;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --panel: #161b22; --panel-2: #1c2230; --border: #2d3440; --text: #e6edf3;
+  --muted: #8b96a5; --accent: #4f8cff; --ok: #4ade80; --ok-bg: #12301f; --bad: #f87171; --bad-bg: #3a1618;
+  --warn: #fbbf24; --warn-bg: #362a0c; --info: #93c5fd; --info-bg: #172a4a; --idle: #a3adbb; --idle-bg: #262d38;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+header { background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+.bar { max-width: 1280px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 20px; min-height: 52px; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; }
+.brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+nav { display: flex; gap: 4px; }
+nav a { padding: 6px 12px; border-radius: 6px; color: var(--muted); font-weight: 500; }
+nav a.on { background: var(--panel-2); color: var(--text); }
+nav a:hover { text-decoration: none; color: var(--text); }
+.spacer { flex: 1; }
+.toplinks { display: flex; gap: 14px; font-size: 13px; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 0; } h3 { font-size: 14px; margin: 0 0 8px; }
+.sub { color: var(--muted); margin: 0 0 18px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; }
+.card > .hd { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.card > .bd { padding: 14px 16px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.muted { color: var(--muted); } .mono { font-family: var(--mono); font-size: 12.5px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.b-ok { background: var(--ok-bg); color: var(--ok); } .b-bad { background: var(--bad-bg); color: var(--bad); }
+.b-warn { background: var(--warn-bg); color: var(--warn); } .b-info { background: var(--info-bg); color: var(--info); }
+.b-idle { background: var(--idle-bg); color: var(--idle); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: currentColor; margin-right: 6px; }
+.pulse { animation: pulse 1.6s infinite; } @keyframes pulse { 50% { opacity: .35; } }
+button, .btn { font: inherit; font-weight: 500; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+button:hover { background: var(--panel-2); } button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.danger { color: var(--bad); border-color: var(--bad); } button.danger:hover { background: var(--bad-bg); }
+button.sm { padding: 3px 9px; font-size: 12.5px; }
+input[type=text], select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 9px; }
+textarea { width: 100%; font-family: var(--mono); font-size: 12.5px; min-height: 90px; }
+label.chk { display: inline-flex; gap: 6px; align-items: center; margin-right: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.tile { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; }
+.tile .k { color: var(--muted); font-size: 12px; } .tile .v { font-size: 20px; font-weight: 650; margin-top: 2px; }
+.steps { display: flex; gap: 0; flex-wrap: wrap; }
+.step { padding: 3px 10px; font-size: 12px; border: 1px solid var(--border); margin-left: -1px; color: var(--muted); background: var(--panel); }
+.step:first-child { border-radius: 6px 0 0 6px; } .step:last-child { border-radius: 0 6px 6px 0; }
+.step.done { color: var(--ok); } .step.cur { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+.devices { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.dev { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel-2); min-width: 0; }
+.dev .s { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.dev .m { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; cursor: default; white-space: nowrap; }
+th.sort { cursor: pointer; } td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel-2); }
+.scroll { overflow-x: auto; }
+.log { background: var(--log-bg); color: var(--log-text); font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  height: 380px; overflow: auto; padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
+.log .f { color: #ff8a8a; } .log .w { color: #f5c26b; } .log .i { color: #8cc8ff; }
+.bar-o { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; min-width: 120px; }
+.bar-i { height: 100%; background: var(--accent); }
+.plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.plan { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; background: var(--panel); }
+.plan.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.plan .t { font-weight: 600; } .plan .d { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.empty { text-align: center; padding: 40px 16px; color: var(--muted); }
+.toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 8px;
+  max-width: min(420px, calc(100vw - 32px)); z-index: 20; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.tl { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow: auto; }
+.tl li { padding: 4px 0; border-bottom: 1px dashed var(--border); font-size: 13px; display: flex; gap: 10px; }
+.tl li span:first-child { color: var(--muted); font-family: var(--mono); font-size: 12px; min-width: 64px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12.5px; } .seg button.on { background: var(--panel-2); font-weight: 650; }
+code { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+pre.cmd { font-family: var(--mono); font-size: 12px; background: var(--panel-2); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; }
+@media (max-width: 640px) { .toplinks { display: none; } th, td { padding: 6px; } }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="brand">xTS Agent<small id="host"></small></div>
+  <nav id="nav">
+    <a href="#/live" data-v="live">Live</a><a href="#/launch" data-v="launch">Launch</a>
+    <a href="#/runs" data-v="runs">Runs</a><a href="#/devices" data-v="devices">Devices</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="toplinks" id="toplinks"></div>
+</div></header>
+<main id="view"></main>
+<script>
+"use strict";
+// ---------------------------------------------------------------- basics
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let TOKEN = "";
+try { TOKEN = sessionStorage.getItem("xts-ui-token") || ""; } catch (e) {}
+(function takeToken() {
+  const m = location.hash.match(/token=([^&]+)/);
+  if (m) { TOKEN = decodeURIComponent(m[1]); try { sessionStorage.setItem("xts-ui-token", TOKEN); } catch (e) {}
+    history.replaceState(null, "", location.pathname + "#/live"); }
+})();
+const hdrs = () => (TOKEN ? { Authorization: "Bearer " + TOKEN } : {});
+const fileHref = (u) => (!u ? "" : TOKEN ? u + (u.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(TOKEN) : u);
+async function api(path, opts = {}) {
+  const init = { headers: { ...hdrs() } };
+  if (opts.body !== undefined) {
+    init.method = "POST"; init.body = JSON.stringify(opts.body);
+    init.headers["Content-Type"] = "application/json"; init.headers["X-XTS-UI"] = "1";
+  }
+  const r = await fetch(path, init);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.status + " " + r.statusText);
+  return data;
+}
+function toast(msg, ms = 4000) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), ms);
+}
+const fmtTime = (s) => (s ? new Date(s * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "–");
+const fmtClock = (s) => (s ? new Date(s * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "");
+function fmtDur(sec) {
+  if (sec == null || isNaN(sec)) return "–"; sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h ? `${h}h ${String(m).padStart(2, "0")}m` : m ? `${m}m ${String(s).padStart(2, "0")}s` : `${s}s`;
+}
+const num = (v) => (v == null ? "–" : Number(v).toLocaleString());
+function badge(status) {
+  const s = String(status || "").toUpperCase();
+  const cls = /PASS|DONE|COMPLETE/.test(s) ? "b-ok" : /FAIL|ERROR|INTERRUPTED/.test(s) ? "b-bad"
+    : /RUNNING|RETRY|RCA|TRIAGE|REPORT/.test(s) ? "b-info" : /INCOMPLETE|CANCEL|WARN|QUARANT/.test(s) ? "b-warn" : "b-idle";
+  const live = /RUNNING|RETRYING/.test(s) ? '<span class="dot pulse"></span>' : "";
+  return `<span class="badge ${cls}">${live}${esc(s || "–")}</span>`;
+}
+
+// ---------------------------------------------------------------- router
+let timers = [];
+const every = (fn, ms) => { fn(); timers.push(setInterval(fn, ms)); };
+function clearTimers() { timers.forEach(clearInterval); timers = []; }
+const views = {};
+function route() {
+  clearTimers();
+  const [, name = "live", arg = ""] = (location.hash || "#/live").split("/");
+  document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === (name === "run" ? "runs" : name)));
+  (views[name] || views.live)(decodeURIComponent(arg));
+}
+window.addEventListener("hashchange", route);
+
+async function loadOverview() {
+  try {
+    const o = await api("/api/overview");
+    $("#host").textContent = "· " + o.host;
+    $("#toplinks").innerHTML = [
+      o.dashboard && `<a href="${esc(fileHref(o.dashboard))}" target="_blank" rel="noopener">Trends</a>`,
+      o.latest_triage && `<a href="${esc(fileHref(o.latest_triage))}" target="_blank" rel="noopener">Latest triage</a>`,
+      o.latest_report && `<a href="${esc(fileHref(o.latest_report))}" target="_blank" rel="noopener">Latest report</a>`,
+    ].filter(Boolean).join("");
+  } catch (e) { if (/token/.test(e.message)) $("#view").innerHTML = `<div class="card"><div class="bd empty">This console needs an access token. Open it with <code>#token=…</code> in the URL.</div></div>`; }
+}
+
+// ---------------------------------------------------------------- live
+const PHASES = ["running", "rca", "triage", "reports", "done"];
+function phaseSteps(phase) {
+  const i = PHASES.indexOf(phase);
+  const names = { running: "Execute", rca: "RCA", triage: "Triage", reports: "Reports", done: "Done" };
+  if (phase === "cancelled" || phase === "error") return badge(phase);
+  return `<div class="steps">${PHASES.map((p, j) => `<span class="step ${j < i || phase === "done" ? "done" : j === i ? "cur" : ""}">${names[p]}</span>`).join("")}</div>`;
+}
+const logState = {};
+views.live = function () {
+  $("#view").innerHTML = `<h1>Live execution</h1><p class="sub">Every <code>xts-agent run</code> on this host, whether started here, from the CLI or from CI. Updates every 3 seconds.</p><div id="live"></div>`;
+  every(renderLive, 3000);
+};
+async function renderLive() {
+  let runs;
+  try { runs = await api("/api/live"); } catch (e) { $("#live").innerHTML = `<div class="card"><div class="bd empty">${esc(e.message)}</div></div>`; return; }
+  const active = runs.filter((r) => r.state === "running" || r.state === "interrupted");
+  const recent = runs.filter((r) => !active.includes(r)).sort((a, b) => (b.finished_at || b.started_at || 0) - (a.finished_at || a.started_at || 0))[0];
+  const host = $("#live"); if (!host) return;
+  if (!active.length) {
+    host.innerHTML = `<div class="card"><div class="bd empty"><div style="font-size:15px;color:var(--text);margin-bottom:6px">No run in progress</div>
+      Start one from <a href="#/launch">Launch</a>, or run <code>xts-agent run --plan …</code> in a shell; it appears here within seconds.</div></div>
+      ${recent ? `<h3 style="margin-top:22px">Last run</h3>${runCard(recent, false)}` : ""}`;
+    return;
+  }
+  // Keep open log panels across refreshes: update cards in place
+  for (const r of active) {
+    let el = document.getElementById("run-" + r.key);
+    if (!el) { el = document.createElement("div"); el.id = "run-" + r.key; host.appendChild(el);
+      el.innerHTML = runCard(r, true); bindRunCard(el, r); }
+    else updateRunCard(el, r);
+  }
+  [...host.children].forEach((c) => { if (!active.some((r) => "run-" + r.key === c.id)) c.remove(); });
+}
+function suiteRows(r) {
+  return r.suites.map((s) => {
+    const p = s.progress || {};
+    const quiet = p.quiet_secs || 0;
+    const retry = s.status === "RETRYING" ? ` <span class="muted">attempt ${esc(s.retry_attempt)}</span>` : s.retry_count ? ` <span class="muted">${esc(s.retry_count)} retries</span>` : "";
+    const counts = s.pass_count != null ? `${num(s.pass_count)} pass · <b style="color:var(--bad)">${num(s.fail_count)}</b> fail` : "";
+    return `<tr><td><b>${esc(s.name)}</b></td><td>${badge(s.status)}${retry}</td>
+      <td class="n">${num(p.modules_completed)} / ${num(p.modules_started)}</td>
+      <td class="n">${num(p.failures)}</td><td>${counts}</td>
+      <td class="n ${quiet > 900 ? "" : "muted"}" ${quiet > 900 ? 'style="color:var(--warn)"' : ""}>${p.heartbeat_at ? fmtDur(quiet) : "–"}</td>
+      <td class="n">${fmtDur(p.elapsed_secs)}</td></tr>`;
+  }).join("");
+}
+function deviceTiles(r) {
+  const tiles = [];
+  for (const s of r.suites) {
+    const running = r.state === "running" && /RUNNING|RETRYING/.test(s.status || "");
+    const cur = running ? (s.progress || {}).current || {} : {};
+    for (const d of s.devices) {
+      const mod = cur[d];
+      tiles.push(`<div class="dev"><div class="s">${esc(d)} · ${esc(s.name)}</div>
+        <div class="m" title="${esc(mod || "")}">${mod ? esc(mod) : `<span class="muted">${running ? "idle / between modules" : "released"}</span>`}</div></div>`);
+    }
+  }
+  return tiles.join("") || '<div class="muted">Devices are being allocated…</div>';
+}
+function runCard(r, live) {
+  const hb = r.heartbeat_at ? Math.round(Date.now() / 1000 - r.heartbeat_at) : null;
+  const stale = r.state === "running" && hb != null && hb > 120;
+  const flags = Object.entries(r.flags || {}).filter(([, v]) => v).map(([k]) => k.replace("_", "-")).join(", ");
+  return `<div class="card">
+    <div class="hd"><h2>${esc(r.plan)}</h2>${badge(r.state === "running" ? r.phase === "running" ? "RUNNING" : r.phase : r.overall_status || r.state)}
+      <span class="muted mono">${esc(r.run_id || r.key)}</span><div class="spacer"></div>
+      ${live && r.state === "running" ? `<button class="danger sm" data-act="stop">Stop</button><button class="danger sm" data-act="force" title="Second signal: kill TradeFed and exit now">Force stop</button>` : ""}
+      <a class="btn sm" href="#/run/${encodeURIComponent(r.run_id || r.key)}">Details</a></div>
+    <div class="bd">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">${phaseSteps(r.phase)}
+        <span class="muted" data-f="meta">Started ${fmtTime(r.started_at)} · pid ${esc(r.pid || "–")} · ${esc(r.user || "")}@${esc(r.host || "")}${flags ? " · " + esc(flags) : ""}
+        ${stale ? ' · <b style="color:var(--warn)">no heartbeat for ' + fmtDur(hb) + "</b>" : ""}</span></div>
+      ${r.state === "interrupted" ? `<p style="color:var(--bad);margin:0 0 12px">The agent process is gone but the run never finished. Continue it with <code>xts-agent run --plan … --resume</code> or <b>Launch → Resume</b>.</p>` : ""}
+      ${r.error ? `<p style="color:var(--bad);margin:0 0 12px">${esc(r.error)}</p>` : ""}
+      <div class="scroll"><table><thead><tr><th>Suite</th><th>Status</th><th class="n">Modules done / started</th><th class="n">Test failures</th><th>Result</th><th class="n">Log quiet</th><th class="n">Elapsed</th></tr></thead>
+      <tbody data-f="suites">${suiteRows(r)}</tbody></table></div>
+      <h3 style="margin-top:16px">Devices</h3><div class="devices" data-f="devices">${deviceTiles(r)}</div>
+      ${live ? `<div class="grid2" style="margin-top:16px">
+        <div><div class="row" style="margin-bottom:8px"><h3 style="margin:0">TradeFed console</h3><div class="spacer"></div>
+          <select data-f="logsuite">${r.suites.map((s) => `<option>${esc(s.name)}</option>`).join("")}</select>
+          <label class="chk"><input type="checkbox" data-f="onlyfail"> failures only</label>
+          <label class="chk"><input type="checkbox" data-f="follow" checked> follow</label></div>
+          <div class="log" data-f="log"><span class="muted">Waiting for TradeFed output…</span></div></div>
+        <div><h3>Timeline</h3><ul class="tl" data-f="timeline">${timeline(r)}</ul></div></div>` : ""}
+    </div></div>`;
+}
+const timeline = (r) => (r.timeline || []).slice().reverse().map((t) => `<li><span>${fmtClock(t.at)}</span><span>${esc(t.event)}</span></li>`).join("") || '<li class="muted">–</li>';
+function updateRunCard(el, r) {
+  const card = runCard(r, true), tmp = document.createElement("div"); tmp.innerHTML = card;
+  for (const f of ["suites", "devices", "timeline", "meta"]) { const a = $(`[data-f=${f}]`, el), b = $(`[data-f=${f}]`, tmp); if (a && b) a.innerHTML = b.innerHTML; }
+  const hdA = $(".hd", el), hdB = $(".hd", tmp); if (hdA && hdB && hdA.innerHTML !== hdB.innerHTML) { hdA.innerHTML = hdB.innerHTML; bindButtons(el, r); }
+  const stA = $(".steps", el), stB = $(".steps", tmp); if (stA && stB) stA.outerHTML = stB.outerHTML;
+  el._run = r;
+}
+function bindButtons(el, r) {
+  el.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", async () => {
+    const force = b.dataset.act === "force";
+    if (!confirm(force ? "Force stop: TradeFed is killed and the agent exits immediately. Continue?" :
+      "Stop this run? TradeFed is asked to stop and writes a partial result; you can resume it later.")) return;
+    try { await api(`/api/runs/${encodeURIComponent((el._run || r).key)}/stop`, { body: { force } }); toast("Stop signal sent"); }
+    catch (e) { toast("Stop failed: " + e.message); }
+  }));
+}
+function bindRunCard(el, r) {
+  el._run = r; bindButtons(el, r);
+  const key = r.key, st = logState[key] = logState[key] || { offset: -1, suite: r.suites[0] && r.suites[0].name, lines: [] };
+  const logEl = $("[data-f=log]", el), sel = $("[data-f=logsuite]", el), only = $("[data-f=onlyfail]", el);
+  if (sel) sel.addEventListener("change", () => { st.suite = sel.value; st.offset = -1; st.lines = []; logEl.textContent = ""; });
+  if (only) only.addEventListener("change", () => paint());
+  // Red: a test failure or an error-level line. TradeFed logs many harmless
+  // "Adb Shell Command exited with status: FAILED" warnings during setup.
+  const FAIL_RE = /ModuleListener: \[.*(FAILURE|FAILED)|\sE\/|Exception:|Caused by:/;
+  function cls(line) { return FAIL_RE.test(line) ? "f" : /\sW\//.test(line) ? "w" : /ModuleListener|ITestSuite|Running module|ModuleDefinition/.test(line) ? "i" : ""; }
+  function paint() {
+    const lines = only && only.checked ? st.lines.filter((l) => FAIL_RE.test(l)) : st.lines;
+    logEl.innerHTML = lines.slice(-1500).map((l) => { const c = cls(l); return c ? `<span class="${c}">${esc(l)}</span>` : esc(l); }).join("\n");
+    if ($("[data-f=follow]", el).checked) logEl.scrollTop = logEl.scrollHeight;
+  }
+  async function pull() {
+    if (!document.body.contains(el) || !st.suite) return;
+    try {
+      const d = await api(`/api/runs/${encodeURIComponent((el._run || r).key)}/log?suite=${encodeURIComponent(st.suite)}&offset=${st.offset}`);
+      if (d.text) { const parts = d.text.split("\n"); st.lines.push(...parts.filter((l, i) => l || i < parts.length - 1)); if (st.lines.length > 4000) st.lines.splice(0, st.lines.length - 4000); paint(); }
+      st.offset = d.offset;
+    } catch (e) { /* no log yet */ }
+  }
+  timers.push(setInterval(pull, 2000)); pull();
+}
+
+// ---------------------------------------------------------------- launch
+views.launch = async function () {
+  $("#view").innerHTML = `<h1>Launch a run</h1><p class="sub">Starts <code>xts-agent run</code> as its own process: closing this page or restarting the console never stops it.</p>
+    <div class="card"><div class="hd"><h2>1. Test plan</h2><span class="muted">from config/test_plans</span></div><div class="bd"><div class="plans" id="plans">Loading…</div></div></div>
+    <div class="card"><div class="hd"><h2>2. Scope and options</h2></div><div class="bd" id="opts"></div></div>
+    <div class="card"><div class="hd"><h2>3. Devices</h2><div class="spacer"></div><a href="#/devices">Manage devices</a></div><div class="bd" id="devsum">Checking adb…</div></div>
+    <div class="row"><button class="primary" id="go" disabled>Start run</button><span class="muted" id="gohint"></span></div>`;
+  let plans = [], sel = null;
+  try { plans = await api("/api/plans"); } catch (e) { $("#plans").textContent = e.message; return; }
+  const render = () => {
+    $("#plans").innerHTML = plans.map((p, i) => `<div class="plan ${sel === i ? "sel" : ""}" data-i="${i}"><div class="t">${esc(p.name)}</div>
+      <div class="d">${esc(p.file)} · ${esc(p.profile)}${p.ai_rca ? " · AI RCA" : ""}</div>
+      <div class="d">${p.suites.map((s) => esc(s.name.toUpperCase()) + (s.include_filters.length ? ` (${s.include_filters.length} module${s.include_filters.length > 1 ? "s" : ""})` : " (all)")).join(", ")}</div></div>`).join("");
+    document.querySelectorAll(".plan").forEach((el) => el.addEventListener("click", () => { sel = +el.dataset.i; render(); renderOpts(); }));
+  };
+  const renderOpts = () => {
+    const p = plans[sel]; if (!p) { $("#opts").innerHTML = '<span class="muted">Pick a plan first.</span>'; return; }
+    const single = p.suites.filter((s) => s.enabled !== false).length === 1;
+    $("#opts").innerHTML = `${p.description ? `<p style="margin-top:0">${esc(p.description)}</p>` : ""}
+      <div class="scroll"><table><thead><tr><th>Suite</th><th>TradeFed plan</th><th>Modules</th><th>Shards</th><th>Retries</th></tr></thead><tbody>
+      ${p.suites.map((s) => `<tr><td>${esc(s.name)}</td><td class="mono">${esc(s.plan)}</td><td>${s.include_filters.length ? esc(s.include_filters.join(", ")) : "all"}${s.exclude_filters ? ` <span class="muted">(${s.exclude_filters} excluded)</span>` : ""}</td><td>${esc(s.shard_count || 1)}</td><td>${esc(s.max_retries ?? "–")}</td></tr>`).join("")}</tbody></table></div>
+      <h3 style="margin-top:14px">Only these modules <span class="muted" style="font-weight:400">(optional, one per line: <code>CtsBionicTestCases</code> or <code>CtsFoo android.foo.BarTest#testX</code>)</span></h3>
+      <textarea id="mods" ${single ? "" : "disabled"} placeholder="${single ? "Leave empty to run the plan as configured" : "Module selection needs a plan with one enabled suite"}"></textarea>
+      ${p.profile === "certification" ? '<p class="muted">A certification plan narrowed to some modules runs as a development run; certification refuses filtered plans.</p>' : ""}
+      <div style="margin-top:12px"><label class="chk"><input type="checkbox" id="retry" checked> Auto-retry failures</label>
+      <label class="chk"><input type="checkbox" id="resume"> Resume the last interrupted run of this plan</label>
+      <label class="chk"><input type="checkbox" id="dry"> Dry run</label>
+      <label class="chk">AI RCA <select id="ai"><option value="">plan default (${p.ai_rca ? "on" : "off"})</option><option value="1">on</option><option value="0">off</option></select></label></div>
+      <pre class="cmd" id="cmd"></pre>`;
+    const upd = () => {
+      const mods = ($("#mods").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+      $("#cmd").textContent = `xts-agent run --plan ${mods.length || $("#ai").value ? "results/ui_plans/" + p.file.replace(".yaml", ".<run>.yaml") : "config/test_plans/" + p.file}` +
+        ($("#retry").checked ? " --auto-retry" : "") + ($("#resume").checked ? " --resume" : "") + ($("#dry").checked ? " --dry-run" : "") +
+        (mods.length ? `\n# include_filters: ${mods.join(", ")}` : "");
+    };
+    ["#mods", "#retry", "#resume", "#dry", "#ai"].forEach((s) => $(s).addEventListener("input", upd)); upd();
+    $("#go").disabled = false; $("#gohint").textContent = "";
+  };
+  render(); renderOpts();
+  $("#gohint").textContent = "Pick a plan.";
+  api("/api/devices").then((ds) => {
+    const on = ds.filter((d) => d.state === "device"), busy = on.filter((d) => d.leased_by), q = ds.filter((d) => d.quarantine);
+    $("#devsum").innerHTML = `<div class="tiles"><div class="tile"><div class="k">Online</div><div class="v">${on.length}</div></div>
+      <div class="tile"><div class="k">Free</div><div class="v">${on.length - busy.length}</div></div>
+      <div class="tile"><div class="k">Leased by another run</div><div class="v">${busy.length}</div></div>
+      <div class="tile"><div class="k">Quarantined</div><div class="v">${q.length}</div></div></div>
+      <p class="muted" style="margin-bottom:0">The agent health-checks and leases every free device with the same build, then shards across them. A device leased by another run is skipped, never shared.</p>`;
+  }).catch((e) => { $("#devsum").textContent = e.message; });
+  $("#go").addEventListener("click", async () => {
+    const p = plans[sel]; if (!p) return;
+    const mods = ($("#mods").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+    const body = { plan: p.file, modules: mods, auto_retry: $("#retry").checked, resume: $("#resume").checked, dry_run: $("#dry").checked };
+    if ($("#ai").value) body.ai_rca = $("#ai").value === "1";
+    $("#go").disabled = true;
+    try { const r = await api("/api/launch", { body }); toast(`Started ${r.run_id} (pid ${r.pid})`); location.hash = "#/live"; }
+    catch (e) { toast("Launch failed: " + e.message, 7000); $("#go").disabled = false; }
+  });
+};
+
+// ---------------------------------------------------------------- runs
+views.runs = async function () {
+  $("#view").innerHTML = `<h1>Runs</h1><p class="sub">Finished and interrupted runs on this host, newest first. Older runs come from the results database.</p>
+    <div class="card"><div class="hd"><input type="text" id="q" placeholder="Filter by plan, run id, device, status" style="flex:1;min-width:200px">
+      <select id="st"><option value="">All statuses</option><option>PASSED</option><option>FAILED</option><option>INCOMPLETE</option><option>CANCELLED</option><option>INTERRUPTED</option></select></div>
+    <div class="scroll"><table><thead><tr><th>Started</th><th>Plan</th><th>Status</th><th class="n">Pass</th><th class="n">Fail</th><th class="n">Skip</th><th class="n">Duration</th><th>Devices</th><th>Results</th></tr></thead><tbody id="rows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody></table></div></div>`;
+  let rows = [];
+  try { rows = await api("/api/runs"); } catch (e) { $("#rows").innerHTML = `<tr><td colspan="9">${esc(e.message)}</td></tr>`; return; }
+  const paint = () => {
+    const q = $("#q").value.toLowerCase(), st = $("#st").value;
+    const vis = rows.filter((r) => (!st || String(r.status).toUpperCase().includes(st)) &&
+      (!q || [r.plan, r.run_id, r.status, (r.devices || []).join(" "), (r.suites || []).join(" ")].join(" ").toLowerCase().includes(q)));
+    $("#rows").innerHTML = vis.map((r) => `<tr class="click" data-k="${esc(r.key)}"><td>${fmtTime(r.started_at)}</td>
+      <td><b>${esc(r.plan)}</b><div class="muted mono">${esc(r.run_id || (r.suites || []).join(", "))}</div></td><td>${badge(r.status)}</td>
+      <td class="n">${num(r.pass)}</td><td class="n" ${r.fail ? 'style="color:var(--bad);font-weight:600"' : ""}>${num(r.fail)}</td><td class="n">${num(r.skip)}</td>
+      <td class="n">${fmtDur(r.duration)}</td><td>${(r.devices || []).length}</td>
+      <td>${r.report_url ? `<a href="${esc(fileHref(r.report_url))}" target="_blank" rel="noopener">Report</a>` : ""} ${r.triage_url ? `<a href="${esc(fileHref(r.triage_url))}" target="_blank" rel="noopener">Triage${r.triage_groups != null ? " (" + r.triage_groups + ")" : ""}</a>` : ""}</td></tr>`).join("")
+      || '<tr><td colspan="9" class="empty">No runs match.</td></tr>';
+    document.querySelectorAll("tr.click").forEach((tr) => tr.addEventListener("click", (ev) => { if (ev.target.tagName !== "A") location.hash = "#/run/" + encodeURIComponent(tr.dataset.k); }));
+  };
+  $("#q").addEventListener("input", paint); $("#st").addEventListener("change", paint); paint();
+};
+
+views.run = async function (key) {
+  $("#view").innerHTML = `<p><a href="#/runs">← Runs</a></p><div id="detail" class="muted">Loading run… (a full CTS result takes a few seconds to read the first time)</div>`;
+  let r;
+  try { r = await api("/api/runs/" + encodeURIComponent(key)); } catch (e) { $("#detail").textContent = e.message; return; }
+  const t = r.totals || {};
+  const sumOf = (f) => r.suites.reduce((a, s) => a + ((s.result && s.result.summary && s.result.summary[f]) || 0), 0);
+  const pass = t.pass ?? sumOf("pass"), fail = t.fail ?? sumOf("fail"), skip = t.skip ?? sumOf("skip");
+  const devs = [...new Set(r.suites.flatMap((s) => s.devices || []))];
+  const dur = t.duration ?? (r.finished_at && r.started_at ? r.finished_at - r.started_at : null);
+  const ts = r.triage_summary;
+  $("#detail").className = "";
+  $("#detail").innerHTML = `<div class="row" style="margin-bottom:6px"><h1 style="margin:0">${esc(r.plan)}</h1>${badge(r.overall_status || r.state)}
+      ${r.state === "running" ? '<a class="btn sm" href="#/live">Watch live</a>' : ""}<div class="spacer"></div>
+      <button class="sm" id="xjson">Export JSON</button><button class="sm" id="xcsv">Export modules CSV</button></div>
+    <p class="sub mono">${esc(r.run_id || r.key)}${r.host ? " · " + esc(r.user) + "@" + esc(r.host) : ""}</p>
+    <div class="tiles" style="margin-bottom:16px">
+      <div class="tile"><div class="k">Started</div><div class="v" style="font-size:15px">${fmtTime(r.started_at)}</div></div>
+      <div class="tile"><div class="k">Duration</div><div class="v">${fmtDur(dur)}</div></div>
+      <div class="tile"><div class="k">Passed</div><div class="v" style="color:var(--ok)">${num(pass)}</div></div>
+      <div class="tile"><div class="k">Failed</div><div class="v" style="color:var(--bad)">${num(fail)}</div></div>
+      <div class="tile"><div class="k">Skipped</div><div class="v">${num(skip)}</div></div>
+      <div class="tile"><div class="k">Devices</div><div class="v">${devs.length}</div></div>
+      ${ts ? `<div class="tile"><div class="k">Triage groups</div><div class="v">${num(ts.groups)}</div></div>` : ""}</div>
+    <div class="grid2"><div class="card"><div class="hd"><h2>Results</h2></div><div class="bd">
+      ${(r.links.reports || []).map((u) => `<div><a href="${esc(fileHref(u))}" target="_blank" rel="noopener">${esc(u.split("/").pop())}</a></div>`).join("") || '<span class="muted">No report written (yet).</span>'}
+      ${r.links.triage_html ? `<div style="margin-top:8px"><b><a href="${esc(fileHref(r.links.triage_html))}" target="_blank" rel="noopener">Triage page: failure groups, owners, AI root cause</a></b></div>` : ""}
+      ${ts ? `<p class="muted" style="margin-bottom:0">${num(ts.failures)} failures in ${num(ts.groups)} groups, ${num(ts.actionable_groups)} actionable, ${num(ts.known_groups)} known issues.</p>` : ""}
+      ${r.suites.map((s) => s.results_dir ? `<div class="muted mono" style="margin-top:8px">${esc(s.name)} TradeFed results: ${esc(s.results_dir)}</div>` : "").join("")}
+    </div></div>
+    <div class="card"><div class="hd"><h2>Timeline</h2></div><div class="bd"><ul class="tl">${timeline(r)}</ul></div></div></div>
+    ${r.suites.map((s, i) => suiteDetail(s, i)).join("")}`;
+  r.suites.forEach((s, i) => bindSuite(s, i));
+  const dl = (name, text, type) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
+  $("#xjson").addEventListener("click", () => dl(`${r.run_id || r.key}.json`, JSON.stringify(r, null, 2), "application/json"));
+  $("#xcsv").addEventListener("click", () => {
+    const rows = [["suite", "abi", "module", "done", "pass", "fail", "skip", "total", "runtime_secs", "reason"]];
+    r.suites.forEach((s) => ((s.result && s.result.modules) || []).forEach((m) => rows.push([s.name, m.abi, m.name, m.done, m.pass, m.fail, m.skip, m.total, m.runtime_secs, m.reason])));
+    dl(`${r.run_id || r.key}_modules.csv`, rows.map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n"), "text/csv");
+  });
+};
+function suiteDetail(s, i) {
+  const res = s.result;
+  if (!res) return `<div class="card"><div class="hd"><h2>${esc(s.name)}</h2>${badge(s.status)}</div><div class="bd muted">No test_result.xml${s.error ? ": " + esc(s.error) : " yet"}.</div></div>`;
+  if (res.error) return `<div class="card"><div class="hd"><h2>${esc(s.name)}</h2></div><div class="bd">${esc(res.error)}</div></div>`;
+  const di = res.device_info || {};
+  const incomplete = res.modules.filter((m) => !m.done).length;
+  return `<div class="card"><div class="hd"><h2>${esc(s.name)}</h2>${badge(s.status)}
+      <span class="muted">${num(res.modules_done)} / ${num(res.modules_total)} modules done${incomplete ? `, <b style="color:var(--warn)">${incomplete} incomplete</b>` : ""} · ${Math.max((res.devices || []).length, (s.devices || []).length)} devices · ${esc(di.build_fingerprint || s.fingerprint || "")}</span></div>
+    <div class="bd"><div class="row" style="margin-bottom:10px"><h3 style="margin:0">Modules</h3><div class="spacer"></div>
+      <div class="seg" id="mf${i}"><button class="on" data-m="all">All</button><button data-m="fail">With failures</button><button data-m="inc">Incomplete</button></div>
+      <input type="text" id="mq${i}" placeholder="Filter modules"></div>
+    <div class="scroll" style="max-height:460px;overflow:auto"><table><thead><tr><th class="sort" data-s="name">Module</th><th>ABI</th><th class="n sort" data-s="pass">Passed</th><th class="n sort" data-s="fail">Failed</th>
+      <th class="n sort" data-s="skip">Skipped</th><th class="n sort" data-s="total">Total</th><th>Done</th><th class="n sort" data-s="runtime_secs">Runtime</th><th>Reason</th></tr></thead><tbody id="mt${i}"></tbody></table></div>
+    <h3 style="margin-top:18px">Failed tests ${res.failed_truncated ? `<span class="muted" style="font-weight:400">(first ${res.failed_tests.length}; open the triage page for all)</span>` : ""}</h3>
+    <div class="scroll" style="max-height:420px;overflow:auto"><table><thead><tr><th>Module</th><th>Test</th><th>Message</th></tr></thead><tbody>
+      ${res.failed_tests.map((f) => `<tr><td class="mono">${esc(f.module)}</td><td class="mono">${esc(f.test)}</td><td>${esc(f.message)}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No failed tests.</td></tr>'}
+    </tbody></table></div></div></div>`;
+}
+function bindSuite(s, i) {
+  const res = s.result; if (!res || res.error) return;
+  let mode = "all", sortKey = "fail", dir = -1;
+  const paint = () => {
+    const q = ($("#mq" + i).value || "").toLowerCase();
+    const rows = res.modules.filter((m) => (mode === "all" || (mode === "fail" ? m.fail > 0 : !m.done)) && (!q || m.name.toLowerCase().includes(q)))
+      .sort((a, b) => (sortKey === "name" ? a.name.localeCompare(b.name) * -dir : (a[sortKey] - b[sortKey]) * dir));
+    $("#mt" + i).innerHTML = rows.slice(0, 2000).map((m) => `<tr><td class="mono">${esc(m.name)}</td><td class="mono muted">${esc(m.abi)}</td><td class="n">${num(m.pass)}</td>
+      <td class="n" ${m.fail ? 'style="color:var(--bad);font-weight:600"' : ""}>${num(m.fail)}</td><td class="n">${num(m.skip)}</td><td class="n">${num(m.total)}</td>
+      <td>${m.done ? '<span class="badge b-ok">done</span>' : '<span class="badge b-warn">incomplete</span>'}</td><td class="n">${fmtDur(m.runtime_secs)}</td><td class="muted">${esc(m.reason)}</td></tr>`).join("")
+      || '<tr><td colspan="9" class="muted">No modules match.</td></tr>';
+  };
+  $("#mf" + i).querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.m; $("#mf" + i).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); paint(); }));
+  $("#mq" + i).addEventListener("input", paint);
+  $("#mt" + i).closest("table").querySelectorAll("th.sort").forEach((th) => th.addEventListener("click", () => { dir = sortKey === th.dataset.s ? -dir : -1; sortKey = th.dataset.s; paint(); }));
+  paint();
+}
+
+// ---------------------------------------------------------------- devices
+views.devices = function () {
+  $("#view").innerHTML = `<div class="row"><div><h1>Devices</h1><p class="sub">What <code>adb</code> sees on this host, who holds each device, and the quarantine list.</p></div><div class="spacer"></div><button id="rf">Refresh</button></div>
+    <div class="card"><div class="scroll"><table><thead><tr><th>Serial</th><th>State</th><th>Model</th><th>Build</th><th>Fingerprint</th><th>In use by</th><th>Quarantine</th></tr></thead><tbody id="drows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody></table></div></div>
+    <p class="muted">A run leases each device it uses, so two runs never share one. Devices that fail repeatedly (reboot not coming back, offline mid-suite) are quarantined and skipped until released or the quarantine expires.</p>`;
+  const paint = async (refresh) => {
+    let ds; try { ds = await api("/api/devices" + (refresh ? "?refresh=1" : "")); } catch (e) { $("#drows").innerHTML = `<tr><td colspan="7">${esc(e.message)}</td></tr>`; return; }
+    if (!$("#drows")) return;
+    $("#drows").innerHTML = ds.map((d) => `<tr><td class="mono">${esc(d.serial)}</td>
+      <td>${d.state === "device" ? (d.booted ? '<span class="badge b-ok">online</span>' : '<span class="badge b-warn">booting</span>') : badge(d.state)}</td>
+      <td>${esc(d.model || "")}</td><td>${esc(d.build_type || "")}</td><td class="mono muted" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.fingerprint || "")}">${esc(d.fingerprint || "")}</td>
+      <td class="muted" style="font-size:12.5px">${d.leased_by ? esc(d.leased_by.replace(/ since=.*/, "")) : "free"}</td>
+      <td>${d.quarantine ? `<span class="badge b-warn" title="${esc(d.quarantine)}">quarantined</span> <button class="sm" data-rel="${esc(d.serial)}">Release</button>` : ""}</td></tr>`).join("")
+      || '<tr><td colspan="7" class="empty">No devices. Check <code>adb devices</code> on this host.</td></tr>';
+    document.querySelectorAll("[data-rel]").forEach((b) => b.addEventListener("click", async () => {
+      if (!confirm("Release " + b.dataset.rel + " from quarantine? It will be allocated to runs again.")) return;
+      try { await api(`/api/devices/${encodeURIComponent(b.dataset.rel)}/release`, { body: {} }); toast("Released"); paint(true); } catch (e) { toast(e.message); }
+    }));
+  };
+  $("#rf").addEventListener("click", () => paint(true));
+  every(() => paint(false), 10000);
+};
+
+loadOverview(); route();
+</script>
+</body>
+</html>

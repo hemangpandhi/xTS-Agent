@@ -354,6 +354,7 @@ class OpsConfig:
     """Run-time operations: heartbeat, metrics, disk guard, retention."""
 
     progress_interval_secs: int = 600  # TradeFed progress line in the job log; 0 = off
+    status_interval_secs: int = 15  # live status file for `xts-agent ui`; 0 = with the log line
     stall_warning_mins: int = 60  # warn when the TradeFed log is silent this long; 0 = off
     metrics_textfile_dir: str = ""  # node_exporter textfile collector dir; "" = off
     pushgateway_url: str = ""  # Prometheus Pushgateway; "" = off

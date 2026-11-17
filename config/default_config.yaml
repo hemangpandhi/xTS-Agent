@@ -139,6 +139,7 @@ artifacts:
 # Operations: heartbeat, metrics, disk guard, retention
 ops:
   progress_interval_secs: 600           # TradeFed progress line in the job log (0 = off)
+  status_interval_secs: 15              # live status for `xts-agent ui` (results/run_state/*.json)
   stall_warning_mins: 60                # warn when TradeFed's log is silent this long (0 = off)
   # Prometheus: node_exporter textfile collector dir (writes xts_<plan>.prom)
   # and/or a Pushgateway URL. Empty = off.

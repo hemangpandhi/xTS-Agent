@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -174,6 +175,7 @@ class Orchestrator:
             plan.post_execution and plan.post_execution.suite_retry.enabled
         )
 
+        run_state = RunState.for_plan(self._results_dir, plan.name)
         executor = TestPlanExecutor(
             config=plan,
             device_manager=self.device_manager,
@@ -181,14 +183,21 @@ class Orchestrator:
             retry_manager=self.retry_manager,
             suite_registry=self.suite_registry,
             results_dir=self._results_dir,
-            run_state=RunState.for_plan(self._results_dir, plan.name),
+            run_state=run_state,
             history_estimate=self._history_estimate,
             metrics=self._metrics,
         )
 
-        results = executor.execute_plan(
-            plan, dry_run=dry_run, auto_retry=effective_retry, resume=resume
-        )
+        try:
+            results = executor.execute_plan(
+                plan, dry_run=dry_run, auto_retry=effective_retry, resume=resume
+            )
+        except BaseException as exc:
+            if not dry_run and run_state.data:
+                run_state.set_phase("error", error=f"{type(exc).__name__}: {exc}"[:500])
+                run_state.archive()
+            raise
+        live = run_state if (not dry_run and run_state.data) else None
         self.last_plan_result = results
         logger.info("Plan Execution Finished: %s", results.overall_status)
         logger.info(
@@ -203,18 +212,26 @@ class Orchestrator:
             # Be quick: CI gives a short grace period after SIGTERM. Skip RCA,
             # triage, uploads and history (a partial run would skew trends).
             self.generate_reports(results)
+            self._finish_live(live, "cancelled", results)
             self._publish_metrics(results)
             notifier.notify_plan_complete(results)
             return results
 
         rca_report = None
         if plan.post_execution.rca.enabled and not dry_run:
+            if live:
+                live.set_phase("rca")
             rca_report = self._run_rca(results)
             self.last_rca_report = rca_report
         if not dry_run:
+            if live:
+                live.set_phase("triage")
             self._run_triage(results, rca_report)
 
+        if live:
+            live.set_phase("reports")
         self.generate_reports(results, rca_report=rca_report)
+        self._finish_live(live, "done", results)
         if not dry_run:
             # Upload once per execution; regenerating reports must not re-upload
             self._upload_ats2(results)
@@ -225,6 +242,26 @@ class Orchestrator:
             self._publish_metrics(results)
         notifier.notify_plan_complete(results)
         return results
+
+    def _finish_live(self, live: Optional[RunState], phase: str, results: PlanResult) -> None:
+        """Final phase, totals and report links in the live status, then archive it."""
+        if live is None:
+            return
+        try:
+            live.set_phase(
+                phase,
+                overall_status=results.overall_status,
+                totals={"pass": results.total_pass, "fail": results.total_fail,
+                        "skip": results.total_skip, "duration": round(results.duration)},
+                finished_at=time.time(),
+                reports=[str(p) for p in self._last_report_files],
+                triage_json=str(self._last_triage_path or ""),
+                triage_html=str(self._last_triage_html or ""),
+                triage_summary=getattr(getattr(self, "last_triage", None), "summary", None),
+            )
+            live.archive()
+        except Exception as exc:  # the live view must never fail a finished run
+            logger.warning("Could not finalise live run status: %s", exc)
 
     def retry_plan(self, max_retries: int = 1) -> Optional[PlanResult]:
         plan = self._initialize()

@@ -9,10 +9,13 @@ with ``run retry`` on the same build.
 
 from __future__ import annotations
 
+import getpass
 import json
 import logging
 import os
 import re
+import shutil
+import socket
 import threading
 import time
 from pathlib import Path
@@ -58,6 +61,67 @@ class RunState:
             }
             self._write()
 
+    def attach_process(self, **flags: Any) -> None:
+        """Record which process owns this run (fresh or resumed).
+
+        Live views use ``pid`` to tell a running plan from a dead checkpoint
+        and to send the graceful-cancel SIGTERM; ``run_id`` names the archive.
+        """
+        from xts_agent.utils.logger import run_id
+
+        with self._lock:
+            self.data.update(
+                {
+                    "run_id": run_id(),
+                    "pid": os.getpid(),
+                    "host": socket.gethostname(),
+                    "user": getpass.getuser(),
+                    "attached_at": time.time(),
+                    "phase": "running",
+                    "flags": flags,
+                }
+            )
+            self.data.setdefault("timeline", []).append({"at": time.time(), "event": "started", **flags})
+            self._write()
+
+    def set_phase(self, phase: str, **extra: Any) -> None:
+        """running -> rca/triage -> reports -> done (or cancelled / error)."""
+        with self._lock:
+            self.data["phase"] = phase
+            self.data.update(extra)
+            self.data.setdefault("timeline", []).append({"at": time.time(), "event": phase})
+            self._write()
+
+    def suite_retrying(self, name: str, attempt: int) -> None:
+        with self._lock:
+            entry = self.data.setdefault("suites", {}).setdefault(name, {})
+            entry["status"] = "RETRYING"
+            entry["retry_attempt"] = attempt
+            entry["updated_at"] = time.time()
+            self.data.setdefault("timeline", []).append(
+                {"at": time.time(), "event": f"{name} retry {attempt}"}
+            )
+            self._write()
+
+    def archive(self) -> Optional[Path]:
+        """Copy the final state to ``run_state/history/<run_id>.json``.
+
+        The live file is per plan and is overwritten by the next run; the
+        archive keeps one record per run for the UI's run history.
+        """
+        rid = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(self.data.get("run_id") or "")).strip("_")
+        if not rid or not self.path.exists():
+            return None
+        dest = self.path.parent / "history" / f"{rid}.json"
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with self._lock:
+                shutil.copyfile(self.path, dest)
+            return dest
+        except OSError as exc:
+            logger.warning("Could not archive run state to %s: %s", dest, exc)
+            return None
+
     def suite(self, name: str) -> Optional[Dict[str, Any]]:
         return (self.data.get("suites") or {}).get(name)
 
@@ -89,6 +153,18 @@ class RunState:
                     "updated_at": time.time(),
                 }
             )
+            details = getattr(suite_result, "details", None)
+            for key, src in (("pass_count", suite_result), ("fail_count", suite_result),
+                             ("skip_count", suite_result), ("modules_done", details),
+                             ("modules_total", details)):
+                value = getattr(src, key, None)
+                if isinstance(value, int):
+                    entry[key] = value
+            if getattr(suite_result, "error_message", ""):
+                entry["error"] = str(suite_result.error_message)[:500]
+            self.data.setdefault("timeline", []).append(
+                {"at": time.time(), "event": f"{suite_result.name} {suite_result.status}"}
+            )
             self._write()
 
     def suite_progress(self, name: str, progress: Dict[str, Any]) -> None:
@@ -108,6 +184,6 @@ class RunState:
     def _write(self) -> None:
         # Atomic replace so a crash mid-write never corrupts the checkpoint
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".json.tmp")
+        tmp = self.path.with_suffix(f".json.{os.getpid()}.tmp")
         tmp.write_text(json.dumps(self.data, indent=2), encoding="utf-8")
         os.replace(tmp, self.path)

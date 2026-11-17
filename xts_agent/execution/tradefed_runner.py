@@ -92,6 +92,7 @@ class TradefedRunner:
         # Heartbeat: progress line every N secs, warning after M quiet secs
         self.progress_interval_secs: float = 600
         self.stall_warning_secs: float = 3600
+        self.status_interval_secs: float = 0  # on_progress cadence for live views; 0 = with the log line
         self.on_progress: Optional[Callable[[TradefedProgress], None]] = None
         # Device lease fds inherited by TradeFed, so devices stay locked while
         # it runs even if the agent process dies
@@ -263,9 +264,10 @@ class TradefedRunner:
                     # Signal arrived between check() and register()
                     os.killpg(self._process.pid, signal.SIGTERM)
                 monitor = None
-                if self.progress_interval_secs > 0:
+                if self.progress_interval_secs > 0 or (self.status_interval_secs > 0 and self.on_progress):
                     monitor = ProgressMonitor(
-                        log_path, self.progress_interval_secs, self.stall_warning_secs, self.on_progress
+                        log_path, self.progress_interval_secs, self.stall_warning_secs, self.on_progress,
+                        status_interval_secs=self.status_interval_secs,
                     )
                     monitor.start()
                 try:

@@ -46,6 +46,7 @@ class TradefedProgress:
     current: Dict[str, str] = field(default_factory=dict)  # serial -> "abi module"
     started_at: float = field(default_factory=time.time)
     last_output_at: float = field(default_factory=time.time)
+    log_path: str = ""  # TradeFed console log being tailed (for live views)
     _serial: str = ""  # device of the latest ITestSuite line (unsharded: the only one)
 
     @property
@@ -96,6 +97,7 @@ class TradefedProgress:
             "elapsed_secs": round(time.time() - self.started_at),
             "quiet_secs": round(self.quiet_secs()),
             "heartbeat_at": time.time(),
+            "log": self.log_path,
         }
 
 
@@ -111,13 +113,21 @@ class ProgressMonitor(threading.Thread):
         interval_secs: float = 600,
         stall_after_secs: float = 3600,
         on_update: Optional[Callable[[TradefedProgress], None]] = None,
+        status_interval_secs: float = 0,
     ):
         super().__init__(name="tf-progress", daemon=True)
         self.log_path = Path(log_path)
-        self.interval = max(0.1, float(interval_secs))
+        # interval: the progress line in the job log (0 = no line).
+        # status_interval: how often on_update (status file / metrics) fires;
+        # live views want seconds, the job log wants minutes.
+        self.log_interval = float(interval_secs)
+        self.status_interval = float(status_interval_secs)
+        ticks = [t for t in (self.log_interval, self.status_interval) if t > 0]
+        self.interval = max(0.1, min(ticks) if ticks else 600.0)
+        self._last_log_line = time.time()
         self.stall_after = float(stall_after_secs)
         self.on_update = on_update
-        self.progress = TradefedProgress()
+        self.progress = TradefedProgress(log_path=str(log_path))
         self._offset = 0
         self._partial = ""
         self._stop_event = threading.Event()
@@ -145,6 +155,19 @@ class ProgressMonitor(threading.Thread):
 
     def report(self) -> None:
         p = self.poll()
+        now = time.time()
+        due = now - self._last_log_line >= self.log_interval - 0.05 or self.status_interval <= 0
+        if self.log_interval > 0 and due:
+            self._last_log_line = now
+            self._log_line(p)
+        self._check_stall(p)
+        if self.on_update is not None:
+            try:
+                self.on_update(p)
+            except Exception as exc:  # progress reporting must never break a run
+                logger.debug("Progress callback failed: %s", exc)
+
+    def _log_line(self, p: TradefedProgress) -> None:
         running = ", ".join(f"{s}:{m.split(' ', 1)[-1]}" for s, m in sorted(p.current.items())[:8])
         logger.info(
             "TradeFed progress: %s modules finished, %s started, %s test failures, elapsed %s%s",
@@ -154,6 +177,8 @@ class ProgressMonitor(threading.Thread):
             _fmt_secs(time.time() - p.started_at),
             f" | running {running}" if running else "",
         )
+
+    def _check_stall(self, p: TradefedProgress) -> None:
         quiet = p.quiet_secs()
         if self.stall_after > 0 and quiet >= self.stall_after and not self._stall_reported:
             self._stall_reported = True
@@ -162,16 +187,16 @@ class ProgressMonitor(threading.Thread):
                 _fmt_secs(quiet),
                 sorted(p.current) or "-",
             )
-        if self.on_update is not None:
-            try:
-                self.on_update(p)
-            except Exception as exc:  # progress reporting must never break a run
-                logger.debug("Progress callback failed: %s", exc)
 
     def run(self) -> None:
         self._context.run(self._loop)
 
     def _loop(self) -> None:
+        if self.on_update is not None:
+            try:  # publish the log path right away, not one interval later
+                self.on_update(self.progress)
+            except Exception as exc:
+                logger.debug("Progress callback failed: %s", exc)
         while not self._stop_event.wait(self.interval):
             self.report()
 

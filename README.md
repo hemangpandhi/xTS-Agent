@@ -14,6 +14,7 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 |----------|-----|
 | [docs/OEM_OVERVIEW.md](docs/OEM_OVERVIEW.md) | Explaining the agent to an OEM: problem, benefits, limits, pilot KPIs, talk track, FAQ |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agent architecture (perception, reasoning, memory, actions, learning loops, communication), harness layers, technology stack, what is built in-house vs Google tooling, components, run flow, triage pipeline, data, deployment |
+| [docs/EXECUTION_UI.md](docs/EXECUTION_UI.md) | **Day-to-day process** and the web console: launch runs, watch them live, review results and devices |
 | [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) | **Step-by-step execution**: host setup, Cuttlefish validation, Pixel Tablet (AAOS), OEM head unit, CI, reading results, troubleshooting, sign-off sheet |
 | This README | Installing, configuring and operating it (reference) |
 
@@ -585,6 +586,7 @@ Details, safety model and catalog format: [docs/FIX_LOOP.md](docs/FIX_LOOP.md).
 | `report --plan P --format html,json,junit` | Regenerate reports |
 | `triage --results-dir D [--report]` / `--import-history D` | Triage any TradeFed results dir (optionally with HTML/JSON/JUnit reports); seed history |
 | `eval-triage --results-dir D --labels L` | Measure rule and AI classification accuracy against held-out labels |
+| `ui [--port N] [--host H --token T]` | Web console: launch runs, live status and TradeFed log, run history, devices ([docs/EXECUTION_UI.md](docs/EXECUTION_UI.md)) |
 | `dashboard --plan P` | Regenerate the trends dashboard |
 | `index-code --plan P` | Build the local source index for AI RCA |
 | `device-check --min-devices N` | Fail unless N devices are online |

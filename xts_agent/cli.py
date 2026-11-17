@@ -293,6 +293,50 @@ def eval_triage(plan, config_path, results_dirs, labels_file, suite, no_held_out
         sys.exit(3)
 
 
+@main.command("ui")
+@click.option("--config", "config_path", default=None, help="default_config.yaml (results dir, DB, lease dir)")
+@click.option("--host", default="127.0.0.1", show_default=True,
+              help="Bind address; anything but loopback needs --token")
+@click.option("--port", default=8765, show_default=True, type=int)
+@click.option("--token", default=lambda: os.environ.get("XTS_UI_TOKEN", ""), show_default="$XTS_UI_TOKEN",
+              help="Access token (Bearer header, or open the page with #token=...)")
+@click.option("--plans-dir", default="config/test_plans", show_default=True)
+def ui(config_path, host, port, token, plans_dir):
+    """Web console: launch runs, watch them live, browse results and devices."""
+    from pathlib import Path
+
+    import yaml
+
+    from xts_agent.ui.server import UiConfig, make_server
+
+    defaults_file = Path(config_path or "config/default_config.yaml")
+    defaults: dict = {}
+    if defaults_file.exists():
+        defaults = yaml.safe_load(defaults_file.read_text(encoding="utf-8")) or {}
+    agent = defaults.get("agent") or {}
+    results_dir = Path(agent.get("results_dir") or "results")
+    db = agent.get("database_path") or str(results_dir / "xts_agent.db")
+    lease_dir = (defaults.get("device") or {}).get("lease_dir") or None
+    cfg = UiConfig(
+        root=Path.cwd(), results_dir=results_dir, plans_dir=Path(plans_dir), db_path=Path(db),
+        lease_dir=lease_dir, defaults_path=config_path, token=token, host=host, port=port,
+    )
+    try:
+        server = make_server(cfg)
+    except (ValueError, OSError) as exc:
+        click.echo(f"Cannot start the UI: {exc}", err=True)
+        sys.exit(2)
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    click.echo(f"xTS Agent console: http://{shown}:{port}/" + ("#token=<token>" if token else ""))
+    click.echo(f"results: {results_dir.resolve()}  plans: {Path(plans_dir).resolve()}  (Ctrl-C to stop; runs keep going)")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
 @main.command("index-code")
 @click.option("--plan", default="config/test_plans/full_certification.yaml")
 @click.option("--config", "config_path", default=None)
