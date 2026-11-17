@@ -441,7 +441,7 @@ def list_plans(plans_dir: Path) -> List[Dict[str, Any]]:
 
 # ---------------------------------------------------------------- devices
 
-_PROPS = ("ro.product.model", "ro.build.type", "ro.build.fingerprint", "sys.boot_completed")
+_PROPS = ("ro.product.model", "ro.build.type", "ro.build.fingerprint", "sys.boot_completed", "ro.product.cpu.abi")
 
 
 def _adb(args: List[str], timeout: float = 8) -> str:
@@ -494,6 +494,7 @@ class DevicesView:
                     {
                         "model": values.get("ro.product.model", ""),
                         "build_type": values.get("ro.build.type", ""),
+                        "abi": values.get("ro.product.cpu.abi", ""),
                         "fingerprint": values.get("ro.build.fingerprint", ""),
                         "booted": values.get("sys.boot_completed") == "1",
                     }

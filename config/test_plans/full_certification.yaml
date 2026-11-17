@@ -27,7 +27,6 @@ suites:
   - name: cts
     enabled: true
     priority: 1
-    package_path: "/opt/xts/android-cts"
     command: "cts-tradefed"
     plan: "cts"
     description: "Compatibility Test Suite - API compatibility and Android framework behavior"
@@ -53,7 +52,6 @@ suites:
   - name: vts
     enabled: true
     priority: 2
-    package_path: "/opt/xts/android-vts"
     command: "vts-tradefed"
     plan: "vts"
     description: "Vendor Test Suite - HAL, kernel, and vendor interfaces (Treble compliance)"
@@ -77,7 +75,6 @@ suites:
   - name: sts
     enabled: true
     priority: 3
-    package_path: "/opt/xts/android-sts"
     command: "sts-tradefed"
     plan: "sts-dynamic-full"
     description: "Security Test Suite - Security patch verification against Android Security Bulletins"
@@ -98,7 +95,6 @@ suites:
   - name: gts
     enabled: true
     priority: 4
-    package_path: "/opt/xts/android-gts"
     command: "gts-tradefed"
     plan: "gts"
     description: "Google Test Suite - Google services (GMS/GAS) certification"
@@ -121,7 +117,6 @@ suites:
   - name: ats
     enabled: true
     priority: 5
-    package_path: "/opt/xts/android-ats"
     command: "ats-tradefed"
     plan: "ats"
     description: "Automotive Test Suite - VHAL, HVAC, vehicle-specific features"
@@ -143,7 +138,6 @@ suites:
   - name: catbox
     enabled: true
     priority: 6
-    package_path: "/opt/xts/android-catbox"
     command: "catbox-tradefed"
     plan: "catbox-functional"
     description: "Complete Automotive Tests in a Box - Functional testing via Spectatio framework"

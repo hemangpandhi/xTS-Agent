@@ -263,6 +263,7 @@ class SuiteConfig:
     enabled: bool = True
     priority: int = 100
     package_path: str = ""
+    arch: str = ""  # x86_64 | arm64: picks the suite installation (see xts_agent/settings.py)
     command: str = ""
     timeout_hours: float = 24.0
     description: str = ""
@@ -453,9 +454,10 @@ def _plan_schema() -> Dict[str, Any]:
         "name": None,
         "description": None,
         "profile": None,
+        "arch": None,
         "max_concurrent_suites": None,
         "plan": dict.fromkeys(
-            ("name", "description", "profile", "max_concurrent_suites", "target_completion_hours")
+            ("name", "description", "profile", "max_concurrent_suites", "target_completion_hours", "arch")
         ),
         "devices": _names(DeviceRequirements),
         "device_requirements": _names(DeviceRequirements),
@@ -522,7 +524,15 @@ class ConfigLoader:
             data = yaml.safe_load(f) or {}
         logger.info("Loaded defaults from %s", self.defaults_path)
         warn_unknown_keys(data, _defaults_schema(), self.defaults_path)
-        return _expand_env(data, self.defaults_path)
+        data = _expand_env(data, self.defaults_path)
+        from xts_agent import settings as host_settings
+
+        local_path = host_settings.settings_path(self.defaults_path)
+        local = host_settings.load(local_path)
+        if local:
+            logger.info("Applied host settings from %s", local_path)
+            data = host_settings.merge_into_defaults(data, local)
+        return data
 
     def load_plan(self) -> TestPlanConfig:
         if not self.plan_path.exists():
@@ -579,6 +589,8 @@ class ConfigLoader:
                     suite_data,
                     plan_dir=self.plan_path.parent,
                     packages_dir=paths.xts_packages_dir,
+                    installations=defaults.get("suite_installations") or {},
+                    plan_arch=str(plan_data.get("arch") or plan_meta.get("arch") or ""),
                     default_retry=default_retry,
                     default_sharding=default_sharding,
                     default_timeout=default_timeout,
@@ -767,12 +779,17 @@ class ConfigLoader:
         default_sharding: dict,
         default_timeout: float,
         default_diagnostics: Optional[dict] = None,
+        installations: Optional[dict] = None,
+        plan_arch: str = "",
     ) -> SuiteConfig:
         name = str(suite_data.get("name", "unknown"))
         name_lower = name.lower()
 
-        package_path = suite_data.get("package_path") or str(
-            Path(packages_dir) / f"android-{name_lower}"
+        from xts_agent import settings as host_settings
+
+        arch = str(suite_data.get("arch") or plan_arch or (installations or {}).get("default_arch") or "")
+        package_path = suite_data.get("package_path") or host_settings.resolve_package_path(
+            name_lower, arch, installations or {}, packages_dir
         )
         command = suite_data.get("command") or f"{name_lower}-tradefed"
 
@@ -862,6 +879,7 @@ class ConfigLoader:
             enabled=bool(suite_data.get("enabled", True)),
             priority=int(suite_data.get("priority", 100)),
             package_path=package_path,
+            arch=arch,
             command=command,
             timeout_hours=float(suite_data.get("timeout_hours", default_timeout)),
             description=str(suite_data.get("description", "")),

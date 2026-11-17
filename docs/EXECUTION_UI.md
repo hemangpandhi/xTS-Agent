@@ -11,8 +11,9 @@ host setup and the validation stages, see [EXECUTION_GUIDE.md](EXECUTION_GUIDE.m
 | 1. Host ready | `scripts/preflight.sh` (once per host, and after upgrades) | shell | All checks green |
 | 2. Devices up | Connect the rack, or start Cuttlefish: `scripts/start_cluster.sh 6` | shell | **Devices** page: every DUT `online`, same build, `free` |
 | 3. Local LLM up (only for AI RCA) | `PORT=8011 /mnt/OEM/llm-env/serve_qwen.sh` | shell | `curl -s 127.0.0.1:8011/v1/models` lists `coder` |
-| 4. Open the console | `xts-agent ui` and browse to <http://127.0.0.1:8765/> | browser | The four tabs load |
-| 5. Launch | **Launch**: pick a plan, optionally list modules, tick auto-retry, **Start run** | console (or `xts-agent run --plan …` in a shell, or CI) | **Live** shows the run within seconds |
+| 4. Open the console | `xts-agent ui` and browse to <http://127.0.0.1:8765/> | browser | The pages load |
+| 4a. First time on a host: Settings | **Settings**: unzip each suite, **Scan** its folder, **Use for x86_64/arm64**, check JDK, SDK and adb, test the LLM, **Save** | console | Every suite you need shows a green build badge for your device architecture |
+| 5. Launch | **Launch**: pick a plan and the device architecture, optionally list modules, tick auto-retry, **Start run** | console (or `xts-agent run --plan …` in a shell, or CI) | **Live** shows the run within seconds |
 | 6. Watch | **Live**: phase, per-suite status, the module each device is running, failures so far, TradeFed console | console | Heartbeat stays fresh; "Log quiet" stays low |
 | 7. Stop or resume if needed | **Stop** on the run card, later **Launch → Resume** (or `run --resume`) | console | Card shows `CANCELLED`; resume continues from the partial result |
 | 8. Review | **Runs → run**: totals, module table, failed tests, links to the HTML report and the **triage page** | console | Triage page groups the failures with owners and AI root cause |
@@ -95,7 +96,40 @@ it is cached.
 
 What `adb` sees on the host: state, model, build type, fingerprint, which
 process holds each device (`pid`, user, CI job), and the quarantine list with a
-**Release** button.
+**Release** button, plus each device's CPU ABI.
+
+### Settings
+
+Everything a host needs before its first run, saved to
+`config/local_settings.yaml` (git-ignored) and merged over
+`config/default_config.yaml` for every run, whether started from the console,
+a shell or CI. Runs already in progress keep the settings they started with.
+
+- **Test suites**: one path per suite (CTS, VTS, STS, GTS, ATS, CATBox) and per
+  device architecture. Google ships separate x86 and ARM suite downloads that
+  cannot be mixed, so a lab with Cuttlefish and real head units keeps two sets,
+  for example `/opt/xts/x86_64/android-cts` and `/opt/xts/arm64/android-cts`.
+  Each path is checked as you type: build number, the ABIs it contains, module
+  count, and a warning if an x86 package sits in the arm64 column. An empty cell
+  uses `<suite packages folder>/android-<suite>` and shows what that folder holds.
+  **Default architecture** is used when a plan or launch does not choose one.
+- **Find suite packages** scans a folder (three levels deep) for suite packages
+  and fills a cell with **Use for x86_64 / arm64**.
+- **Host tools**: suite packages folder, JDK, Android SDK (`aapt2`) and `adb`,
+  each validated.
+- **AI root-cause analysis**: the local LLM server and model, with **Test**
+  listing the models the server offers. Only servers on this host or a private
+  network can be tested or used.
+
+A suite's package path is chosen in this order: a `package_path` written in the
+plan itself, then the Settings path for the run's architecture, then the
+default folder. A plan can name its architecture with `arch: arm64`; **Launch**
+can override it per run. Launch shows, per suite, the path the run will use and
+whether the package is installed, refuses to start while one is missing, and
+warns when the online devices are a different architecture.
+
+From the command line the same file applies; set `XTS_LOCAL_SETTINGS` to use
+another one.
 
 ## Security
 

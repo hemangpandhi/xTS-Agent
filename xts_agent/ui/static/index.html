@@ -204,6 +204,8 @@ pre.cmd { font-family: var(--mono); font-size: 12px; background: var(--log-bg); 
   <a class="nav" href="#/launch" data-v="launch"><svg class="i" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg><span>Launch</span></a>
   <a class="nav" href="#/runs" data-v="runs"><svg class="i" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Runs</span></a>
   <a class="nav" href="#/devices" data-v="devices"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><span>Devices</span></a>
+  <div class="navlabel">Setup</div>
+  <a class="nav" href="#/settings" data-v="settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
   <div id="sidelinks"></div>
   <div class="side-foot"><div class="faint">Host</div><div class="host" id="host">–</div><div class="conn" id="conn"><i></i><span>Live updates</span></div></div>
 </aside>
@@ -316,7 +318,11 @@ let timers = [];
 const every = (fn, ms) => { fn(); timers.push(setInterval(fn, ms)); };
 const clearTimers = () => { timers.forEach(clearInterval); timers = []; };
 const views = {};
+let skipRoute = false;
 function route() {
+  if (skipRoute) { skipRoute = false; return; }
+  if (window.onbeforeunload && window.onbeforeunload() && !confirm("Leave Settings without saving your changes?")) { skipRoute = true; history.back(); return; }
+  window.onbeforeunload = null;
   clearTimers();
   const parts = (location.hash || "#/live").slice(2).split("/");
   const name = parts[0] || "live", arg = decodeURIComponent(parts.slice(1).join("/"));
@@ -565,57 +571,220 @@ views.launch = async function (preselect) {
     <div style="min-width:0"><div class="card" style="position:sticky;top:20px"><div class="card-hd"><h2>3 · Devices</h2><span class="spacer"></span><a href="#/devices" class="btn sm ghost">Manage</a></div><div class="card-bd" id="devsum"><div class="skeleton" style="height:90px"></div></div>
       <div class="card-bd" style="border-top:1px solid var(--border)"><button class="btn primary" id="go" disabled style="width:100%;justify-content:center;padding:10px">${ic("play")} Start run</button>
       <div class="muted" id="gohint" style="text-align:center;margin-top:8px;font-size:12.5px">Pick a plan.</div><pre class="cmd" id="cmd" hidden></pre></div></div></div></div>`;
-  let plans = [], sel = null;
-  try { plans = await api("/api/plans"); } catch (e) { $("#plans").textContent = e.message; return; }
+  let plans = [], sel = null, defaultArch = "x86_64", devs = [];
+  try { [plans] = await Promise.all([api("/api/plans")]); } catch (e) { $("#plans").textContent = e.message; return; }
+  api("/api/settings").then((st) => { defaultArch = st.default_arch || defaultArch; renderOpts(); }).catch(() => {});
   if (preselect) { const i = plans.findIndex((p) => p.file === preselect); if (i >= 0) sel = i; }
+  const famOf = (abi) => (/^arm/.test(abi || "") ? "arm64" : /^x86/.test(abi || "") ? "x86_64" : "");
   const render = () => {
     const q = ($("#pq").value || "").toLowerCase();
     $("#plans").innerHTML = plans.map((p, i) => ({ p, i })).filter(({ p }) => !q || (p.name + p.file + (p.description || "")).toLowerCase().includes(q)).map(({ p, i }) => `<div class="plan ${sel === i ? "sel" : ""}" data-i="${i}">
       <div class="t">${esc(p.name)}</div><div class="d mono">${esc(p.file)}</div>
-      <div class="row" style="gap:5px;margin-top:9px"><span class="tag" style="${p.profile === "certification" ? "background:var(--warn-soft);color:var(--warn)" : ""}">${esc(p.profile)}</span>${p.ai_rca ? '<span class="tag" style="background:var(--accent-soft);color:var(--accent)">AI RCA</span>' : ""}
+      <div class="row" style="gap:5px;margin-top:9px"><span class="tag" style="${p.profile === "certification" ? "background:var(--warn-soft);color:var(--warn)" : ""}">${esc(p.profile)}</span>${p.ai_rca ? '<span class="tag" style="background:var(--accent-soft);color:var(--accent)">AI RCA</span>' : ""}${p.arch ? `<span class="tag">${esc(p.arch)}</span>` : ""}
         ${p.suites.map((s) => `<span class="tag">${esc(s.name.toUpperCase())}${s.include_filters.length ? ` · ${s.include_filters.length} mod` : ""}</span>`).join("")}</div></div>`).join("") || '<div class="muted">No plan matches.</div>';
     $$(".plan").forEach((el) => el.addEventListener("click", () => { sel = +el.dataset.i; render(); renderOpts(); }));
   };
   $("#pq").addEventListener("input", render);
   const renderOpts = () => {
     const p = plans[sel]; if (!p) { $("#opts").innerHTML = '<span class="muted">Pick a plan first.</span>'; return; }
+    const keep = $("#arch") ? $("#arch").value : "";
+    const planArch = p.arch || defaultArch;
     const single = p.suites.filter((s) => s.enabled !== false).length === 1;
     $("#opts").innerHTML = `${p.description ? `<p style="margin-top:0" class="muted">${esc(p.description)}</p>` : ""}
-      <div class="tw" style="border:1px solid var(--border);border-radius:10px"><table><thead><tr><th>Suite</th><th>TradeFed plan</th><th>Modules</th><th class="n">Shards</th><th class="n">Retries</th></tr></thead><tbody>
-      ${p.suites.map((s) => `<tr><td><b>${esc(s.name)}</b></td><td class="mono">${esc(s.plan)}</td><td>${s.include_filters.length ? esc(s.include_filters.join(", ")) : '<span class="muted">all</span>'}${s.exclude_filters ? ` <span class="muted">(${s.exclude_filters} excluded)</span>` : ""}</td><td class="n">${esc(s.shard_count || 1)}</td><td class="n">${esc(s.max_retries ?? "–")}</td></tr>`).join("")}</tbody></table></div>
+      <div class="row" style="margin-bottom:12px"><b>Device architecture</b><div class="seg" id="archseg">${["x86_64", "arm64"].map((a) => `<button data-a="${a}">${a}</button>`).join("")}</div>
+        <span class="muted" style="font-size:12.5px">picks the suite packages for these devices · <a href="#/settings">Settings</a></span><input type="hidden" id="arch"></div>
+      <div class="tw" style="border:1px solid var(--border);border-radius:10px"><table><thead><tr><th>Suite</th><th>Modules</th><th>Package for this architecture</th><th class="n">Shards</th><th class="n">Retries</th></tr></thead><tbody id="suiterows"></tbody></table></div>
+      <div id="archwarn"></div>
       <div style="margin-top:16px"><div style="font-weight:600;margin-bottom:6px">Only these modules <span class="muted" style="font-weight:400">· optional, one per line</span></div>
       <textarea id="mods" ${single ? "" : "disabled"} placeholder="${single ? "CtsBionicTestCases\nCtsCarTestCases android.car.cts.CarPropertyManagerTest#testX\n\nLeave empty to run the plan as configured" : "Module selection needs a plan with one enabled suite"}"></textarea></div>
       ${p.profile === "certification" ? `<div class="alert warn" style="margin:10px 0 0">${ic("alert")}<div>A certification plan narrowed to some modules runs as a development run: certification refuses filtered plans.</div></div>` : ""}
       <div style="margin-top:14px" class="row"><label class="chk"><input type="checkbox" id="retry" checked> Auto-retry failures</label>
       <label class="chk"><input type="checkbox" id="resume"> Resume last interrupted run</label><label class="chk"><input type="checkbox" id="dry"> Dry run</label>
       <label class="chk">AI RCA <select id="ai"><option value="">plan default (${p.ai_rca ? "on" : "off"})</option><option value="1">on</option><option value="0">off</option></select></label></div>`;
+    const setArch = (a) => { $("#arch").value = a; $$("#archseg button").forEach((b) => b.classList.toggle("on", b.dataset.a === a)); upd(); };
     const upd = () => {
-      const mods = ($("#mods").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+      const arch = $("#arch").value, mods = ($("#mods").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+      let missing = 0;
+      $("#suiterows").innerHTML = p.suites.filter((s) => s.enabled !== false).map((s) => {
+        const r = (s.resolved || {})[arch] || {}; if (!r.ok) missing++;
+        const status = r.ok ? `<span class="pill t-ok" style="padding:1px 8px">${ic("check")} ${esc((r.abis || []).join(", ") || "installed")}</span>`
+          : `<span class="pill t-bad" style="padding:1px 8px">${ic("x")} ${esc((r.problems || [])[0] || "not installed")}</span>`;
+        return `<tr><td><b>${esc(s.name.toUpperCase())}</b><div class="muted mono" style="font-size:11.5px">${esc(s.plan)}</div></td>
+          <td>${s.include_filters.length ? esc(s.include_filters.join(", ")) : '<span class="muted">all</span>'}${s.exclude_filters ? ` <span class="muted">(${s.exclude_filters} excluded)</span>` : ""}</td>
+          <td><div class="mono ell" style="max-width:320px" title="${esc(r.path || "")}">${esc(r.path || "–")}</div><div class="row" style="gap:6px;margin-top:3px">${status}${r.pinned ? '<span class="tag">pinned in plan</span>' : ""}</div></td>
+          <td class="n">${esc(s.shard_count || 1)}</td><td class="n">${esc(s.max_retries ?? "–")}</td></tr>`;
+      }).join("");
+      const online = devs.filter((d) => d.state === "device"), fams = [...new Set(online.map((d) => famOf(d.abi)).filter(Boolean))];
+      const warn = [];
+      if (missing) warn.push(`<div class="alert bad" style="margin:10px 0 0">${ic("alert")}<div>${missing} suite package${missing > 1 ? "s are" : " is"} not installed for <b>${esc(arch)}</b>. Add ${missing > 1 ? "them" : "it"} in <a href="#/settings">Settings → Test suites</a>, or pick the other architecture.</div></div>`);
+      if (online.length && fams.length && !fams.includes(arch)) warn.push(`<div class="alert warn" style="margin:10px 0 0">${ic("alert")}<div>The devices online are <b>${esc(fams.join(", "))}</b>, not ${esc(arch)}. TradeFed would skip every module.</div></div>`);
+      $("#archwarn").innerHTML = warn.join("");
+      $("#go").disabled = !!missing; $("#gohint").textContent = missing ? "Install the missing suite packages first." : p.name;
       $("#cmd").hidden = false;
-      $("#cmd").textContent = `$ xts-agent run --plan ${mods.length || $("#ai").value ? "results/ui_plans/" + p.file.replace(".yaml", ".<run>.yaml") : "config/test_plans/" + p.file}` +
-        ($("#retry").checked ? " --auto-retry" : "") + ($("#resume").checked ? " --resume" : "") + ($("#dry").checked ? " --dry-run" : "") + (mods.length ? `\n# include_filters: ${mods.join(", ")}` : "");
+      const derived = mods.length || $("#ai").value || arch !== planArch;
+      $("#cmd").textContent = `$ xts-agent run --plan ${derived ? "results/ui_plans/" + p.file.replace(".yaml", ".<run>.yaml") : "config/test_plans/" + p.file}` +
+        ($("#retry").checked ? " --auto-retry" : "") + ($("#resume").checked ? " --resume" : "") + ($("#dry").checked ? " --dry-run" : "") +
+        (arch !== planArch ? `\n# arch: ${arch}` : "") + (mods.length ? `\n# include_filters: ${mods.join(", ")}` : "");
     };
-    ["#mods", "#retry", "#resume", "#dry", "#ai"].forEach((s) => $(s).addEventListener("input", upd)); upd();
-    $("#go").disabled = false; $("#gohint").textContent = p.name;
+    $$("#archseg button").forEach((b) => b.addEventListener("click", () => setArch(b.dataset.a)));
+    ["#mods", "#retry", "#resume", "#dry", "#ai"].forEach((s) => $(s).addEventListener("input", upd));
+    $("#go").dataset.planArch = planArch;
+    setArch(keep || planArch);
   };
   render(); renderOpts();
   api("/api/devices").then((ds) => {
+    devs = ds;
     const on = ds.filter((d) => d.state === "device"), busy = on.filter((d) => d.leased_by), q = ds.filter((d) => d.quarantine);
-    const builds = [...new Set(on.map((d) => d.fingerprint).filter(Boolean))];
+    const builds = [...new Set(on.map((d) => d.fingerprint).filter(Boolean))], abis = [...new Set(on.map((d) => d.abi).filter(Boolean))];
     const row = (t, l, v) => `<div class="row" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span class="row" style="gap:9px"><span class="pill t-${t}" style="padding:3px"><span class="d"></span></span>${l}</span><b>${v}</b></div>`;
     $("#devsum").innerHTML = row("ok", "Online", on.length) + row("info", "Free to allocate", on.length - busy.length) + row("skip", "In use by another run", busy.length) + row("warn", "Quarantined", q.length) +
+      row("accent", "CPU ABI", esc(abis.join(", ") || "–")) +
       `<div class="muted" style="font-size:12.5px;margin-top:12px">${builds.length > 1 ? `<b style="color:var(--warn)">${builds.length} different builds online.</b> A suite only shards across devices with the same build.` : builds.length ? "All online devices run the same build." : "No device online."} Devices are health-checked and leased per run, never shared.</div>`;
+    if ($("#arch") && $("#arch").value && !$("#archseg button.on")) return;
+    if ($("#suiterows")) $$("#archseg button.on").forEach((b) => b.click());
   }).catch((e) => { $("#devsum").textContent = e.message; });
   $("#go").addEventListener("click", async () => {
     const p = plans[sel]; if (!p) return;
     const mods = ($("#mods").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
     const body = { plan: p.file, modules: mods, auto_retry: $("#retry").checked, resume: $("#resume").checked, dry_run: $("#dry").checked };
     if ($("#ai").value) body.ai_rca = $("#ai").value === "1";
+    if ($("#arch").value && $("#arch").value !== $("#go").dataset.planArch) body.arch = $("#arch").value;
     $("#go").disabled = true;
     try { const r = await api("/api/launch", { body }); toast(`Started ${r.run_id} (pid ${r.pid})`); location.hash = "#/live"; }
     catch (e) { toast("Launch failed: " + e.message, 7000, "bad"); $("#go").disabled = false; }
   });
 };
+
+// ================================================================ settings
+const SUITE_LABEL = { cts: "CTS", vts: "VTS", sts: "STS", gts: "GTS", ats: "ATS", catbox: "CATBox" };
+const SUITE_DESC = { cts: "Compatibility Test Suite", vts: "Vendor Test Suite", sts: "Security Test Suite", gts: "GMS Test Suite", ats: "Automotive Test Suite", catbox: "Car Test Box" };
+const TOOL_INFO = {
+  xts_packages_dir: ["Suite packages folder", "Where suites live when no explicit path is set below (android-cts, android-vts, …)", "/opt/xts"],
+  java_home: ["JDK (JAVA_HOME)", "TradeFed needs JDK 17 or newer", "/usr/lib/jvm/java-21"],
+  android_sdk: ["Android SDK", "Used for build-tools/aapt2; the newest build-tools is put first on TradeFed's PATH", "/home/you/Android/Sdk"],
+  adb_path: ["adb", "Leave empty to use adb from PATH", "/opt/platform-tools/adb"],
+};
+views.settings = async function () {
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Settings</h1><p>Host setup for this lab machine: where each test suite is installed, host tools and the local LLM. Every new run uses these.</p></div></div><div id="sbody"><div class="skeleton"></div></div>`;
+  let st;
+  try { st = await api("/api/settings"); } catch (e) { $("#sbody").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+  const state = {
+    default_arch: st.default_arch,
+    inst: {},  // "suite|arch" -> {path, inspect}
+    paths: { ...st.paths },
+    ai: { openai_base_url: st.ai_rca.openai_base_url || "", openai_model: st.ai_rca.openai_model || "" },
+  };
+  for (const i of st.installations) state.inst[`${i.suite}|${i.arch}`] = { path: i.path, inspect: i.inspect };
+  let dirty = false;
+  const markDirty = () => { dirty = true; $("#savebar").hidden = false; };
+  const cellStatus = (c) => {
+    if (!c || !c.path) return `<span class="faint" style="font-size:12px">Not set</span>`;
+    const i = c.inspect; if (!i) return `<span class="faint" style="font-size:12px">checking…</span>`;
+    return i.ok ? `<span class="pill t-ok" style="padding:1px 8px">${ic("check")} ${esc(i.build ? "build " + i.build : "installed")}</span> <span class="muted" style="font-size:12px">${esc((i.abis || []).join(", "))}${i.modules ? " · " + num(i.modules) + " modules" : ""}</span>`
+      : `<span class="pill t-bad" style="padding:1px 8px">${ic("x")} ${esc(i.problems[0] || "invalid")}</span>`;
+  };
+  const archWarn = (c, arch) => { const i = c && c.inspect; if (!i || !i.ok || !i.arch || i.arch === "multi" || i.arch === arch) return "";
+    return `<div style="color:var(--warn);font-size:12px;margin-top:3px">${ic("alert")} this package is ${esc(i.arch)}, not ${esc(arch)}</div>`; };
+  // Full status of a (suite, arch) cell; an empty cell shows what the default folder holds
+  const statusHtml = (key) => {
+    const [s, a] = key.split("|"), c = state.inst[key];
+    if (c && c.path) return cellStatus(c) + archWarn(c, a);
+    const f = (st.fallback || {})[s];
+    if (f && f.ok) return `<span class="faint" style="font-size:12px">Default folder:</span> ${cellStatus({ path: f.path, inspect: f })}${archWarn({ inspect: f }, a)}`;
+    return `<span class="faint" style="font-size:12px">Not installed${f && f.problems && f.problems[0] && !/does not exist/.test(f.problems[0]) ? ` · default folder: ${esc(f.problems[0])}` : ""}</span>`;
+  };
+  $("#sbody").innerHTML = `
+    <div class="card mb"><div class="card-hd"><h2>${ic("layers")} Test suites</h2><span class="sub">one package per suite and device architecture: Google ships separate x86 and ARM downloads</span>
+      <span class="spacer"></span><span class="muted" style="font-size:12.5px">Default architecture</span><div class="seg" id="defarch">${st.arches.map((a) => `<button data-a="${a}" class="${a === state.default_arch ? "on" : ""}">${a}</button>`).join("")}</div></div>
+      <div class="tw"><table><thead><tr><th style="width:190px">Suite</th>${st.arches.map((a) => `<th>${a} <span class="muted" style="text-transform:none;font-weight:500">${a === "x86_64" ? "· Cuttlefish, emulators" : "· head units, phones"}</span></th>`).join("")}</tr></thead>
+      <tbody>${st.suites_known.map((s) => `<tr><td><b>${SUITE_LABEL[s]}</b><div class="muted" style="font-size:12px">${SUITE_DESC[s]}</div></td>
+        ${st.arches.map((a) => `<td><input type="text" class="mono" data-cell="${s}|${a}" placeholder="${esc((st.paths.xts_packages_dir || "/opt/xts") + "/android-" + s)}" style="width:100%;font-size:12px" value="${esc((state.inst[`${s}|${a}`] || {}).path || "")}">
+          <div data-status="${s}|${a}" style="margin-top:5px">${statusHtml(`${s}|${a}`)}</div></td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <div class="card-bd muted" style="font-size:12.5px;border-top:1px solid var(--border)">An empty cell falls back to <code>${esc(st.paths.xts_packages_dir || "/opt/xts")}/android-&lt;suite&gt;</code>. A plan can still pin its own <code>package_path</code>; Launch shows which path each run will use.</div></div>
+    <div class="card mb"><div class="card-hd"><h2>${ic("search")} Find suite packages</h2><span class="sub">looks for folders with tools/tradefed.jar, three levels deep</span></div>
+      <div class="card-bd"><div class="row"><input type="text" id="scanroot" class="mono" value="${esc(st.paths.xts_packages_dir || "/opt/xts")}" style="flex:1;min-width:240px"><button class="btn" id="scan">${ic("search")} Scan</button></div>
+      <div id="found" style="margin-top:12px"></div></div></div>
+    <div class="grid g-2 mb" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="card"><div class="card-hd"><h2>${ic("terminal")} Host tools</h2></div><div class="card-bd">${Object.entries(TOOL_INFO).map(([k, [label, help, ph]]) => `
+        <div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px">${label}</div><div class="muted" style="font-size:12px;margin-bottom:5px">${help}</div>
+        <input type="text" class="mono" data-tool="${k}" value="${esc(state.paths[k] || "")}" placeholder="${esc(ph)}" style="width:100%;font-size:12.5px">
+        <div data-toolst="${k}" style="font-size:12px;margin-top:4px">${toolStatus(st.paths_check[k])}</div></div>`).join("")}</div></div>
+      <div class="card"><div class="card-hd"><h2>${ic("brain")} AI root-cause analysis</h2><span class="sub">local LLM, OpenAI-compatible</span></div><div class="card-bd">
+        <div style="font-weight:600;font-size:13px">Server URL</div><div class="muted" style="font-size:12px;margin-bottom:5px">vLLM, Ollama or llama.cpp server on this host or the lab network. Logs and source never leave it.</div>
+        <input type="text" class="mono" id="aiurl" value="${esc(state.ai.openai_base_url)}" placeholder="http://127.0.0.1:8011/v1" style="width:100%;font-size:12.5px">
+        <div style="font-weight:600;font-size:13px;margin-top:14px">Model</div><div class="muted" style="font-size:12px;margin-bottom:5px">Name as the server lists it</div>
+        <div class="row" style="flex-wrap:nowrap"><input type="text" class="mono" id="aimodel" list="aimodels" value="${esc(state.ai.openai_model)}" placeholder="coder" style="flex:1;font-size:12.5px"><datalist id="aimodels"></datalist>
+          <button class="btn" id="aitest">${ic("activity")} Test</button></div><div id="aist" style="font-size:12.5px;margin-top:8px"></div>
+        ${(st.ai_rca.fallbacks || []).length ? `<div class="muted" style="font-size:12px;margin-top:14px">Fallbacks from default_config.yaml: ${st.ai_rca.fallbacks.map((f) => `<code>${esc(f.model)}</code> at <code>${esc(f.base_url)}</code>`).join(", ")}</div>` : ""}
+      </div></div></div>
+    <div class="card" id="savebar" hidden style="position:sticky;bottom:16px;box-shadow:var(--shadow-lg)"><div class="card-bd row"><span>${ic("alert")} Unsaved changes</span><span class="muted mono" style="font-size:12px">${esc(st.file)}</span><span class="spacer"></span>
+      <button class="btn" id="discard">Discard</button><button class="btn primary" id="save">${ic("check")} Save settings</button></div></div>
+    <p class="muted" style="font-size:12.5px">Saved to <code>${esc(st.file)}</code>${st.file_exists ? "" : " (created on first save)"}, which is merged over <code>default_config.yaml</code> for every run. Runs already in progress keep the settings they started with.</p>`;
+  // suite cells: check on change
+  let timer = {};
+  $$("[data-cell]").forEach((inp) => inp.addEventListener("input", () => {
+    const key = inp.dataset.cell, [suite, arch] = key.split("|"), path = inp.value.trim();
+    state.inst[key] = path ? { path, inspect: null } : undefined; markDirty();
+    $(`[data-status="${key}"]`).innerHTML = statusHtml(key);
+    clearTimeout(timer[key]);
+    if (path) timer[key] = setTimeout(async () => {
+      try { const i = await api("/api/settings/check", { body: { kind: "suite", suite, path } }); if (state.inst[key] && state.inst[key].path === path) { state.inst[key].inspect = i; $(`[data-status="${key}"]`).innerHTML = statusHtml(key); } } catch (e) { /* ignore */ }
+    }, 450);
+  }));
+  $$("#defarch button").forEach((b) => b.addEventListener("click", () => { state.default_arch = b.dataset.a; $$("#defarch button").forEach((x) => x.classList.toggle("on", x === b)); markDirty(); }));
+  // scan
+  const showFound = (list) => {
+    $("#found").innerHTML = list.length ? `<div class="tw" style="border:1px solid var(--border);border-radius:10px"><table><thead><tr><th>Suite</th><th>Architecture</th><th>Build</th><th>Path</th><th></th></tr></thead><tbody>
+      ${list.map((f, i) => `<tr><td><b>${esc(SUITE_LABEL[f.suite] || f.suite || "?")}</b></td><td>${esc(f.arch || "?")} <span class="muted" style="font-size:12px">${esc((f.abis || []).join(", "))}</span></td><td class="mono">${esc(f.build || "–")}</td>
+        <td class="mono ell" style="max-width:380px" title="${esc(f.path)}">${esc(f.path)}</td>
+        <td>${f.ok && SUITE_LABEL[f.suite] ? (f.arch === "multi" || !f.arch ? st.arches : [f.arch]).map((a) => `<button class="btn sm" data-use="${i}" data-arch="${a}">Use for ${a}</button>`).join(" ") : `<span class="muted" style="font-size:12px">${esc((f.problems || [])[0] || "")}</span>`}</td></tr>`).join("")}</tbody></table></div>`
+      : '<div class="muted">No suite packages found there.</div>';
+    $$("[data-use]").forEach((b) => b.addEventListener("click", () => {
+      const f = list[+b.dataset.use], key = `${f.suite}|${b.dataset.arch}`, inp = $(`[data-cell="${key}"]`);
+      inp.value = f.path; state.inst[key] = { path: f.path, inspect: f }; markDirty();
+      $(`[data-status="${key}"]`).innerHTML = statusHtml(key);
+      inp.scrollIntoView({ block: "center", behavior: "smooth" }); toast(`${SUITE_LABEL[f.suite]} ${b.dataset.arch} set; save to apply`);
+    }));
+  };
+  showFound(st.discovered || []);
+  $("#scan").addEventListener("click", async () => {
+    $("#found").innerHTML = '<div class="skeleton" style="height:60px"></div>';
+    try { showFound(await api("/api/settings/scan", { body: { root: $("#scanroot").value.trim() } })); } catch (e) { $("#found").textContent = e.message; }
+  });
+  // host tools
+  $$("[data-tool]").forEach((inp) => inp.addEventListener("input", () => {
+    const k = inp.dataset.tool; state.paths[k] = inp.value.trim(); markDirty();
+    clearTimeout(timer[k]);
+    timer[k] = setTimeout(async () => { try { $(`[data-toolst="${k}"]`).innerHTML = toolStatus(await api("/api/settings/check", { body: { kind: k, path: state.paths[k] } })); } catch (e) { /* ignore */ } }, 450);
+  }));
+  // AI
+  $("#aiurl").addEventListener("input", () => { state.ai.openai_base_url = $("#aiurl").value.trim(); markDirty(); });
+  $("#aimodel").addEventListener("input", () => { state.ai.openai_model = $("#aimodel").value.trim(); markDirty(); });
+  $("#aitest").addEventListener("click", async () => {
+    $("#aist").innerHTML = '<span class="muted">Connecting…</span>';
+    try {
+      const r = await api("/api/settings/test-llm", { body: { base_url: state.ai.openai_base_url, model: state.ai.openai_model } });
+      if (!r.ok) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(r.error)}</span>`; return; }
+      $("#aimodels").innerHTML = r.models.map((m) => `<option value="${esc(m)}">`).join("");
+      $("#aist").innerHTML = `<span style="color:var(--ok)">${ic("check")} Reachable · ${r.models.length} model${r.models.length === 1 ? "" : "s"}</span>` +
+        (r.model_found === false ? ` <span style="color:var(--warn)">· "${esc(state.ai.openai_model)}" is not one of them: ${esc(r.models.slice(0, 6).join(", "))}</span>` : r.model_found ? ` · model found` : "");
+    } catch (e) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(e.message)}</span>`; }
+  });
+  // save
+  $("#discard").addEventListener("click", () => { dirty = false; views.settings(); });
+  $("#save").addEventListener("click", async () => {
+    const installations = Object.entries(state.inst).filter(([, v]) => v && v.path).map(([k, v]) => { const [suite, arch] = k.split("|"); return { suite, arch, path: v.path }; });
+    const body = { paths: state.paths, suites: { default_arch: state.default_arch, installations }, ai_rca: state.ai };
+    $("#save").disabled = true;
+    try { await api("/api/settings", { body }); dirty = false; toast("Settings saved. New runs use them."); views.settings(); }
+    catch (e) { toast("Not saved: " + e.message, 7000, "bad"); $("#save").disabled = false; }
+  });
+  window.onbeforeunload = () => (dirty ? true : undefined);
+};
+function toolStatus(c) {
+  if (!c) return "";
+  return `<span style="color:var(--${c.ok ? "ok" : "bad"})">${ic(c.ok ? "check" : "x")}</span> <span class="muted">${esc(c.note || "")}</span>`;
+}
 
 // ================================================================ runs
 views.runs = async function () {

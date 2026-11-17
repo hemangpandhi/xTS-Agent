@@ -22,3 +22,4 @@ build/
 # Local code RAG index (built by `xts-agent index-code`, hundreds of MB)
 config/known_failures/chroma_db/
 config/triage_labels.yaml
+config/local_settings.yaml
