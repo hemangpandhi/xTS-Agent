@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-{#- Self-contained: no CDN scripts, fonts or icons, so the report renders the
-    same from a CI artifact, an air-gapped lab or an email attachment. -#}
+{#- Self-contained: no CDN scripts, fonts, icons, or <script> tags, so the report
+    renders identically from a CI artifact, an air-gapped lab, or strict CSP viewer. -#}
 {%- set total = plan.total_pass + plan.total_fail + plan.total_skip -%}
 {%- set executed = plan.total_pass + plan.total_fail -%}
 {%- macro pct(n) -%}{{ ((n * 100.0 / total) if total else 0)|round(2) }}{%- endmacro -%}
@@ -11,39 +11,373 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>xTS report &ndash; {{ plan.plan_name }}</title>
 <style>
-body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:#f6f7f9;color:#1f2937}
-main{max-width:1100px;margin:0 auto;padding:24px 16px}
-header{background:#1e3a8a;color:#fff}
-header main{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding-top:20px;padding-bottom:20px}
-h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 10px}
-.sub{color:#bfdbfe;font-size:13px}.muted{color:#6b7280}
-.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin:12px 0}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-.cards .card{margin:0;border-left:4px solid #9ca3af}
-.cards .pass{border-left-color:#16a34a}.cards .fail{border-left-color:#dc2626}.cards .dev{border-left-color:#2563eb}
-.k{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.03em}.v{font-size:24px;font-weight:700}
-.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#e5e7eb;margin:8px 0}
-.bar span{display:block;height:100%}.b-pass{background:#16a34a}.b-fail{background:#dc2626}.b-skip{background:#9ca3af}
-.legend span{margin-right:14px;font-size:13px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
-table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #eef0f3;vertical-align:top}
-th{color:#6b7280;font-weight:600}td.n,th.n{text-align:right}.wrap{overflow-x:auto}
-.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:#f3f4f6;color:#374151;white-space:nowrap}
-.PASSED,.cert{background:#dcfce7;color:#166534}.FAILED,.NEW{background:#fee2e2;color:#991b1b}
-.INCOMPLETE,.FLAKY,.devprof{background:#fef3c7;color:#92400e}.status{background:#fff;color:#1e3a8a}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
-.small{font-size:12px}.reason{color:#92400e;font-size:12px;margin-top:2px}.red{color:#b91c1c;font-weight:600}
-pre{white-space:pre-wrap;background:#f9fafb;border:1px solid #eef0f3;border-radius:6px;padding:8px;font-size:12px;margin:6px 0}
-pre.ai{background:#eff6ff}summary{cursor:pointer;color:#4338ca;font-size:12px}
-footer{color:#9ca3af;font-size:12px;text-align:center;padding:24px}
+  :root {
+    color-scheme: light;
+    --page: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --muted: #64748b;
+    --grid: #e2e8f0;
+    --axis: #cbd5e1;
+    --ring: rgba(15, 23, 42, 0.08);
+    --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+    --blue: #2563eb;
+    --blue-100: #dbeafe;
+    --blue-600: #1d4ed8;
+    --good: #16a34a;
+    --warning: #d97706;
+    --critical: #e11d48;
+    --ai-bg: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%);
+    --ai-border: #bfdbfe;
+    --fix-bg: #f0fdf4;
+    --fix-border: #bbf7d0;
+    --code-bg: #0f172a;
+    --code-ink: #e2e8f0;
+    --code-ln: #64748b;
+    --stack-bg: #f8fafc;
+
+    --cat-product: #e11d48;
+    --cat-product-bg: #ffe4e6;
+    --cat-product-ink: #9f1239;
+    --cat-env: #d97706;
+    --cat-env-bg: #fef3c7;
+    --cat-env-ink: #92400e;
+    --cat-flaky: #7c3aed;
+    --cat-flaky-bg: #ede9fe;
+    --cat-flaky-ink: #5b21b6;
+    --cat-infra: #0284c7;
+    --cat-infra-bg: #e0f2fe;
+    --cat-infra-ink: #075985;
+    --cat-test: #0d9488;
+    --cat-test-bg: #ccfbf1;
+    --cat-test-ink: #115e59;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0b0f19;
+      --surface: #111827;
+      --surface-2: #1e293b;
+      --ink: #f1f5f9;
+      --ink-2: #cbd5e1;
+      --muted: #94a3b8;
+      --grid: #1e293b;
+      --axis: #334155;
+      --ring: rgba(255, 255, 255, 0.09);
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+      --blue: #3b82f6;
+      --blue-100: #1e3a8a;
+      --blue-600: #60a5fa;
+      --ai-bg: linear-gradient(135deg, rgba(30, 58, 138, 0.32) 0%, rgba(76, 29, 149, 0.24) 100%);
+      --ai-border: rgba(96, 165, 250, 0.3);
+      --fix-bg: rgba(20, 83, 45, 0.28);
+      --fix-border: rgba(74, 222, 128, 0.3);
+      --code-bg: #090d16;
+      --code-ink: #e2e8f0;
+      --code-ln: #64748b;
+      --stack-bg: #0f172a;
+
+      --cat-product: #fb7185;
+      --cat-product-bg: rgba(225, 29, 72, 0.2);
+      --cat-product-ink: #fda4af;
+      --cat-env: #fbbf24;
+      --cat-env-bg: rgba(217, 119, 6, 0.2);
+      --cat-env-ink: #fde68a;
+      --cat-flaky: #a78bfa;
+      --cat-flaky-bg: rgba(124, 58, 237, 0.22);
+      --cat-flaky-ink: #ddd6fe;
+      --cat-infra: #38bdf8;
+      --cat-infra-bg: rgba(2, 132, 199, 0.2);
+      --cat-infra-ink: #bae6fd;
+      --cat-test: #2dd4bf;
+      --cat-test-bg: rgba(13, 148, 136, 0.2);
+      --cat-test-ink: #99f6e4;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1480px; margin: 0 auto; padding: 26px 32px 64px; }
+  header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #1e3a8a 100%);
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.18);
+  }
+  header main {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding-top: 24px;
+    padding-bottom: 24px;
+  }
+  h1 { font-size: 24px; font-weight: 750; letter-spacing: -0.02em; margin: 0 0 4px; }
+  h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; margin: 30px 0 12px; display: flex; align-items: baseline; gap: 8px; }
+  h2 small { color: var(--muted); font-weight: 400; font-size: 13px; }
+  .sub { color: #cbd5e1; font-size: 13.5px; }
+  .muted { color: var(--muted); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--ring);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin: 12px 0;
+    box-shadow: var(--shadow);
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+    gap: 14px;
+  }
+  .cards .card { margin: 0; border-top: 3px solid #94a3b8; }
+  .cards .pass { border-top-color: #16a34a; }
+  .cards .fail { border-top-color: #e11d48; }
+  .cards .dev { border-top-color: #2563eb; }
+  .cards .triage-kpi { border-top-color: #7c3aed; }
+  .k { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .v { font-size: 30px; font-weight: 750; margin-top: 4px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .v.good { color: var(--good); }
+  .v.bad { color: var(--critical); }
+  .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--surface-2); margin: 8px 0 12px; }
+  .bar span { display: block; height: 100%; }
+  .b-pass { background: #16a34a; }
+  .b-fail { background: #e11d48; }
+  .b-skip { background: #94a3b8; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--ink-2); font-weight: 500; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+
+  /* Distribution Charts Grid */
+  .charts { display: grid; grid-template-columns: 1.1fr 1.1fr 1fr; gap: 14px; margin-top: 14px; }
+  .chart h3 { margin: 0 0 12px; font-size: 13.5px; font-weight: 650; display: flex; justify-content: space-between; }
+  .chart h3 small { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .hbar { display: grid; grid-template-columns: minmax(120px, 42%) 1fr 54px; gap: 10px; align-items: center; padding: 4px 0; font-size: 12.5px; }
+  .hbar .n { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .hbar .t { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .hbar .f { height: 100%; background: var(--blue); border-radius: 999px; min-width: 3px; }
+  .hbar .f.cat-PRODUCT_BUG { background: var(--cat-product); }
+  .hbar .f.cat-ENVIRONMENT_ISSUE { background: var(--cat-env); }
+  .hbar .f.cat-FLAKY_TEST { background: var(--cat-flaky); }
+  .hbar .f.cat-INFRASTRUCTURE_FAILURE { background: var(--cat-infra); }
+  .hbar .f.cat-TEST_BUG { background: var(--cat-test); }
+  .hbar .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .cats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 14px; }
+  .cat {
+    border: 1px solid var(--ring);
+    border-left: 4px solid var(--axis);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .cat.cat-PRODUCT_BUG { border-left-color: var(--cat-product); }
+  .cat.cat-ENVIRONMENT_ISSUE { border-left-color: var(--cat-env); }
+  .cat.cat-FLAKY_TEST { border-left-color: var(--cat-flaky); }
+  .cat.cat-INFRASTRUCTURE_FAILURE { border-left-color: var(--cat-infra); }
+  .cat.cat-TEST_BUG { border-left-color: var(--cat-test); }
+  .cat .n { font-size: 12px; font-weight: 600; color: var(--ink-2); min-height: 32px; }
+  .cat .v { font-size: 22px; font-weight: 750; }
+  .cat .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .cat .ai { font-size: 11.5px; color: var(--blue-600); margin-top: 4px; font-weight: 500; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 650; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; background: var(--surface-2); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .wrap { overflow-x: auto; }
+
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; border: 1px solid transparent; }
+  .PASSED, .cert { background: #dcfce7; color: #166534; }
+  .FAILED, .NEW { background: #ffe4e6; color: #9f1239; }
+  .PERSISTENT { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+  .INCOMPLETE, .FLAKY, .devprof { background: #fef3c7; color: #92400e; }
+  .status { background: #fff; color: #1e3a8a; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--axis);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  .badge.cat-PRODUCT_BUG { background: var(--cat-product-bg); color: var(--cat-product-ink); border-color: var(--cat-product); }
+  .badge.cat-ENVIRONMENT_ISSUE { background: var(--cat-env-bg); color: var(--cat-env-ink); border-color: var(--cat-env); }
+  .badge.cat-FLAKY_TEST { background: var(--cat-flaky-bg); color: var(--cat-flaky-ink); border-color: var(--cat-flaky); }
+  .badge.cat-INFRASTRUCTURE_FAILURE { background: var(--cat-infra-bg); color: var(--cat-infra-ink); border-color: var(--cat-infra); }
+  .badge.cat-TEST_BUG { background: var(--cat-test-bg); color: var(--cat-test-ink); border-color: var(--cat-test); }
+  .badge.known { border-color: var(--blue); color: var(--blue-600); background: var(--blue-100); }
+  .badge.waived { border-color: var(--good); color: var(--good); }
+
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; word-break: break-word; }
+  .small { font-size: 12px; }
+  .reason { color: #b45309; font-size: 12px; margin-top: 3px; font-weight: 500; }
+  .red { color: var(--critical); font-weight: 700; }
+
+  /* Pure-CSS Filter Tabs */
+  .css-filters { margin: 14px 0 16px; }
+  .css-filters input[type="radio"] { display: none; }
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--ring);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+  .filter-bar span.lbl { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-right: 4px; }
+  .filter-bar label {
+    cursor: pointer;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    background: var(--surface-2);
+    color: var(--ink-2);
+    border: 1px solid var(--axis);
+    transition: all 0.15s ease;
+  }
+  .filter-bar label:hover { border-color: var(--blue); color: var(--ink); }
+  #tab-all:checked ~ .filter-bar label[for="tab-all"],
+  #tab-prod:checked ~ .filter-bar label[for="tab-prod"],
+  #tab-env:checked ~ .filter-bar label[for="tab-env"],
+  #tab-flaky:checked ~ .filter-bar label[for="tab-flaky"],
+  #tab-ai:checked ~ .filter-bar label[for="tab-ai"] {
+    background: var(--blue);
+    color: #fff;
+    border-color: var(--blue);
+  }
+  #tab-prod:checked ~ .group-list .group:not(.cat-PRODUCT_BUG),
+  #tab-env:checked ~ .group-list .group:not(.cat-ENVIRONMENT_ISSUE),
+  #tab-flaky:checked ~ .group-list .group:not(.cat-FLAKY_TEST),
+  #tab-ai:checked ~ .group-list .group:not(.has-ai) {
+    display: none;
+  }
+
+  /* Group Cards */
+  .group {
+    display: grid;
+    grid-template-columns: 135px 1fr;
+    gap: 20px;
+    margin-bottom: 14px;
+    border-left: 4px solid var(--axis);
+  }
+  .group.cat-PRODUCT_BUG { border-left-color: var(--cat-product); }
+  .group.cat-ENVIRONMENT_ISSUE { border-left-color: var(--cat-env); }
+  .group.cat-FLAKY_TEST { border-left-color: var(--cat-flaky); }
+  .group.cat-INFRASTRUCTURE_FAILURE { border-left-color: var(--cat-infra); }
+  .group.cat-TEST_BUG { border-left-color: var(--cat-test); }
+
+  .group-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding-right: 12px;
+    border-right: 1px solid var(--grid);
+  }
+  .group .rank-tag { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; margin-bottom: 4px; }
+  .group .count { font-size: 32px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .group .count small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 500; margin-top: 5px; }
+  .group .title { font-size: 14.5px; font-weight: 650; line-height: 1.4; color: var(--ink); }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+
+  .ai-box {
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .ai-box .h {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  }
+  .ai-box .h b { color: var(--ink); font-size: 13px; }
+  .meter { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12px; }
+  .meter .t { width: 84px; height: 8px; background: rgba(148, 163, 184, 0.25); border-radius: 99px; overflow: hidden; }
+  .meter .f { height: 100%; background: var(--blue); border-radius: 99px; }
+  .ai-box p { margin: 6px 0; line-height: 1.5; }
+  .ai-box .fix-callout {
+    background: var(--fix-bg);
+    border: 1px solid var(--fix-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 8px 0;
+  }
+  .ai-box .k-lbl { font-weight: 700; color: var(--ink); }
+
+  .refs { margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(148, 163, 184, 0.3); }
+  .refs details { margin: 6px 0; }
+  .refs summary { cursor: pointer; color: var(--blue-600); font-size: 12.5px; font-weight: 600; }
+  pre.code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-x: auto;
+  }
+  pre.code .ln { display: inline-block; width: 44px; color: var(--code-ln); text-align: right; margin-right: 14px; user-select: none; }
+
+  pre {
+    white-space: pre-wrap;
+    background: var(--stack-bg);
+    border: 1px solid var(--grid);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    margin: 6px 0;
+    max-height: 320px;
+    overflow: auto;
+  }
+  summary { cursor: pointer; color: var(--blue-600); font-size: 12.5px; font-weight: 600; margin-top: 8px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 28px; border-top: 1px solid var(--grid); margin-top: 32px; }
+  @media (max-width: 1100px) {
+    .charts { grid-template-columns: 1fr; }
+    .cats { grid-template-columns: repeat(2, 1fr); }
+    .group { grid-template-columns: 1fr; }
+    .group-left { border-right: none; border-bottom: 1px solid var(--grid); padding-bottom: 10px; flex-direction: row; align-items: center; gap: 14px; }
+  }
 </style>
 </head>
 <body>
 <header><main>
   <div>
     <h1>{{ plan.plan_name }}</h1>
-    <div class="sub">xTS Agent report &middot; {{ hours(plan.duration) }} h &middot; {{ plan.device_serials|length }} device(s)</div>
+    <div class="sub">xTS Agent Executive &amp; AI Triage Report &middot; {{ hours(plan.duration) }} h &middot; {{ plan.device_serials|length }} device(s){% if triage and triage.fingerprint %} &middot; <span class="mono">{{ triage.fingerprint }}</span>{% endif %}</div>
   </div>
-  <div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <span class="pill status">{{ plan.overall_status }}</span>
     {% if plan.profile == 'certification' %}
     <span class="pill cert">Certification profile</span>
@@ -56,10 +390,33 @@ footer{color:#9ca3af;font-size:12px;text-align:center;padding:24px}
 
 <main>
   <div class="cards">
-    <div class="card pass"><div class="k">Passed</div><div class="v">{{ plan.total_pass }}</div></div>
-    <div class="card fail"><div class="k">Failed</div><div class="v">{{ plan.total_fail }}</div></div>
-    <div class="card"><div class="k">Skipped</div><div class="v">{{ plan.total_skip }}</div></div>
-    <div class="card dev" title="passed / (passed + failed), as on the trends dashboard"><div class="k">Pass rate</div><div class="v">{{ ((plan.total_pass * 100.0 / executed) if executed else 0)|round(2) }}%</div></div>
+    <div class="card pass">
+      <div class="k">Passed</div>
+      <div class="v good">{{ plan.total_pass }}</div>
+      <div class="kpi-sub">{{ pct(plan.total_pass) }}% of total tests</div>
+    </div>
+    <div class="card fail">
+      <div class="k">Failed</div>
+      <div class="v bad">{{ plan.total_fail }}</div>
+      <div class="kpi-sub">{% if triage %}{{ triage.summary.groups }} distinct root-cause groups{% else %}{{ pct(plan.total_fail) }}% of total tests{% endif %}</div>
+    </div>
+    <div class="card">
+      <div class="k">Skipped</div>
+      <div class="v">{{ plan.total_skip }}</div>
+      <div class="kpi-sub">wall time {{ hours(plan.duration) }} h</div>
+    </div>
+    <div class="card dev" title="passed / (passed + failed), as on the trends dashboard">
+      <div class="k">Pass rate</div>
+      <div class="v">{{ ((plan.total_pass * 100.0 / executed) if executed else 0)|round(2) }}%</div>
+      <div class="kpi-sub">{{ executed }} executed tests</div>
+    </div>
+    {% if triage_ctx %}
+    <div class="card triage-kpi">
+      <div class="k">Triage compression</div>
+      <div class="v">{{ triage_ctx.reduction }}&times;</div>
+      <div class="kpi-sub">{{ triage_ctx.failures }} failures &rarr; {{ triage_ctx.n_groups }} groups ({{ triage_ctx.ai_groups }} AI analyzed)</div>
+    </div>
+    {% endif %}
   </div>
 
   <div class="card">
@@ -71,14 +428,14 @@ footer{color:#9ca3af;font-size:12px;text-align:center;padding:24px}
       {% endif %}
     </div>
     <div class="legend">
-      <span><i class="dot b-pass"></i>Passed {{ pct(plan.total_pass) }}%</span>
-      <span><i class="dot b-fail"></i>Failed {{ pct(plan.total_fail) }}%</span>
-      <span><i class="dot b-skip"></i>Skipped {{ pct(plan.total_skip) }}%</span>
+      <span><i class="dot b-pass"></i>Passed {{ pct(plan.total_pass) }}% ({{ plan.total_pass }})</span>
+      <span><i class="dot b-fail"></i>Failed {{ pct(plan.total_fail) }}% ({{ plan.total_fail }})</span>
+      <span><i class="dot b-skip"></i>Skipped {{ pct(plan.total_skip) }}% ({{ plan.total_skip }})</span>
     </div>
   </div>
 
   <h2>Suites</h2>
-  <div class="card wrap">
+  <div class="card wrap" style="padding: 0; overflow: hidden;">
     <table>
       <tr><th>Suite</th><th>Status</th><th class="n">Pass</th><th class="n">Fail</th><th class="n">Skip</th>
           <th class="n">Hours</th><th class="n">Retries</th><th>Devices</th></tr>
@@ -99,47 +456,165 @@ footer{color:#9ca3af;font-size:12px;text-align:center;padding:24px}
   </div>
 
   {% if triage %}
-  <h2>Failure triage</h2>
-  <div class="card">
-    <p class="muted small">
-      {{ triage.summary.failures }} failures in {{ triage.summary.groups }} root-cause groups &middot;
-      {{ triage.summary.actionable_groups }} actionable &middot;
-      {{ triage.summary.known_groups }} known ({{ triage.summary.waived_groups }} waived)
-      {% for label, n in triage.summary.by_label.items() %} &middot; {{ label }}: {{ n }}{% endfor %}
-    </p>
-    <div class="wrap">
-      <table>
-        <tr><th class="n">Tests</th><th>History</th><th>Root cause</th><th>Owner</th><th>Status</th></tr>
-        {% for g in triage.groups[:100] %}
-        <tr>
-          <td class="n"><b>{{ g.count }}</b></td>
-          <td><span class="pill {{ g.label }}">{{ g.label }}</span>
-              {% if g.last_pass_build %}<div class="muted small" title="{{ g.last_pass_build }}">last pass: {{ g.last_pass_build.split('/')[-2] if g.last_pass_build.count('/') > 1 else g.last_pass_build }}</div>{% endif %}</td>
-          <td>
-            <div class="mono">{{ g.title }}</div>
-            <div class="muted small">{{ g.classification }} &middot; {{ g.modules[:4]|join(', ') }}{% if g.modules|length > 4 %} +{{ g.modules|length - 4 }}{% endif %} &middot; sig {{ g.signature }}</div>
-            <details><summary>tests &amp; stack</summary>
+  <h2>Failure triage &amp; AI root-cause analysis <small>{{ triage.summary.failures }} failures in {{ triage.summary.groups }} root-cause groups &middot; {{ triage.summary.actionable_groups }} actionable &middot; {{ triage.summary.known_groups }} known ({{ triage.summary.waived_groups }} waived)</small></h2>
+
+  {% if triage_ctx %}
+  <section class="charts">
+    <div class="card chart" style="margin:0">
+      <h3>Failing tests by category <small>rules + known issues + AI promotion</small></h3>
+      {% for b in triage_ctx.class_bars %}
+      <div class="hbar">
+        <div class="n">{{ b.label }}</div>
+        <div class="t"><div class="f cat-{{ b.code or 'UNKNOWN' }}" style="width: {{ b.pct }}%"></div></div>
+        <div class="val">{{ b.value }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card chart" style="margin:0">
+      <h3>Failing tests by owning team <small>from config/ownership.yaml</small></h3>
+      {% for b in triage_ctx.team_bars %}
+      <div class="hbar">
+        <div class="n">{{ b.label }}</div>
+        <div class="t"><div class="f" style="width: {{ b.pct }}%"></div></div>
+        <div class="val">{{ b.value }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card chart" style="margin:0">
+      <h3>History &amp; stability <small>across builds</small></h3>
+      {% for b in triage_ctx.label_bars %}
+      <div class="hbar">
+        <div class="n"><span class="pill {{ b.label }}">{{ b.label }}</span></div>
+        <div class="t"><div class="f" style="width: {{ b.pct }}%"></div></div>
+        <div class="val">{{ b.value }}</div>
+      </div>
+      {% endfor %}
+      <div class="muted small" style="margin-top:10px">Top 10 groups account for <b>{{ triage_ctx.top10_pct }}%</b> ({{ triage_ctx.top10 }} tests) of all failures.</div>
+    </div>
+  </section>
+
+  <section class="cats">
+    {% for c in triage_ctx.categories %}
+    <div class="cat cat-{{ c.code }}">
+      <div class="n">{{ c.label }}</div>
+      <div class="v">{{ c.groups }} <small>groups &middot; {{ c.failures }} tests</small></div>
+      {% if triage_ctx.ai_groups %}<div class="ai">AI suggests this for {{ c.ai_groups }} of {{ triage_ctx.ai_groups }} analysed</div>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <div class="css-filters">
+    <input type="radio" name="cat-tab" id="tab-all" checked>
+    <input type="radio" name="cat-tab" id="tab-prod">
+    <input type="radio" name="cat-tab" id="tab-env">
+    <input type="radio" name="cat-tab" id="tab-flaky">
+    <input type="radio" name="cat-tab" id="tab-ai">
+    <div class="filter-bar">
+      <span class="lbl">Filter top root-cause cards:</span>
+      <label for="tab-all">All Top Groups ({{ triage.groups[:25]|length }})</label>
+      <label for="tab-prod">Product Bugs</label>
+      <label for="tab-env">Environment Issues</label>
+      <label for="tab-flaky">Flaky Tests</label>
+      <label for="tab-ai">With AI Root Cause</label>
+    </div>
+
+    <div class="group-list" style="margin-top: 14px;">
+      {% for g in triage.groups[:25] %}
+      <article class="card group cat-{{ g.classification }}{% if g.ai %} has-ai{% endif %}">
+        <div class="group-left">
+          <div class="rank-tag">GROUP #{{ g.index or loop.index }}</div>
+          <div class="count">{{ g.count }}<small>failing tests{% if g.share is defined %} &middot; {{ g.share }}%{% endif %}</small></div>
+          <div style="margin-top:10px"><span class="pill {{ g.label }}">{{ g.label }}</span></div>
+          {% if g.last_pass_build %}<div class="muted small" style="margin-top:6px" title="{{ g.last_pass_build }}">last pass: {{ g.last_pass_build.split('/')[-2] if g.last_pass_build.count('/') > 1 else g.last_pass_build }}</div>{% endif %}
+        </div>
+        <div>
+          <div class="title mono">#{{ g.index or loop.index }} &middot; {{ g.title }}</div>
+          <div class="meta">
+            <span class="badge cat-{{ g.classification }}">{{ g.category_label or g.classification }}</span>
+            <span><b>{{ g.owner.team }}</b>{% if g.owner.jira_component %} &middot; {{ g.owner.jira_component }}{% endif %}</span>
+            <span>{{ g.modules[:4]|join(', ') }}{% if g.modules|length > 4 %} +{{ g.modules|length - 4 }} modules{% endif %}</span>
+            {% if g.known_issue %}<span class="badge known">{{ g.known_issue.id }} &middot; {{ g.known_issue.title }}</span>{% if g.known_issue.waived %}<span class="badge waived">waived</span>{% endif %}{% endif %}
+            {% if g.jira_key %}<span class="badge">{{ g.jira_key }}</span>{% elif g.actionable %}<span class="red small">needs triage</span>{% endif %}
+            <span class="muted mono small">sig {{ g.signature }}</span>
+          </div>
+
+          {% if g.ai %}
+          <div class="ai-box">
+            <div class="h">
+              <b>&#10024; AI Root Cause Analysis</b>
+              <span class="badge cat-{{ g.ai.get('classification', g.classification) }}">{{ g.ai_category_label or g.ai.get('classification', '') }}</span>
+              {% if g.confidence_pct is defined %}
+              <span class="meter"><span class="t"><span class="f" style="width: {{ g.confidence_pct }}%"></span></span>{{ g.confidence_pct }}% confidence</span>
+              {% endif %}
+              <span class="muted mono small">{{ g.ai.get('model', '') }}</span>
+            </div>
+            <p>{{ g.ai.get('root_cause', '') }}</p>
+            {% if g.ai.get('suggested_fix') %}<div class="fix-callout"><span class="k-lbl">Suggested fix:</span> {{ g.ai.get('suggested_fix') }}</div>{% endif %}
+            {% if g.ai.get('evidence') %}<p><span class="k-lbl">Evidence:</span> {{ g.ai.get('evidence') }}</p>{% endif %}
+            {% if g.snippets or g.ai.get('code_refs') %}
+            <div class="refs">
+              <span class="k-lbl small">Grounded AOSP / OEM Source References:</span>
+              {% for s in g.snippets or [] %}
+              <details{% if loop.first %} open{% endif %}>
+                <summary><code>{{ s.short }}</code> line {{ s.start }}</summary>
+                <pre class="code">{% for n, text in s.lines %}<span class="ln">{{ n }}</span>{{ text }}
+{% endfor %}</pre>
+              </details>
+              {% endfor %}
+              {% if not g.snippets %}{% for r in g.ai.get('code_refs') or [] %}<div class="mono small">{{ r }}</div>{% endfor %}{% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <details>
+            <summary>{{ g.tests|length }}{% if g.tests_truncated %}+{% endif %} failing tests &amp; sample stack trace</summary>
 <pre>{{ g.tests|join('\n') }}{% if g.tests_truncated %}
 ... and {{ g.tests_truncated }} more{% endif %}
 
 {{ g.sample_stack }}</pre>
-              {% if g.ai %}<pre class="ai">AI ({{ g.ai.get('confidence', '') }}): {{ g.ai.get('root_cause', '') }}
-{{ g.ai.get('suggested_fix', '') }}</pre>{% endif %}
-            </details>
-          </td>
-          <td>{{ g.owner.team }}{% if g.owner.jira_component %}<div class="muted small">{{ g.owner.jira_component }}</div>{% endif %}</td>
-          <td class="small">
-            {% if g.known_issue %}{{ g.known_issue.id }}{% if g.known_issue.waived %} (waived){% elif g.known_issue.waiver_expired %} (waiver expired){% endif %}<br>{% endif %}
-            {% if g.jira_key %}<b>{{ g.jira_key }}</b>{% if g.jira_action %} ({{ g.jira_action }}){% endif %}{% elif g.actionable %}<span class="red">needs triage</span>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </table>
-      {% if triage.groups|length > 100 %}<p class="muted small">Showing 100 of {{ triage.groups|length }} groups; see the triage JSON for all.</p>{% endif %}
+          </details>
+        </div>
+      </article>
+      {% endfor %}
     </div>
   </div>
+
+  {% if triage.groups|length > 25 %}
+  <h2>Additional root-cause groups <small>groups #26 &ndash; #{{ [triage.groups|length, 100]|min }} of {{ triage.groups|length }}</small></h2>
+  <div class="card wrap" style="padding: 0; overflow: hidden;">
+    <table>
+      <tr><th class="n">#</th><th class="n">Tests</th><th>History</th><th>Category</th><th>Root cause</th><th>Owner</th><th>Status</th></tr>
+      {% for g in triage.groups[25:100] %}
+      <tr>
+        <td class="n muted">{{ loop.index + 25 }}</td>
+        <td class="n"><b>{{ g.count }}</b></td>
+        <td><span class="pill {{ g.label }}">{{ g.label }}</span></td>
+        <td><span class="badge cat-{{ g.classification }}">{{ g.classification }}</span></td>
+        <td>
+          <div class="mono">{{ g.title }}</div>
+          <div class="muted small">{{ g.modules[:4]|join(', ') }}{% if g.modules|length > 4 %} +{{ g.modules|length - 4 }}{% endif %} &middot; sig {{ g.signature }}</div>
+          <details><summary>tests &amp; stack</summary>
+<pre>{{ g.tests|join('\n') }}{% if g.tests_truncated %}
+... and {{ g.tests_truncated }} more{% endif %}
+
+{{ g.sample_stack }}</pre>
+          </details>
+        </td>
+        <td>{{ g.owner.team }}{% if g.owner.jira_component %}<div class="muted small">{{ g.owner.jira_component }}</div>{% endif %}</td>
+        <td class="small">
+          {% if g.known_issue %}{{ g.known_issue.id }}{% if g.known_issue.waived %} (waived){% elif g.known_issue.waiver_expired %} (waiver expired){% endif %}<br>{% endif %}
+          {% if g.jira_key %}<b>{{ g.jira_key }}</b>{% elif g.actionable %}<span class="red">needs triage</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if triage.groups|length > 100 %}<p class="muted small" style="padding: 8px 12px;">Showing 100 of {{ triage.groups|length }} groups; see the companion triage dashboard or JSON for all.</p>{% endif %}
+  </div>
+  {% endif %}
   {% endif %}
 </main>
-<footer>Generated by xTS Agent</footer>
+<footer>Generated by xTS Agent &middot; Self-contained offline HTML report</footer>
 </body>
 </html>

@@ -41,6 +41,18 @@ class StorageBackendTests(unittest.TestCase):
             backends.append(pg)
         return backends
 
+    def test_sqlite_url_prefixes_resolve_to_the_same_path(self):
+        import tempfile
+
+        from xts_agent.storage.db import Database
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "h.db")
+            # sqlite:///<abs path> keeps the leading slash (sqlite:////tmp/h.db)
+            for url in (path, f"sqlite:{path}", f"sqlite:///{path}"):
+                self.assertEqual(Database(url).url, path, url)
+            self.assertEqual(repr(Database(f"sqlite:{path}")), f"Database(sqlite:{path})")
+
     def test_history_store_and_cache_on_each_backend(self):
         from xts_agent.results.result_store import ResultStore
         from xts_agent.triage.ai_rca import _Cache

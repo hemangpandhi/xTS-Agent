@@ -14,7 +14,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,17 @@ class OEMCodeIndexer:
         os.makedirs(self.db_path, exist_ok=True)
         # No usage telemetry from an on-prem OEM host
         client = chromadb.PersistentClient(path=self.db_path, settings=Settings(anonymized_telemetry=False))
-        emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=self.embedding_model)
+        # Any: chromadb resolves embedding functions lazily, so its stubs do not list them
+        ef: Any = embedding_functions
+        device = "cpu"
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                device = "cuda"
+        except ImportError:
+            pass
+        emb_fn = ef.SentenceTransformerEmbeddingFunction(model_name=self.embedding_model, device=device)
         self.collection = client.get_or_create_collection(name="oem_source_code", embedding_function=emb_fn)
 
     @staticmethod
@@ -117,17 +127,52 @@ class OEMCodeIndexer:
         logger.info("Indexing complete: %s chunks", total)
         return total
 
-    def search(self, query: str, top_k: int = 3) -> str:
-        """Relevant OEM code for a failure, or "" when nothing is indexed."""
+    def search_chunks(self, query: str, top_k: int = 3, contains: str = "") -> List[Dict[str, Any]]:
+        """Best-matching source chunks: [{file, start_line, text}], [] when nothing is indexed.
+
+        ``contains`` restricts candidates to chunks whose text contains that
+        string (e.g. the method named in a stack frame) before ranking them by
+        similarity, so the frame's own code is found and not just code that
+        reads alike.
+        """
         try:
             self._lazy_init()
             if self.collection.count() == 0:
-                return ""
-            results = self.collection.query(query_texts=[query], n_results=top_k)
+                return []
+            kwargs: Dict[str, Any] = {"query_texts": [query], "n_results": top_k}
+            if contains:
+                kwargs["where_document"] = {"$contains": contains}
+            results = self.collection.query(**kwargs)
         except Exception as e:
             logger.warning("Code search unavailable: %s", e)
-            return ""
-        context = []
-        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-            context.append(f"--- File: {meta['file']} (line {meta['start_line']}) ---\n{doc}\n")
-        return "\n".join(context)
+            return []
+        return [
+            {"file": meta["file"], "start_line": meta["start_line"], "text": doc}
+            for doc, meta in zip(results["documents"][0], results["metadatas"][0])
+        ]
+
+    def search(self, query: str, top_k: int = 3) -> str:
+        """Relevant OEM code for a failure, or "" when nothing is indexed."""
+        return format_chunks(self.search_chunks(query, top_k))
+
+    def unload(self) -> None:
+        """Release embedding model and PyTorch CUDA cache when idle."""
+        if self.collection is None:
+            return
+        self.collection = None
+        try:
+            import gc
+
+            import torch
+
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+
+
+def format_chunks(chunks: List[Dict[str, Any]]) -> str:
+    return "\n".join(
+        f"--- File: {c['file']} (line {c['start_line']}) ---\n{c['text']}\n" for c in chunks
+    )

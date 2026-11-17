@@ -108,6 +108,8 @@ class RCAEngine:
                 )
             )
 
+        self._correlate_run_contamination(failed, report.failures)
+
         for failure in report.failures:
             key = failure.classification.name
             report.summary[key] = report.summary.get(key, 0) + 1
@@ -121,6 +123,111 @@ class RCAEngine:
             )
 
         return report
+
+    _FOCUS_HIJACK_SIGNALS = (
+        "was focused instead",
+        "must have window focus",
+        "timed out waiting for window to be on top",
+        "does not have focus",
+        "timed out waiting for activity",
+    )
+    _NETWORK_OUTAGE_SIGNALS = (
+        "unknownhostexception",
+        "no valid test network",
+        "not connected to wifi",
+        "wi-fi network unavailable",
+        "network is unreachable",
+        "make sure you have wifi",
+    )
+    _STRUCTURAL_BUG_EXCLUSIONS = (
+        "hiddenapi",
+        "signature.cts",
+        "systemfeaturestest",
+        "keyattestation",
+        "listeningports",
+        "installsourceinfo",
+        "carrotaryime",
+        "appstartstats",
+        "process crashed",
+        "native crash",
+        "sigsegv",
+        "fatal exception",
+    )
+    _UI_FOCUS_SUBSYSTEMS = (
+        "uiautomator",
+        "uiobject2",
+        "uidump",
+        "inputmethod",
+        "mockime",
+        "server.wm.",
+        "windowmanager",
+        "backnavigation",
+        "clipboard",
+        "clipdescription",
+        "providerui",
+        "mediastoreuitest",
+        "permissionui",
+        "suspendapps",
+        "suspendpackagetest",
+        "sensorprivacy",
+        "doescalation",
+        "actionbartest",
+        "searchmanagertest",
+        "activitylaunchuripermission",
+        "hibernation",
+        "surfacecontrol",
+    )
+    _NETWORK_SUBSYSTEMS = (
+        "wifi",
+        "networklogging",
+        "privatedns",
+        "metereddata",
+        "connectivity",
+    )
+
+    @classmethod
+    def _correlate_run_contamination(
+        cls, failed: List[Any], analyses: List[FailureAnalysis]
+    ) -> None:
+        """Correlate unmatched UI/focus or network victims when a run has a systemic outage."""
+        if not failed or len(failed) != len(analyses):
+            return
+        texts = [
+            f"{tc.test_id}\n{tc.message or ''}\n{tc.stack_trace or ''}".lower()
+            for tc in failed
+        ]
+        focus_hijacks = sum(
+            1 for t in texts if any(sig in t for sig in cls._FOCUS_HIJACK_SIGNALS)
+        )
+        network_outages = sum(
+            1 for t in texts if any(sig in t for sig in cls._NETWORK_OUTAGE_SIGNALS)
+        )
+        if focus_hijacks < 10 and network_outages < 5:
+            return
+
+        for text, fa in zip(texts, analyses):
+            if fa.classification != FailureType.PRODUCT_BUG or fa.confidence > 0.4:
+                continue
+            if any(ex in text for ex in cls._STRUCTURAL_BUG_EXCLUSIONS):
+                continue
+            if focus_hijacks >= 10 and any(sub in text for sub in cls._UI_FOCUS_SUBSYSTEMS):
+                fa.classification = FailureType.ENVIRONMENT_ISSUE
+                fa.confidence = 0.75
+                fa.root_cause = (
+                    "Cascading UI/window-focus failure correlated with run-wide foreground window hijack"
+                )
+                fa.suggested_action = (
+                    "Dismiss or fix the interfering foreground window holding focus in this run and re-test"
+                )
+            elif network_outages >= 5 and any(sub in text for sub in cls._NETWORK_SUBSYSTEMS):
+                fa.classification = FailureType.ENVIRONMENT_ISSUE
+                fa.confidence = 0.75
+                fa.root_cause = (
+                    "Cascading connectivity failure correlated with run-wide Wi-Fi/network outage"
+                )
+                fa.suggested_action = (
+                    "Verify active Wi-Fi/internet connectivity on the device and re-test"
+                )
 
     def analyze_plan_results(self, plan_result: Any) -> RCAReport:
         """Aggregate RCA across all suite details in a PlanResult."""

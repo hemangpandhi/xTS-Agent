@@ -1,0 +1,61 @@
+name: "OEM code fix loop"
+description: >-
+  xts-agent fix-loop against an OEM build: root-cause CTS failures in OEM code
+  (CarSettings, CarSystemUI, CarLauncher, device overlays), patch the source,
+  build, flash the DUT and re-run until the tests pass.
+profile: development
+devices:
+  min_devices: 1
+suites:
+  - name: "cts"
+    priority: 100
+    plan: "cts"
+    enabled: true
+
+fix_loop:
+  max_iterations: 6
+  # Local LLM on this host's GPU (vLLM, Qwen3.8-27B-FP8 served as "coder"); nothing leaves the lab
+  llm_base_url: "http://127.0.0.1:8011/v1"
+  llm_model: "coder"
+  llm_fallbacks:
+    - base_url: "http://127.0.0.1:11434/v1"
+      model: "qwen3-coder-64k:latest"
+  # The OEM DUT runs in its own Cuttlefish group (instance 9, adb 0.0.0.0:6528)
+  restart_command: "env HOME=/tmp/cvd_oem_home /mnt/aosp-17-master/out/host/linux-x86/bin/restart_cvd -instance_num={cvd_instance} -boot_timeout=600"
+  oem_sources:
+    - name: CarSettings
+      kind: local
+      path: "/mnt/aosp-17-master/packages/apps/Car/Settings"
+      packages: ["com.android.car.settings"]
+      editable: true
+      build_targets: ["CarSettings"]
+    - name: CarSystemUI
+      kind: local
+      path: "/mnt/aosp-17-master/packages/apps/Car/SystemUI"
+      packages: ["com.android.systemui"]
+      editable: true
+      build_targets: ["CarSystemUI"]
+    - name: CarLauncher
+      kind: local
+      path: "/mnt/aosp-17-master/packages/apps/Car/Launcher"
+      packages: ["com.android.car.carlauncher"]
+      editable: true
+      build_targets: ["CarLauncher"]
+    # Device config this product builds with: framework-res overlays, makefiles
+    - name: CuttlefishAutoDevice
+      kind: local
+      path: "/mnt/aosp-17-master/device/google/cuttlefish/shared/auto"
+      packages: ["com.android.car.dialer", "android.app.role"]
+      editable: true
+      build_targets: ["framework-res"]
+    # Read-only reference: AOSP defaults that the OEM overlays override
+    - name: AospFrameworkRes
+      kind: local
+      path: "/mnt/aosp-17-master/frameworks/base/core/res/res/values"
+  code_fix:
+    enabled: true
+    build_command: "scripts/aosp_build.sh {modules}"
+    deploy_command: "env CVD_HOME=/tmp/cvd_oem_home BASE_INSTANCE={cvd_instance} scripts/cf_flash.sh {serial}"
+    workdir: "."
+    max_attempts: 4                     # a patch rejected by self-review (no build) counts too
+    restore_on_failure: true

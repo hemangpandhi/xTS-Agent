@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xTS triage · {{ plan_name }}</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --muted: #64748b;
+    --grid: #e2e8f0;
+    --axis: #cbd5e1;
+    --ring: rgba(15, 23, 42, 0.08);
+    --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07);
+    --blue: #2563eb;
+    --blue-200: #93c5fd;
+    --blue-100: #dbeafe;
+    --blue-600: #1d4ed8;
+    --gray-mark: #94a3b8;
+    --good: #16a34a;
+    --warning: #d97706;
+    --serious: #ea580c;
+    --critical: #e11d48;
+    --ai-bg: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%);
+    --ai-border: #bfdbfe;
+    --fix-bg: #f0fdf4;
+    --fix-border: #bbf7d0;
+    --code-bg: #0f172a;
+    --code-ink: #e2e8f0;
+    --code-ln: #64748b;
+    --code-hl: rgba(56, 189, 248, 0.16);
+    --stack-bg: #f8fafc;
+
+    /* Semantic Category Colors */
+    --cat-product: #e11d48;
+    --cat-product-bg: #ffe4e6;
+    --cat-product-ink: #9f1239;
+    --cat-env: #d97706;
+    --cat-env-bg: #fef3c7;
+    --cat-env-ink: #92400e;
+    --cat-flaky: #7c3aed;
+    --cat-flaky-bg: #ede9fe;
+    --cat-flaky-ink: #5b21b6;
+    --cat-infra: #0284c7;
+    --cat-infra-bg: #e0f2fe;
+    --cat-infra-ink: #075985;
+    --cat-test: #0d9488;
+    --cat-test-bg: #ccfbf1;
+    --cat-test-ink: #115e59;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0b0f19;
+      --surface: #111827;
+      --surface-2: #1e293b;
+      --ink: #f1f5f9;
+      --ink-2: #cbd5e1;
+      --muted: #94a3b8;
+      --grid: #1e293b;
+      --axis: #334155;
+      --ring: rgba(255, 255, 255, 0.09);
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+      --blue: #3b82f6;
+      --blue-200: #1d4ed8;
+      --blue-100: #1e3a8a;
+      --blue-600: #60a5fa;
+      --gray-mark: #475569;
+      --ai-bg: linear-gradient(135deg, rgba(30, 58, 138, 0.32) 0%, rgba(76, 29, 149, 0.24) 100%);
+      --ai-border: rgba(96, 165, 250, 0.3);
+      --fix-bg: rgba(20, 83, 45, 0.28);
+      --fix-border: rgba(74, 222, 128, 0.3);
+      --code-bg: #090d16;
+      --code-ink: #e2e8f0;
+      --code-ln: #64748b;
+      --code-hl: rgba(56, 189, 248, 0.2);
+      --stack-bg: #0f172a;
+
+      --cat-product: #fb7185;
+      --cat-product-bg: rgba(225, 29, 72, 0.2);
+      --cat-product-ink: #fda4af;
+      --cat-env: #fbbf24;
+      --cat-env-bg: rgba(217, 119, 6, 0.2);
+      --cat-env-ink: #fde68a;
+      --cat-flaky: #a78bfa;
+      --cat-flaky-bg: rgba(124, 58, 237, 0.22);
+      --cat-flaky-ink: #ddd6fe;
+      --cat-infra: #38bdf8;
+      --cat-infra-bg: rgba(2, 132, 199, 0.2);
+      --cat-infra-ink: #bae6fd;
+      --cat-test: #2dd4bf;
+      --cat-test-bg: rgba(13, 148, 136, 0.2);
+      --cat-test-ink: #99f6e4;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0b0f19;
+    --surface: #111827;
+    --surface-2: #1e293b;
+    --ink: #f1f5f9;
+    --ink-2: #cbd5e1;
+    --muted: #94a3b8;
+    --grid: #1e293b;
+    --axis: #334155;
+    --ring: rgba(255, 255, 255, 0.09);
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+    --blue: #3b82f6;
+    --blue-200: #1d4ed8;
+    --blue-100: #1e3a8a;
+    --blue-600: #60a5fa;
+    --gray-mark: #475569;
+    --ai-bg: linear-gradient(135deg, rgba(30, 58, 138, 0.32) 0%, rgba(76, 29, 149, 0.24) 100%);
+    --ai-border: rgba(96, 165, 250, 0.3);
+    --fix-bg: rgba(20, 83, 45, 0.28);
+    --fix-border: rgba(74, 222, 128, 0.3);
+    --code-bg: #090d16;
+    --code-ink: #e2e8f0;
+    --code-ln: #64748b;
+    --code-hl: rgba(56, 189, 248, 0.2);
+    --stack-bg: #0f172a;
+
+    --cat-product: #fb7185;
+    --cat-product-bg: rgba(225, 29, 72, 0.2);
+    --cat-product-ink: #fda4af;
+    --cat-env: #fbbf24;
+    --cat-env-bg: rgba(217, 119, 6, 0.2);
+    --cat-env-ink: #fde68a;
+    --cat-flaky: #a78bfa;
+    --cat-flaky-bg: rgba(124, 58, 237, 0.22);
+    --cat-flaky-ink: #ddd6fe;
+    --cat-infra: #38bdf8;
+    --cat-infra-bg: rgba(2, 132, 199, 0.2);
+    --cat-infra-ink: #bae6fd;
+    --cat-test: #2dd4bf;
+    --cat-test-bg: rgba(13, 148, 136, 0.2);
+    --cat-test-ink: #99f6e4;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+  /* Hero Header */
+  header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #1e3a8a 100%);
+    color: #fff;
+    padding: 26px 36px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.18);
+  }
+  .header-inner {
+    max-width: 1520px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  header h1 .brand-pill {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: rgba(59, 130, 246, 0.28);
+    border: 1px solid rgba(147, 197, 253, 0.4);
+    color: #dbeafe;
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+  header .sub { color: #cbd5e1; margin-top: 6px; font-size: 13.5px; }
+  header .sub b { color: #fff; }
+  header .fp-chip {
+    display: inline-block;
+    margin-top: 8px;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: #93c5fd;
+  }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .btn-ghost {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font: 500 12.5px system-ui, sans-serif;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-ghost:hover { background: rgba(255, 255, 255, 0.18); }
+
+  main { max-width: 1520px; margin: 0 auto; padding: 26px 36px 72px; }
+  h2 {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 32px 0 14px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  h2 small { color: var(--muted); font-weight: 400; font-size: 13px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--ring);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+
+  /* KPI Row */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+    gap: 14px;
+  }
+  .kpi {
+    position: relative;
+    overflow: hidden;
+    border-top: 3px solid var(--blue);
+  }
+  .kpi .v.good { color: var(--good); }
+  .kpi .v.bad { color: var(--critical); }
+  .kpi .l {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .kpi .v {
+    font-size: 32px;
+    font-weight: 750;
+    line-height: 1.15;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi .d { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; }
+  .kpi.hero {
+    grid-column: span 2;
+    border-top-color: #3b82f6;
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 14px;
+  }
+  .kpi.hero .arrow {
+    font-size: 24px;
+    color: var(--blue);
+    background: var(--blue-100);
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+  .kpi.hero .v { font-size: 38px; }
+
+  /* Charts */
+  .charts { display: grid; grid-template-columns: 1.15fr 1.05fr 0.9fr; gap: 14px; }
+  .chart h3 {
+    margin: 0 0 14px;
+    font-size: 13.5px;
+    font-weight: 650;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .chart h3 small { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .bar {
+    display: grid;
+    grid-template-columns: minmax(130px, 42%) 1fr 56px;
+    gap: 10px;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12.5px;
+  }
+  .bar .n { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .bar .t { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; position: relative; }
+  .bar .f { height: 100%; background: var(--blue); border-radius: 999px; min-width: 3px; transition: width 0.25s ease; }
+  .bar.other .f { background: var(--gray-mark); }
+  .bar .f.cat-PRODUCT_BUG { background: var(--cat-product); }
+  .bar .f.cat-ENVIRONMENT_ISSUE { background: var(--cat-env); }
+  .bar .f.cat-FLAKY_TEST { background: var(--cat-flaky); }
+  .bar .f.cat-INFRASTRUCTURE_FAILURE { background: var(--cat-infra); }
+  .bar .f.cat-TEST_BUG { background: var(--cat-test); }
+  .bar .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+
+  /* Interactive Category Cards */
+  .cats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 14px; }
+  .cat {
+    border: 1px solid var(--ring);
+    border-left: 4px solid var(--axis);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+    user-select: none;
+  }
+  .cat:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .cat.active { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .cat.cat-PRODUCT_BUG { border-left-color: var(--cat-product); }
+  .cat.cat-ENVIRONMENT_ISSUE { border-left-color: var(--cat-env); }
+  .cat.cat-FLAKY_TEST { border-left-color: var(--cat-flaky); }
+  .cat.cat-INFRASTRUCTURE_FAILURE { border-left-color: var(--cat-infra); }
+  .cat.cat-TEST_BUG { border-left-color: var(--cat-test); }
+  .cat .n { font-size: 12px; font-weight: 600; color: var(--ink-2); min-height: 32px; }
+  .cat .v { font-size: 24px; font-weight: 750; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .cat .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .cat .ai { font-size: 11.5px; color: var(--blue-600); margin-top: 4px; font-weight: 500; }
+
+  /* Filter Toolbar */
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: center;
+    margin: 14px 0 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--ring);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .filters label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+  .filters select, .filters input[type="search"] {
+    font: inherit;
+    padding: 6px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--axis);
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .filters input[type="search"] { min-width: 260px; flex: 1; max-width: 380px; }
+  .filters .btn-sm {
+    font: 500 12px system-ui, sans-serif;
+    padding: 6px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--axis);
+    background: var(--surface-2);
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .filters .btn-sm:hover { background: var(--grid); color: var(--ink); }
+  #f-count { margin-left: auto; font-weight: 600; color: var(--muted); }
+
+  /* Group Cards */
+  .group {
+    display: grid;
+    grid-template-columns: 135px 1fr;
+    gap: 20px;
+    margin-bottom: 14px;
+    border-left: 4px solid var(--axis);
+    transition: box-shadow 0.15s ease;
+  }
+  .group:hover { box-shadow: var(--shadow-md); }
+  .group.cat-PRODUCT_BUG { border-left-color: var(--cat-product); }
+  .group.cat-ENVIRONMENT_ISSUE { border-left-color: var(--cat-env); }
+  .group.cat-FLAKY_TEST { border-left-color: var(--cat-flaky); }
+  .group.cat-INFRASTRUCTURE_FAILURE { border-left-color: var(--cat-infra); }
+  .group.cat-TEST_BUG { border-left-color: var(--cat-test); }
+
+  .group-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding-right: 12px;
+    border-right: 1px solid var(--grid);
+  }
+  .group .rank-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .group .count { font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .group .count small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 500; margin-top: 5px; }
+  .share-bar { width: 100%; height: 5px; background: var(--grid); border-radius: 99px; margin-top: 8px; overflow: hidden; }
+  .share-bar > span { display: block; height: 100%; background: var(--blue); border-radius: 99px; }
+
+  .group .title {
+    font-size: 14.5px;
+    font-weight: 650;
+    line-height: 1.4;
+    word-break: break-word;
+    color: var(--ink);
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+    margin-top: 9px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+
+  /* Pills & Semantic Badges */
+  .pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+  }
+  .pill.NEW { background: var(--critical); color: #fff; }
+  .pill.PERSISTENT { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+  .pill.FLAKY { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .pill.NO_HISTORY { background: var(--surface-2); color: var(--ink-2); border-color: var(--axis); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--axis);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  .badge.cat-PRODUCT_BUG { background: var(--cat-product-bg); color: var(--cat-product-ink); border-color: var(--cat-product); }
+  .badge.cat-ENVIRONMENT_ISSUE { background: var(--cat-env-bg); color: var(--cat-env-ink); border-color: var(--cat-env); }
+  .badge.cat-FLAKY_TEST { background: var(--cat-flaky-bg); color: var(--cat-flaky-ink); border-color: var(--cat-flaky); }
+  .badge.cat-INFRASTRUCTURE_FAILURE { background: var(--cat-infra-bg); color: var(--cat-infra-ink); border-color: var(--cat-infra); }
+  .badge.cat-TEST_BUG { background: var(--cat-test-bg); color: var(--cat-test-ink); border-color: var(--cat-test); }
+  .badge.known { border-color: var(--blue); color: var(--blue-600); background: var(--blue-100); }
+  .badge.waived { border-color: var(--good); color: var(--good); background: rgba(22, 163, 74, 0.1); }
+  .badge.jira { border-color: var(--axis); }
+  .sig { color: var(--muted); }
+
+  /* AI Root Cause Card */
+  .ai-box {
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .ai-box .h {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  }
+  .ai-box .h b { color: var(--ink); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+  .ai-spark { color: var(--blue); font-size: 14px; }
+  .meter { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12px; }
+  .meter .t { width: 88px; height: 8px; background: rgba(148, 163, 184, 0.25); border-radius: 99px; overflow: hidden; }
+  .meter .f { height: 100%; background: var(--blue); border-radius: 99px; }
+  .ai-box p { margin: 7px 0; line-height: 1.5; }
+  .ai-box .fix-callout {
+    background: var(--fix-bg);
+    border: 1px solid var(--fix-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 8px 0;
+  }
+  .ai-box .k { font-weight: 700; color: var(--ink); }
+
+  /* Code Snippets & Stack Traces */
+  .refs { margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(148, 163, 184, 0.3); }
+  .refs details { margin: 6px 0; }
+  .refs summary { cursor: pointer; color: var(--blue-600); font-size: 12.5px; font-weight: 600; }
+  .refs summary code {
+    color: var(--ink);
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--ring);
+  }
+  pre.code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-x: auto;
+  }
+  pre.code .ln {
+    display: inline-block;
+    width: 44px;
+    color: var(--code-ln);
+    text-align: right;
+    margin-right: 14px;
+    user-select: none;
+  }
+  details.tests summary {
+    cursor: pointer;
+    color: var(--blue-600);
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-top: 10px;
+    display: inline-block;
+  }
+  pre.plain {
+    background: var(--stack-bg);
+    border: 1px solid var(--grid);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    max-height: 340px;
+    overflow: auto;
+    margin-top: 8px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 650; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; background: var(--surface-2); }
+  tr:hover td { background: var(--surface-2); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hidden { display: none !important; }
+  footer {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid var(--grid);
+    text-align: center;
+  }
+  @media (max-width: 1100px) {
+    .charts { grid-template-columns: 1fr; }
+    .cats { grid-template-columns: repeat(2, 1fr); }
+    .group { grid-template-columns: 1fr; }
+    .group-left { border-right: none; border-bottom: 1px solid var(--grid); padding-bottom: 10px; flex-direction: row; align-items: center; gap: 14px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div>
+      <h1>
+        <span>xTS Agent · Failure triage</span>
+        <span class="brand-pill">{{ profile }} profile</span>
+      </h1>
+      <div class="sub"><b>{{ plan_name }}</b> · {{ profile }} profile{% if run %} · {{ run.devices }} devices · {{ run.hours }} h wall time · {{ run.passed }} passed · {{ run.skipped }} skipped{% endif %} · generated {{ generated }}</div>
+      {% if fingerprint %}<div class="fp-chip">build <span class="mono">{{ fingerprint }}</span></div>{% endif %}
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn-ghost" id="btn-expand-all">Expand all details</button>
+      <button type="button" class="btn-ghost" id="btn-theme">Toggle theme</button>
+    </div>
+  </div>
+</header>
+<main>
+
+  <section class="kpis">
+    <div class="card kpi hero">
+      <div><div class="l">Failing tests</div><div class="v bad">{{ failures }}</div><div class="d">from TradeFed, untouched</div></div>
+      <div class="arrow">&rarr;</div>
+      <div><div class="l">Root causes</div><div class="v">{{ n_groups }}</div><div class="d">{{ reduction }}&times; fewer things to look at</div></div>
+    </div>
+    {% if previous %}
+    <div class="card kpi"><div class="l">vs previous run</div><div class="v {% if previous.delta < 0 %}good{% elif previous.delta > 0 %}bad{% endif %}">{{ '%+d' % previous.delta }}</div><div class="d">{{ previous.failures }} failures on {{ previous.when }} ({{ '%+d' % previous.pct }}%)</div></div>
+    {% endif %}
+    <div class="card kpi"><div class="l">New regressions</div><div class="v {% if new_groups %}bad{% else %}good{% endif %}">{{ new_groups }}</div><div class="d">{% if new_groups %}root causes, {{ new_failures }} tests, not seen before{% else %}no root cause unseen in earlier runs{% endif %}</div></div>
+    <div class="card kpi"><div class="l">Top 10 groups</div><div class="v">{{ top10_pct }}%</div><div class="d">of all failures ({{ top10 }} tests)</div></div>
+    <div class="card kpi"><div class="l">Known lab noise</div><div class="v">{{ waived_failures }}</div><div class="d">tests in {{ waived_groups }} waived group{{ 's' if waived_groups != 1 }} · {{ signal_failures }} left to act on</div></div>
+    <div class="card kpi"><div class="l">AI root causes</div><div class="v">{{ ai_groups }}</div><div class="d">{% if ai_models %}{{ ai_models|join(', ') }}{% else %}not run{% endif %}</div></div>
+    <div class="card kpi"><div class="l">Triage effort</div><div class="v">{{ effort.grouped_h }} h</div><div class="d">instead of {{ effort.manual_h }} h at {{ effort.minutes }} min per item</div></div>
+  </section>
+
+  <h2>Where the failures are <small>click any category card below to filter root-cause groups</small></h2>
+  <section class="charts">
+    <div class="card chart">
+      <h3>Failing tests by owning team <small>from config/ownership.yaml</small></h3>
+      {% for b in team_bars %}
+      <div class="bar{% if b.label == 'other' %} other{% endif %}" title="{{ b.label }}: {{ b.value }} failing tests ({{ b.share }}%)">
+        <div class="n">{{ b.label }}</div>
+        <div class="t"><div class="f" style="width: {{ b.pct }}%"></div></div>
+        <div class="v">{{ b.value }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card chart">
+      <h3>Failing tests by category <small>rules + known issues + AI promotion</small></h3>
+      {% for b in class_bars %}
+      <div class="bar" title="{{ b.label }}: {{ b.value }} failing tests ({{ b.share }}%)">
+        <div class="n">{{ b.label }}</div>
+        <div class="t"><div class="f cat-{{ b.code or 'UNKNOWN' }}" style="width: {{ b.pct }}%"></div></div>
+        <div class="v">{{ b.value }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card chart">
+      <h3>History <small>compared with earlier runs</small></h3>
+      {% for b in label_bars %}
+      <div class="bar" title="{{ b.label }}: {{ b.value }} failing tests ({{ b.share }}%)">
+        <div class="n"><span class="pill {{ b.label }}">{{ b.label }}</span></div>
+        <div class="t"><div class="f" style="width: {{ b.pct }}%"></div></div>
+        <div class="v">{{ b.value }}</div>
+      </div>
+      {% endfor %}
+      <div class="d" style="margin-top:12px;font-size:12px;color:var(--muted)">NEW = regression since the last good build · PERSISTENT = seen in every earlier run · FLAKY = seen in some · NO_HISTORY = first run</div>
+    </div>
+  </section>
+
+  <section class="cats">
+    {% for c in categories %}
+    <div class="cat cat-{{ c.code }}" data-cat-filter="{{ c.label }}" title="Click to filter by {{ c.label }}">
+      <div class="n">{{ c.label }}</div>
+      <div class="v">{{ c.groups }} <small>groups · {{ c.failures }} tests</small></div>
+      {% if ai_groups %}<div class="ai">AI suggests this for {{ c.ai_groups }} of {{ ai_groups }} analysed</div>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <h2>Root-cause groups <small>{{ cards|length }} largest shown as cards{% if rest %}, {{ rest|length }} more in the table below{% endif %}</small></h2>
+  <div class="filters">
+    <input type="search" id="f-search" placeholder="Search exception, test, module, signature, or AI root cause...">
+    <label>Team <select id="f-team"><option value="">all</option>{% for t in teams %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></label>
+    <label>Category <select id="f-cat"><option value="">all</option>{% for c in classes %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></label>
+    <label>History <select id="f-label"><option value="">all</option>{% for l in label_order %}<option value="{{ l }}">{{ l }}</option>{% endfor %}</select></label>
+    <button type="button" class="btn-sm" id="f-reset">Reset</button>
+    <span id="f-count"></span>
+  </div>
+
+  {% for g in cards %}
+  <article class="card group cat-{{ g.classification }}" data-team="{{ g.owner.team }}" data-cat="{{ g.category }}" data-label="{{ g.label }}">
+    <div class="group-left">
+      <div class="rank-tag">GROUP #{{ g.index }}</div>
+      <div class="count">{{ g.count }}<small>failing tests · {{ g.share }}%</small></div>
+      <div class="share-bar" title="{{ g.share }}% of all failures"><span style="width: {{ [g.share, 100]|min }}%"></span></div>
+      <div style="margin-top:10px"><span class="pill {{ g.label }}">{{ g.label }}</span></div>
+      {% if g.last_pass_build %}<div class="sig" style="font-size:11px;margin-top:6px">last pass {{ g.last_pass_build.split('/')[-2] if g.last_pass_build.count('/') > 1 else g.last_pass_build }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="title mono">#{{ g.index }} · {{ g.title }}</div>
+      <div class="meta">
+        <span class="badge cat-{{ g.classification }}">{{ g.category }}</span>
+        <span><b>{{ g.owner.team }}</b>{% if g.owner.jira_component %} · {{ g.owner.jira_component }}{% endif %}</span>
+        <span>{{ g.modules[:4]|join(', ') }}{% if g.modules|length > 4 %} +{{ g.modules|length - 4 }} modules{% endif %}</span>
+        {% if g.known_issue %}<span class="badge known">{{ g.known_issue.id }} · {{ g.known_issue.title }}{% if g.known_issue.jira %} · {{ g.known_issue.jira }}{% endif %}</span>{% if g.known_issue.waived %}<span class="badge waived">waived</span>{% endif %}{% endif %}
+        {% if g.jira_key %}<span class="badge jira">{{ g.jira_key }}{% if g.jira_action %} · {{ g.jira_action }}{% endif %}</span>{% elif g.jira_action %}<span class="badge jira">Jira: {{ g.jira_action }}</span>{% endif %}
+        <span class="sig mono">sig {{ g.signature }}</span>
+      </div>
+
+      {% if g.ai %}
+      <div class="ai-box">
+        <div class="h">
+          <b><span class="ai-spark">&#10024;</span> AI root cause</b>
+          <span class="badge cat-{{ g.ai_class_code or g.classification }}">{{ g.ai_category }}</span>
+          <span class="meter" title="confidence {{ g.confidence_pct }}%"><span class="t"><span class="f" style="width: {{ g.confidence_pct }}%"></span></span>{{ g.confidence_pct }}% confidence</span>
+          <span class="sig mono">{{ g.ai.model }}</span>
+        </div>
+        <p>{{ g.ai.root_cause }}</p>
+        {% if g.ai.suggested_fix %}<div class="fix-callout"><span class="k">Suggested fix.</span> {{ g.ai.suggested_fix }}</div>{% endif %}
+        {% if g.ai.evidence %}<p><span class="k">Evidence.</span> {{ g.ai.evidence }}</p>{% endif %}
+        {% if g.snippets or g.ai.code_refs %}
+        <div class="refs">
+          <span class="k">Source the answer was grounded on</span>
+          {% for s in g.snippets %}
+          <details{% if loop.first %} open{% endif %}>
+            <summary><code>{{ s.short }}</code> line {{ s.start }}</summary>
+            <pre class="code">{% for n, text in s.lines %}<span class="ln">{{ n }}</span>{{ text }}
+{% endfor %}</pre>
+          </details>
+          {% endfor %}
+          {% if not g.snippets %}{% for r in g.ai.code_refs %}<div class="mono" style="font-size:12px">{{ r }}</div>{% endfor %}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <details class="tests">
+        <summary>{{ g.tests|length }}{% if g.tests_truncated %}+{% endif %} tests &amp; sample stack</summary>
+<pre class="plain">{{ g.tests|join('\n') }}{% if g.tests_truncated %}
+... and {{ g.tests_truncated }} more{% endif %}
+
+{{ g.sample_stack }}</pre>
+      </details>
+    </div>
+  </article>
+  {% endfor %}
+
+  {% if rest %}
+  <h2>Remaining root-cause groups <small>{{ rest|length }} smaller groups</small></h2>
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <table>
+      <tr><th class="num">Tests</th><th>History</th><th>Root cause</th><th>Category</th><th>Owner</th><th>Modules</th></tr>
+      {% for g in rest %}
+      <tr class="rest-row" data-team="{{ g.owner.team }}" data-cat="{{ g.category }}" data-label="{{ g.label }}">
+        <td class="num"><b>{{ g.count }}</b></td>
+        <td><span class="pill {{ g.label }}">{{ g.label }}</span></td>
+        <td class="mono">{{ g.title }}</td>
+        <td><span class="badge cat-{{ g.classification }}">{{ g.category }}</span></td>
+        <td>{{ g.owner.team }}</td>
+        <td>{{ g.modules[:3]|join(', ') }}{% if g.modules|length > 3 %} +{{ g.modules|length - 3 }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if tickets %}
+  <h2>Proposed Jira tickets <small>dry run: nothing was filed</small></h2>
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <table>
+      <tr><th class="num">#</th><th>Summary</th><th>Component</th><th>Labels</th><th>Assignee</th></tr>
+      {% for t in tickets %}
+      <tr><td class="num">{{ loop.index }}</td><td>{{ t.summary }}</td><td>{{ t.component }}</td><td>{{ t.labels|join(' ') }}</td><td>{{ t.assignee or '—' }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <footer>xTS Agent · groups by root-cause signature · history, known issues and owners from YAML · AI root cause is advisory and never changes a TradeFed result{% if ai_agreement and ai_agreement.evaluated %} · AI matched the hand-assigned class on {{ ai_agreement.agreed }}/{{ ai_agreement.evaluated }} known issues (a consistency check on a small label set, not a measured accuracy){% endif %}</footer>
+</main>
+<script>
+(function () {
+  var sel = {
+    team: document.getElementById('f-team'),
+    cat: document.getElementById('f-cat'),
+    label: document.getElementById('f-label'),
+    search: document.getElementById('f-search')
+  };
+  var cards = Array.prototype.slice.call(document.querySelectorAll('article.group'));
+  var rows = Array.prototype.slice.call(document.querySelectorAll('tr.rest-row'));
+  var catCards = Array.prototype.slice.call(document.querySelectorAll('.cat[data-cat-filter]'));
+  var out = document.getElementById('f-count');
+
+  function apply() {
+    var n = 0;
+    var q = (sel.search && sel.search.value ? sel.search.value : '').toLowerCase().trim();
+    cards.forEach(function (c) {
+      var matchTeam = !sel.team.value || c.dataset.team === sel.team.value;
+      var matchCat = !sel.cat.value || c.dataset.cat === sel.cat.value;
+      var matchLabel = !sel.label.value || c.dataset.label === sel.label.value;
+      var matchQ = !q || c.textContent.toLowerCase().indexOf(q) !== -1;
+      var show = matchTeam && matchCat && matchLabel && matchQ;
+      c.classList.toggle('hidden', !show);
+      if (show) n++;
+    });
+    rows.forEach(function (r) {
+      var matchTeam = !sel.team.value || r.dataset.team === sel.team.value;
+      var matchCat = !sel.cat.value || r.dataset.cat === sel.cat.value;
+      var matchLabel = !sel.label.value || r.dataset.label === sel.label.value;
+      var matchQ = !q || r.textContent.toLowerCase().indexOf(q) !== -1;
+      var show = matchTeam && matchCat && matchLabel && matchQ;
+      r.classList.toggle('hidden', !show);
+    });
+    catCards.forEach(function (cc) {
+      cc.classList.toggle('active', sel.cat.value && cc.getAttribute('data-cat-filter') === sel.cat.value);
+    });
+    out.textContent = n + ' of ' + cards.length + ' cards';
+  }
+
+  ['team', 'cat', 'label'].forEach(function (k) {
+    if (sel[k]) sel[k].addEventListener('change', apply);
+  });
+  if (sel.search) sel.search.addEventListener('input', apply);
+
+  catCards.forEach(function (cc) {
+    cc.addEventListener('click', function () {
+      var val = cc.getAttribute('data-cat-filter');
+      if (sel.cat) {
+        sel.cat.value = (sel.cat.value === val) ? '' : val;
+        apply();
+      }
+    });
+  });
+
+  var resetBtn = document.getElementById('f-reset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      if (sel.team) sel.team.value = '';
+      if (sel.cat) sel.cat.value = '';
+      if (sel.label) sel.label.value = '';
+      if (sel.search) sel.search.value = '';
+      apply();
+    });
+  }
+
+  var expandBtn = document.getElementById('btn-expand-all');
+  var expanded = false;
+  if (expandBtn) {
+    expandBtn.addEventListener('click', function () {
+      expanded = !expanded;
+      Array.prototype.slice.call(document.querySelectorAll('details.tests')).forEach(function (d) {
+        d.open = expanded;
+      });
+      expandBtn.textContent = expanded ? 'Collapse all details' : 'Expand all details';
+    });
+  }
+
+  var themeBtn = document.getElementById('btn-theme');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      var root = document.documentElement;
+      var cur = root.getAttribute('data-theme');
+      var isDark = cur === 'dark' || (!cur && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    });
+  }
+
+  apply();
+})();
+</script>
+</body>
+</html>

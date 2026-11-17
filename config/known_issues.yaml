@@ -24,3 +24,31 @@ issues:
     #   expires: 2026-12-31
     #   builds_regex: "aosp_cf_x86_64_auto"
     #   profiles: [development]
+
+  - id: KI-0002
+    title: "KitchenSink window focus blocks WindowUntrustedTouchTestBase setUp, causing tearDown NPE on null mContext"
+    jira: ""
+    classification: ENVIRONMENT_ISSUE
+    match:
+      message_regex: "WindowUntrustedTouchTestBase\\.removeActivityOverlays"
+
+  - id: KI-0003
+    title: "AOSP-17 Baklava @FlaggedApi release-config skew vs prebuilt CTS hiddenapi-flags.csv"
+    jira: ""
+    classification: ENVIRONMENT_ISSUE
+    match:
+      message_regex: "Error: Hidden field accessible through JNI"
+
+  - id: KI-0004
+    title: "Telecom CTS MockConnectionService leaked across tests when tearDown is skipped"
+    jira: ""
+    classification: TEST_BUG
+    match:
+      message_regex: "Mock ConnectionService exists\\. Failed to call setUp"
+
+  - id: KI-0005
+    title: "Cuttlefish userdebug shell port 8886 (UID 2000 com.android.shell) listening on loopback/IPv6"
+    jira: ""
+    classification: ENVIRONMENT_ISSUE
+    match:
+      message_regex: "UID=2000 \\[com\\.android\\.shell\\]"

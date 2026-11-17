@@ -129,6 +129,8 @@ class JiraFiler:
         if tg.ai:
             lines += ["", f"*AI analysis ({tg.ai.get('confidence', '?')}):* {tg.ai.get('root_cause', '')}",
                       str(tg.ai.get("suggested_fix", ""))]
+            if tg.ai.get("code_refs"):
+                lines.append("*Source:* " + ", ".join(f"{{{{{r}}}}}" for r in tg.ai["code_refs"]))
         lines += ["", "*Modules:* " + ", ".join(g.modules), "", "*Tests:*", "{noformat}", tests + more,
                   "{noformat}", "", "*Sample stack trace:*", "{noformat}", g.sample_stack[:6000], "{noformat}"]
         return "\n".join(lines)

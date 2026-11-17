@@ -18,3 +18,6 @@ build/
 .venv-check/
 .mypy_cache/
 .ruff_cache/
+
+# Local code RAG index (built by `xts-agent index-code`, hundreds of MB)
+config/known_failures/chroma_db/

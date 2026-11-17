@@ -117,6 +117,19 @@ class TradefedRunnerTests(unittest.TestCase):
             # Interrupted runs print no RESULT DIRECTORY line
             self.assertEqual(runner.find_results_dir("", before=before), str(new))
 
+    def test_find_results_dir_concurrent_runs_use_printed_dir(self):
+        # Parallel runs on other DUTs add their own dirs under the same root
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "android-cts" / "results"
+            runner = TradefedRunner(Path(tmp) / "android-cts", "cts-tradefed")
+            before = runner.snapshot_result_dirs()
+            ours = self._make_result_dir(root, "2026.10.27_08.17.30.240_1370")
+            self._make_result_dir(root, "2026.10.27_08.17.30.268_9528")  # another DUT, newer
+            output = f"RESULT DIRECTORY            : {ours}\n"
+            self.assertEqual(runner.find_results_dir(output, before=before), str(ours))
+            # Without TradeFed's line there is no safe choice
+            self.assertIsNone(runner.find_results_dir("", before=before))
+
     def test_parse_session_table_from_list_results(self):
         table = (
             "Session  Pass    Fail  Warning  Modules Complete  Result Directory              "

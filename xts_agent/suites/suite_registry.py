@@ -19,7 +19,7 @@ class SuiteRegistry:
         installed: List[str] = []
         for name in KNOWN_SUITES:
             suite_dir = Path(base_path) / f"android-{name}"
-            if suite_dir.is_dir():
+            if suite_dir.is_dir() and (suite_dir / "tools" / "tradefed.jar").exists():
                 installed.append(name.upper())
                 self._dirs[name.upper()] = suite_dir
                 logger.info("Discovered suite package: %s", suite_dir)

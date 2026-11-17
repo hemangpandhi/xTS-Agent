@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import tempfile
 import unittest
 from pathlib import Path
@@ -34,6 +35,74 @@ class LlmProviderTests(unittest.TestCase):
 
         with self.assertRaises(ExternalProviderNotAllowed):
             get_llm_provider(self._cfg(provider="gemini", gemini_api_key="k"))
+
+    def test_openai_compatible_on_prem_endpoint_needs_no_opt_in(self):
+        from xts_agent.rca.llm_provider import OpenAICompatibleProvider, get_llm_provider
+
+        for url in ("http://127.0.0.1:11434/v1", "http://localhost:8000/v1/", "http://10.1.2.3:8080/v1"):
+            provider = get_llm_provider(self._cfg(
+                provider="openai_compatible", openai_base_url=url, openai_model="qwen2.5-coder:32b"))
+            self.assertIsInstance(provider, OpenAICompatibleProvider)
+            self.assertEqual(provider.url, url.rstrip("/") + "/chat/completions")
+            self.assertEqual(provider.model_id, "openai:qwen2.5-coder:32b")
+
+    def test_openai_compatible_hosted_endpoint_refused_without_opt_in(self):
+        from xts_agent.rca.llm_provider import ExternalProviderNotAllowed, get_llm_provider
+
+        with self.assertRaises(ExternalProviderNotAllowed):
+            get_llm_provider(self._cfg(
+                provider="openai_compatible", openai_base_url="https://api.openai.com/v1",
+                openai_model="gpt-4o-mini", openai_api_key="k"))
+
+    def test_openai_compatible_bearer_key_in_header_json_mode_and_not_logged(self):
+        import requests
+
+        from xts_agent.rca.llm_provider import get_llm_provider
+
+        provider = get_llm_provider(self._cfg(
+            provider="openai_compatible", openai_base_url="https://api.openai.com/v1",
+            openai_model="gpt-4o-mini", openai_api_key="SECRET-KEY",
+            allow_external_providers=True, request_timeout_secs=7))
+        calls = []
+
+        class Resp:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"choices": [{"message": {"content": '{"root_cause": "x"}'}}]}
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            calls.append((url, json, headers, timeout))
+            return Resp()
+
+        with patch.object(requests, "post", fake_post):
+            with self.assertLogs("xts_agent.rca.llm_provider", level="DEBUG") as logs:
+                logging.getLogger("xts_agent.rca.llm_provider").debug("probe")
+                out = provider.generate("prompt", json_mode=True)
+        self.assertEqual(out, '{"root_cause": "x"}')
+        url, payload, headers, timeout = calls[0]
+        self.assertEqual(url, "https://api.openai.com/v1/chat/completions")
+        self.assertEqual(headers["Authorization"], "Bearer SECRET-KEY")
+        self.assertEqual(payload["response_format"], {"type": "json_object"})
+        self.assertEqual(payload["model"], "gpt-4o-mini")
+        self.assertEqual(timeout, 7)
+        self.assertNotIn("SECRET-KEY", "\n".join(logs.output))
+
+    def test_openai_compatible_http_error_is_reported_not_raised(self):
+        import requests
+
+        from xts_agent.rca.llm_provider import get_llm_provider
+
+        provider = get_llm_provider(self._cfg(
+            provider="openai_compatible", openai_base_url="http://127.0.0.1:11434/v1", openai_model="m"))
+
+        def fake_post(*a, **k):
+            resp = MagicMock(status_code=503)
+            raise requests.HTTPError(response=resp)
+
+        with patch.object(requests, "post", fake_post):
+            self.assertIn("HTTP 503", provider.generate("p"))
 
     def test_gemini_key_in_header_with_timeout_and_not_logged(self):
         import requests
@@ -462,6 +531,44 @@ class GroupAiTests(unittest.TestCase):
             self.assertEqual((stats["cached"], provider.generate.call_count), (1, 2))
             self.assertTrue(again.groups[0].ai["cached"])
 
+    def test_retrieved_source_is_in_prompt_and_recorded_as_code_refs(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        report = JiraFilerTests._report(None, [("a", "NEW", False, "")])
+        provider = MagicMock(model_id="m")
+        provider.generate.return_value = '{"root_cause": "r", "classification": "PRODUCT_BUG", "confidence": 0.5}'
+        report.groups[0].group.frames = ["util.PollingCheck.run", "util.WindowUtil.waitForFocus"]
+        foo = {"file": "/aosp/frameworks/base/Foo.java", "start_line": 120, "text": "void waitForFocus() {}"}
+        bar = {"file": "/aosp/cts/Bar.java", "start_line": 1, "text": "class Bar {}"}
+        indexer = MagicMock()
+        indexer.search_chunks.side_effect = lambda q, top_k=3, contains="": [foo] if contains else [foo, bar]
+        GroupAIAnalyzer(provider, indexer=indexer).analyze(report)
+        prompt = provider.generate.call_args_list[0][0][0]
+        self.assertIn("File: /aosp/frameworks/base/Foo.java (line 120)", prompt)
+        self.assertIn("void waitForFocus() {}", prompt)
+        # frame method looked up first (not the generic "run"), then semantic matches, de-duplicated
+        contains = [c.kwargs.get("contains", "") for c in indexer.search_chunks.call_args_list]
+        self.assertEqual(contains, ["waitForFocus(", ""])
+        self.assertEqual(report.groups[0].ai["code_refs"],
+                         ["/aosp/frameworks/base/Foo.java:120", "/aosp/cts/Bar.java:1"])
+        self.assertIn(report.groups[0].group.exception, indexer.search_chunks.call_args[0][0])
+
+    def test_known_classified_groups_keep_eval_slots_when_cap_is_full(self):
+        from xts_agent.triage.ai_rca import GroupAIAnalyzer
+
+        report = JiraFilerTests._report(None, [
+            ("a", "NEW", False, ""), ("b", "NEW", False, ""), ("c", "NEW", False, ""),
+            ("k1", "NEW", True, ""), ("k2", "NEW", True, ""), ("k3", "NEW", True, ""),
+        ])
+        for tg in report.groups[3:]:
+            tg.known.issue.classification = "ENVIRONMENT_ISSUE"
+        provider = MagicMock(model_id="m")
+        provider.generate.return_value = '{"root_cause": "r", "classification": "ENVIRONMENT_ISSUE", "confidence": 0.9}'
+        GroupAIAnalyzer(provider, max_groups=2).analyze(report)
+        analysed = [tg.group.signature for tg in report.groups if tg.ai]
+        self.assertEqual(analysed, ["a", "b", "k1", "k2"])  # cap on actionable + 2 reserved known
+        self.assertEqual(report.ai_agreement["evaluated"], 2)
+
     def test_agreement_with_human_classified_known_issues(self):
         from xts_agent.triage.ai_rca import GroupAIAnalyzer
 
@@ -494,6 +601,59 @@ class GroupAiTests(unittest.TestCase):
         self.assertEqual([c[0] for c in first], [c[0] for c in second])
         self.assertTrue(all(len(c[1].split("\n")) <= CHUNK_LINES for c in first))
         self.assertEqual(first[1][2], CHUNK_LINES - 10 + 1)  # overlapping windows
+
+    def test_cross_group_contamination_correlates_ui_victims_but_preserves_product_bugs(self):
+        from xts_agent.rca.failure_classifier import FailureClassifier
+        from xts_agent.rca.rca_engine import FailureType, RCAEngine
+        from xts_agent.results.result_parser import ModuleResult, TestCaseResult, TestResults
+
+        hijacks = [
+            TestCaseResult(
+                class_name="android.app.cts.DialogTest",
+                test_name=f"testFocus{i}",
+                result="FAIL",
+                message="Timed out waiting for activity; com.oem.overlay was focused instead",
+                stack_trace="junit.framework.AssertionFailedError: com.oem.overlay was focused instead",
+                module="CtsAppTestCases",
+            )
+            for i in range(12)
+        ]
+        ui_victim = TestCaseResult(
+            class_name="android.view.inputmethod.cts.FocusHandlingTest",
+            test_name="testKeyboardState",
+            result="FAIL",
+            message="java.lang.AssertionError",
+            stack_trace="java.lang.AssertionError\n\tat android.view.inputmethod.cts.FocusHandlingTest.testKeyboardState(FocusHandlingTest.java:100)",
+            module="CtsInputMethodTestCases",
+        )
+        real_bug = TestCaseResult(
+            class_name="android.app.cts.SystemFeaturesTest",
+            test_name="testCameraFeatures",
+            result="FAIL",
+            message="AssertionError: PackageManager#hasSystemFeature should NOT return true",
+            stack_trace="java.lang.AssertionError\n\tat android.app.cts.SystemFeaturesTest.testCameraFeatures(SystemFeaturesTest.java:160)",
+            module="CtsAppTestCases",
+        )
+        tr = TestResults(
+            suite_name="CTS",
+            device_info={},
+            start_time="",
+            end_time="",
+            modules=[
+                ModuleResult(
+                    name="m",
+                    done=True,
+                    pass_count=0,
+                    fail_count=14,
+                    runtime=0.0,
+                    test_cases=hijacks + [ui_victim, real_bug],
+                )
+            ],
+        )
+        report = RCAEngine(config=None, failure_classifier=FailureClassifier()).analyze_failures(tr)
+        by_id = {f.test_id: f for f in report.failures}
+        self.assertEqual(by_id[ui_victim.test_id].classification, FailureType.ENVIRONMENT_ISSUE)
+        self.assertEqual(by_id[real_bug.test_id].classification, FailureType.PRODUCT_BUG)
 
 
 if __name__ == "__main__":

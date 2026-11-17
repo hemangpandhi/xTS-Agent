@@ -12,8 +12,8 @@ agent:
 
 paths:
   xts_packages_dir: "/opt/xts"         # Base directory for downloaded xTS packages
-  java_home: ""                        # JDK for TradeFed; empty = environment's JAVA_HOME/PATH
-  android_sdk: ""                      # SDK root (aapt2); empty = ANDROID_HOME / common locations
+  java_home: "/mnt/aosp-17-master/prebuilts/jdk/jdk21/linux-x86"  # JDK 21 for TradeFed
+  android_sdk: "/home/hemang/Android/Sdk"  # SDK root (aapt2)
   adb_path: ""                         # adb binary; empty = first adb on PATH
 
 device:
@@ -85,7 +85,7 @@ rca:
   enabled: true
   ai_powered: false                     # Set true and provide api_key for Gemini
   ai_api_key: ""                        # Gemini API key
-  ai_model: "gemini-2.0-flash"
+  ai_model: "gemini-2.5-flash"
   patterns_file: "config/known_failures/patterns.yaml"
   classify_failures: true
 
@@ -157,19 +157,27 @@ ats2:
 
 # AI Root Cause Analysis Configuration
 ai_rca:
-  enabled: false
-  provider: "llama_cpp"                 # "llama_cpp" (on-prem, default) or "gemini" (external)
+  enabled: false                        # Set true in test plan or CLI to run GPU AI RCA
+  provider: "openai_compatible"         # "openai_compatible" (local GPU server, default), "llama_cpp" or "gemini"
   # External providers receive failure logs, stack traces and retrieved OEM
   # source code. They are refused unless this is explicitly set to true.
   allow_external_providers: false
-  request_timeout_secs: 120
+  request_timeout_secs: 180
 
   # Gemini Configuration (external; requires allow_external_providers: true)
   gemini_api_key: ""
-  gemini_model: "gemini-1.5-pro"
+  gemini_model: "gemini-2.5-flash"
   
-  # Llama.cpp (Local GPU) Configuration
-  llama_model_path: "/path/to/models/DeepSeek-Coder-V2.gguf"
+  # OpenAI-compatible chat-completions server. On-prem servers (Ollama, vLLM,
+  # llama.cpp server, LM Studio) on this host or a private network need no
+  # opt-in; a hosted endpoint (OpenAI, Gemini's OpenAI API, OpenRouter) is
+  # external and requires allow_external_providers: true. Key: XTS_LLM_API_KEY.
+  openai_base_url: "http://127.0.0.1:11434/v1"
+  openai_model: "qwen2.5-coder:32b"     # local Ollama on this host (GPU); never leaves the machine
+  openai_api_key: "${XTS_LLM_API_KEY:-}"
+
+  # Llama.cpp (Direct GGUF) Configuration
+  llama_model_path: "/usr/share/ollama/.ollama/models/blobs/sha256-ac3d1ba8aa77755dab3806d9024e9c385ea0d5b412d6bdf9157f8a4a7e9fc0d9"
   llama_n_ctx: 16384 # Large context for logs + code
   llama_n_gpu_layers: -1 # -1 offloads everything to GPU
   
@@ -181,5 +189,93 @@ ai_rca:
   embedding_model: "all-MiniLM-L6-v2"   # or a local model dir for offline labs
   index_db_path: "config/known_failures/chroma_db"
   source_code_paths:
-    - "/mnt/aosp/vendor"
-    - "/mnt/aosp/hardware"
+    - "/mnt/aosp-17-master/cts/common/device-side/util-axt"
+    - "/mnt/aosp-17-master/cts/common/device-side/bedstead/nene"
+    - "/mnt/aosp-17-master/cts/tests/framework/base/windowmanager/util"
+    - "/mnt/aosp-17-master/cts/tests/framework/base/windowmanager/src"
+    - "/mnt/aosp-17-master/cts/tests/app/src"
+    - "/mnt/aosp-17-master/cts/tests/inputmethod"
+    - "/mnt/aosp-17-master/cts/hostsidetests/scopedstorage"
+    - "/mnt/aosp-17-master/packages/services/Car/tests/EmbeddedKitchenSinkApp"
+    - "/mnt/aosp-17-master/packages/services/Car/service/src/com/android/car/user"
+    - "/mnt/aosp-17-master/frameworks/base/services/core/java/com/android/server/wm"
+    - "/mnt/aosp-17-master/frameworks/base/services/core/java/com/android/server/pm"
+    - "/mnt/aosp-17-master/frameworks/base/services/core/java/com/android/server/inputmethod"
+    - "/mnt/aosp-17-master/frameworks/base/services/core/java/com/android/server/notification"
+
+# Closed-loop fixing: `xts-agent fix-loop --test "<Module> <Class#method>"`.
+# Each iteration is a real TradeFed run on the DUT; only remediations from
+# remediations_file are ever applied (the LLM can choose among them, never
+# add commands). See docs/FIX_LOOP.md.
+fix_loop:
+  suite_path: "/opt/xts/android-cts"
+  command_name: "cts-tradefed"
+  plan: "cts"
+  remediations_file: "config/remediations.yaml"
+  out_dir: "results/fixloop"
+  max_iterations: 6                     # TradeFed runs per target, baseline included
+  confirm_runs: 1                       # a fix must pass again before it counts
+  flaky_retries: 1
+  run_timeout_hours: 1.0
+  use_llm: true                         # local LLM from ai_rca (never external unless allowed there)
+  # Optional: a different on-host OpenAI-compatible server for the loop.
+  # This lab: vLLM on the RTX 6000 Ada serving Qwen3.8-27B-FP8 as "coder".
+  llm_base_url: "http://127.0.0.1:8011/v1"
+  llm_model: "coder"
+  llm_extra_body:
+    chat_template_kwargs: {enable_thinking: false}
+  llm_timeout_secs: 600                 # calls are serialized; a shared server may queue them
+  llm_fallbacks:                        # tried in order if the server above is down (all on-prem)
+    - base_url: "http://127.0.0.1:11434/v1"
+      model: "qwen2.5-coder:32b"        # Ollama; fully on the GPU when vLLM is not running
+  # Revive a hung DUT ({serial}, {cvd_instance} for Cuttlefish adb ports 6520+).
+  # This lab: restart one Cuttlefish instance of the 8-instance group, keeping its data.
+  restart_command: "env HOME=/tmp/cvd_cluster_home /mnt/aosp-17-master/out/host/linux-x86/bin/restart_cvd -instance_num={cvd_instance} -boot_timeout=600"
+  adb_path: "adb"
+  variables:                            # used by remediations as {var.NAME}
+    lab_wifi_ssid: "VirtWifi"           # Cuttlefish AP; your lab SSID on hardware
+    lab_wifi_security: "open"           # open | owe | wpa2 <passphrase> | wpa3 <passphrase>
+  # OEM code the loop reads to explain failures. Sources whose `packages`
+  # appear in the failure (stack, message, focused window) are searched first.
+  # kind: local -> a folder on this host; kind: mcp -> an MCP server (stdio)
+  # exposing code search, e.g. in front of your Gerrit/GitLab. Nothing leaves the host
+  # unless your MCP server sends it.
+  # The AOSP Car apps below stand in for OEM-modified versions in this lab.
+  oem_sources:
+    - name: CarLauncher
+      kind: local
+      path: "/mnt/aosp-17-master/packages/apps/Car/Launcher"
+      packages: ["com.android.car.carlauncher"]
+    - name: CarSettings
+      kind: local
+      path: "/mnt/aosp-17-master/packages/apps/Car/Settings"
+      packages: ["com.android.car.settings"]
+    - name: CarSystemUI
+      kind: local
+      path: "/mnt/aosp-17-master/packages/apps/Car/SystemUI"
+      packages: ["com.android.systemui"]
+    # The device config this product really builds with (overlays, makefiles)
+    - name: CuttlefishAutoDevice
+      kind: local
+      path: "/mnt/aosp-17-master/device/google/cuttlefish/shared/auto"
+      packages: ["com.android.car.dialer", "android.app.role"]
+    - name: CarService
+      kind: local
+      path: "/mnt/aosp-17-master/packages/services/Car/service"
+      packages: ["com.android.car"]
+    # - name: oem-code-search
+    #   kind: mcp
+    #   command: "/opt/oem/bin/code-search-mcp --repo-root /src/oem"
+    #   search_tool: "search_code"          # called with {"query": ..., "limit": ...}
+    #   packages: ["com.oem.launcher", "com.oem.settings"]
+  # Product bugs: patch the OEM source, build, flash, re-run until green.
+  # Needs oem_sources entries with `editable: true` and `build_targets`.
+  code_fix:
+    enabled: false
+    build_command: "scripts/aosp_build.sh {modules}"          # {modules}: build_targets of touched sources
+    deploy_command: "scripts/cf_flash.sh {serial}"            # e.g. fastboot flashall -w on real hardware
+    workdir: "."
+    build_timeout_secs: 5400
+    deploy_timeout_secs: 1800
+    max_attempts: 2                       # patches tried per target
+    restore_on_failure: true              # reflash the unpatched source if no patch worked

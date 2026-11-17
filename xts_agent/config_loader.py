@@ -28,7 +28,7 @@ _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 # Keys whose values are credentials and must not be committed in plaintext
 SECRET_KEYS = frozenset(
-    {"api_key", "ai_api_key", "gemini_api_key", "slack_webhook", "wifi_password", "database_url"}
+    {"api_key", "ai_api_key", "gemini_api_key", "openai_api_key", "slack_webhook", "wifi_password", "database_url"}
 )
 
 
@@ -65,6 +65,7 @@ def _expand_env(value: Any, source: Path, key_path: str = "") -> Any:
 # Environment variables that override secret settings regardless of YAML
 SECRET_ENV_OVERRIDES = {
     "XTS_GEMINI_API_KEY": "ai_rca.gemini_api_key",
+    "XTS_LLM_API_KEY": "ai_rca.openai_api_key",
     "XTS_ATS2_API_KEY": "ats2.api_key",
     "XTS_SLACK_WEBHOOK": "post_execution.reporting.notifications.slack_webhook",
     "XTS_WIFI_PASSWORD": "device_prep.wifi_password",
@@ -203,7 +204,7 @@ class RCAPostConfig:
     baseline_path: str = ""
     patterns_file: str = "config/known_failures/patterns.yaml"
     ai_api_key: str = ""
-    ai_model: str = "gemini-2.0-flash"
+    ai_model: str = "gemini-2.5-flash"
 
 
 @dataclass
@@ -285,7 +286,14 @@ class AiRcaConfig:
     allow_external_providers: bool = False
     request_timeout_secs: int = 120
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-1.5-pro"
+    gemini_model: str = "gemini-2.5-flash"
+    # provider: openai_compatible -- any OpenAI chat-completions server. On-prem
+    # endpoints (loopback / private network, e.g. Ollama) need no opt-in; a
+    # hosted one does.
+    openai_base_url: str = "http://127.0.0.1:11434/v1"
+    openai_model: str = ""
+    openai_api_key: str = ""
+    openai_extra_body: Dict[str, Any] = field(default_factory=dict)
     llama_model_path: str = ""
     llama_n_ctx: int = 16384
     llama_n_gpu_layers: int = -1
@@ -303,6 +311,38 @@ class TriageConfig:
     ownership_file: str = "config/ownership.yaml"
     history_window: int = 5
     history_db: str = ""  # default: agent.database_path
+
+
+@dataclass
+class FixLoopConfig:
+    """``xts-agent fix-loop``: run, diagnose, remediate, re-run until green."""
+
+    suite_path: str = "/opt/xts/android-cts"
+    command_name: str = "cts-tradefed"
+    plan: str = "cts"
+    remediations_file: str = "config/remediations.yaml"
+    out_dir: str = "results/fixloop"
+    max_iterations: int = 6  # TradeFed runs per target, baseline included
+    confirm_runs: int = 1  # extra green runs required before FIXED
+    flaky_retries: int = 1  # plain re-runs when no remediation matches
+    run_timeout_hours: float = 1.0
+    use_llm: bool = True  # local LLM from ai_rca for diagnosis and OEM code lookup
+    # Optional overrides of ai_rca's openai_compatible endpoint for the loop
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_extra_body: Dict[str, Any] = field(default_factory=dict)
+    llm_timeout_secs: int = 600  # one diagnosis may wait behind others on a shared server
+    # Tried in order when the primary endpoint fails: [{base_url, model, extra_body}]
+    llm_fallbacks: List[Dict[str, Any]] = field(default_factory=list)
+    restart_command: str = ""  # recover a dead DUT, e.g. "cvd restart" ({serial} allowed)
+    adb_path: str = "adb"
+    # Lab values used by remediations as {var.NAME}
+    variables: Dict[str, str] = field(default_factory=dict)
+    # OEM code: [{name, kind: local|mcp, path | command, packages: [...]}]
+    oem_sources: List[Dict[str, Any]] = field(default_factory=list)
+    # Patch OEM source, build, flash, re-run (see xts_agent/fixloop/codefix.py):
+    # {enabled, build_command, deploy_command, workdir, max_attempts, ...}
+    code_fix: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -339,6 +379,7 @@ class TestPlanConfig:
     jira: Any = None  # xts_agent.triage.jira_filer.JiraConfig
     artifacts: Any = None  # xts_agent.storage.artifacts.ArtifactConfig
     ops: OpsConfig = field(default_factory=OpsConfig)
+    fix_loop: FixLoopConfig = field(default_factory=FixLoopConfig)
     raw_defaults: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -387,6 +428,7 @@ def _defaults_schema() -> Dict[str, Any]:
         "ats2": _names(ATS2Config),
         "ai_rca": _names(AiRcaConfig),
         "ops": _names(OpsConfig),
+        "fix_loop": _names(FixLoopConfig),
     }
 
 
@@ -426,6 +468,7 @@ def _plan_schema() -> Dict[str, Any]:
         "jira": defaults["jira"],
         "artifacts": defaults["artifacts"],
         "ops": defaults["ops"],
+        "fix_loop": defaults["fix_loop"],
     }
 
 
@@ -576,6 +619,9 @@ class ConfigLoader:
             ops=OpsConfig(**_filter_dataclass_kwargs(
                 OpsConfig, _deep_merge(defaults.get("ops") or {}, plan_data.get("ops") or {})
             )),
+            fix_loop=FixLoopConfig(**_filter_dataclass_kwargs(
+                FixLoopConfig, _deep_merge(defaults.get("fix_loop") or {}, plan_data.get("fix_loop") or {})
+            )),
             raw_defaults=defaults,
         )
         self._apply_secret_env_overrides(plan)
@@ -585,6 +631,8 @@ class ConfigLoader:
     def _apply_secret_env_overrides(plan: "TestPlanConfig") -> None:
         if os.environ.get("XTS_GEMINI_API_KEY"):
             plan.ai_rca.gemini_api_key = os.environ["XTS_GEMINI_API_KEY"]
+        if os.environ.get("XTS_LLM_API_KEY"):
+            plan.ai_rca.openai_api_key = os.environ["XTS_LLM_API_KEY"]
         if os.environ.get("XTS_DATABASE_URL"):
             plan.agent.database_url = os.environ["XTS_DATABASE_URL"]
         if os.environ.get("XTS_WIFI_PASSWORD"):
@@ -665,7 +713,7 @@ class ConfigLoader:
                     "patterns_file", "config/known_failures/patterns.yaml"
                 ),
                 "ai_api_key": default_rca.get("ai_api_key", ""),
-                "ai_model": default_rca.get("ai_model", "gemini-2.0-flash"),
+                "ai_model": default_rca.get("ai_model", "gemini-2.5-flash"),
             },
             plan_post.get("rca") or {},
         )

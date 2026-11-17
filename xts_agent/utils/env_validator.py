@@ -74,6 +74,9 @@ class EnvironmentValidator:
         if sdk:
             os.environ.setdefault("ANDROID_HOME", str(sdk))
             os.environ.setdefault("ANDROID_SDK_ROOT", str(sdk))
+            pt = sdk / "platform-tools"
+            if not shutil.which("adb") and (pt / "adb").exists():
+                os.environ["PATH"] = f"{pt}{os.pathsep}{os.environ.get('PATH', '')}"
         logger.info("Prepended %s to PATH for TradeFed", aapt2.parent)
         return aapt2
 

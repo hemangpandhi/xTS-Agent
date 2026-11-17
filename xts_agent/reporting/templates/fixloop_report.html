@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xTS Fix Loop</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f4f6f9; --surface: #ffffff; --surface-2: #f8fafc;
+    --ink: #0f172a; --ink-2: #334155; --muted: #64748b;
+    --grid: #e2e8f0; --ring: rgba(15, 23, 42, 0.08);
+    --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --blue: #2563eb; --blue-100: #dbeafe;
+    --good: #16a34a; --good-bg: #dcfce7; --good-ink: #166534;
+    --bad: #e11d48; --bad-bg: #ffe4e6; --bad-ink: #9f1239;
+    --warn: #d97706; --warn-bg: #fef3c7; --warn-ink: #92400e;
+    --info: #0284c7; --info-bg: #e0f2fe; --info-ink: #075985;
+    --violet: #7c3aed; --violet-bg: #ede9fe; --violet-ink: #5b21b6;
+    --notrun: #94a3b8;
+    --ai-bg: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%); --ai-border: #bfdbfe;
+    --fix-bg: #f0fdf4; --fix-border: #bbf7d0;
+    --code-bg: #0f172a; --code-ink: #e2e8f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0b0f19; --surface: #111827; --surface-2: #1e293b;
+      --ink: #f1f5f9; --ink-2: #cbd5e1; --muted: #94a3b8;
+      --grid: #1e293b; --ring: rgba(255, 255, 255, 0.09);
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      --blue: #3b82f6; --blue-100: #1e3a8a;
+      --good: #22c55e; --good-bg: rgba(22, 163, 74, 0.18); --good-ink: #86efac;
+      --bad: #fb7185; --bad-bg: rgba(225, 29, 72, 0.18); --bad-ink: #fda4af;
+      --warn: #f59e0b; --warn-bg: rgba(217, 119, 6, 0.18); --warn-ink: #fcd34d;
+      --info: #38bdf8; --info-bg: rgba(2, 132, 199, 0.18); --info-ink: #7dd3fc;
+      --violet: #a78bfa; --violet-bg: rgba(124, 58, 237, 0.2); --violet-ink: #c4b5fd;
+      --notrun: #475569;
+      --ai-bg: linear-gradient(135deg, rgba(30, 58, 138, 0.32) 0%, rgba(76, 29, 149, 0.24) 100%);
+      --ai-border: rgba(96, 165, 250, 0.3);
+      --fix-bg: rgba(20, 83, 45, 0.28); --fix-border: rgba(74, 222, 128, 0.3);
+      --code-bg: #090d16;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0b0f19; --surface: #111827; --surface-2: #1e293b;
+    --ink: #f1f5f9; --ink-2: #cbd5e1; --muted: #94a3b8;
+    --grid: #1e293b; --ring: rgba(255, 255, 255, 0.09);
+    --good-bg: rgba(22, 163, 74, 0.18); --good-ink: #86efac;
+    --bad-bg: rgba(225, 29, 72, 0.18); --bad-ink: #fda4af;
+    --warn-bg: rgba(217, 119, 6, 0.18); --warn-ink: #fcd34d;
+    --info-bg: rgba(2, 132, 199, 0.18); --info-ink: #7dd3fc;
+    --violet-bg: rgba(124, 58, 237, 0.2); --violet-ink: #c4b5fd;
+    --notrun: #475569; --code-bg: #090d16;
+    --ai-bg: linear-gradient(135deg, rgba(30, 58, 138, 0.32) 0%, rgba(76, 29, 149, 0.24) 100%);
+    --fix-bg: rgba(20, 83, 45, 0.28); --fix-border: rgba(74, 222, 128, 0.3);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .mono, code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header.hero { background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #1e3a8a 100%); color: #f8fafc; padding: 28px 16px 72px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .hero h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.01em; }
+  .hero .sub { color: #cbd5e1; font-size: 13px; }
+  .hero .sub span { margin-right: 14px; display: inline-block; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: -52px; }
+  .kpi { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--ring); padding: 14px 16px; }
+  .kpi .v { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .kpi .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi.good .v { color: var(--good); } .kpi.violet .v { color: var(--violet); } .kpi.bad .v { color: var(--bad); }
+  main { padding: 18px 16px 40px; }
+  .how { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 14px 18px; margin: 16px 0; box-shadow: var(--shadow); }
+  .how ol { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 8px 0 0; padding: 0; counter-reset: s; }
+  .how li { counter-increment: s; background: var(--surface-2); border: 1px solid var(--grid); border-radius: 999px; padding: 4px 12px 4px 6px; font-size: 13px; }
+  .how li::before { content: counter(s); display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 11px; margin-right: 6px; }
+  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 14px; box-shadow: var(--shadow); margin: 18px 0; overflow: hidden; }
+  .card > .head { padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; border-bottom: 1px solid var(--grid); }
+  .card h2 { margin: 0; font-size: 17px; }
+  .card .meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .st-FIXED, .st-FIXED_IN_CODE, .st-ALREADY_PASSING { background: var(--good-bg); color: var(--good-ink); }
+  .st-WORKAROUND_VERIFIED { background: var(--violet-bg); color: var(--violet-ink); }
+  .st-FLAKY { background: var(--warn-bg); color: var(--warn-ink); }
+  .st-NEEDS_CODE_FIX, .st-NO_FIX_FOUND, .st-DEVICE_LOST, .st-ERROR, .st-ABORTED { background: var(--bad-bg); color: var(--bad-ink); }
+  .cat { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  .cat-INFRASTRUCTURE_FAILURE { background: var(--info-bg); color: var(--info-ink); }
+  .cat-ENVIRONMENT_ISSUE { background: var(--warn-bg); color: var(--warn-ink); }
+  .cat-PRODUCT_BUG { background: var(--bad-bg); color: var(--bad-ink); }
+  .cat-FLAKY_TEST { background: var(--violet-bg); color: var(--violet-ink); }
+  .body { padding: 16px 18px; }
+  .summary { font-size: 14px; color: var(--ink-2); margin: 0 0 14px; }
+  /* iteration timeline */
+  .loop { display: flex; flex-wrap: wrap; align-items: stretch; row-gap: 10px; padding-bottom: 6px; }
+  .step { flex: 0 0 210px; background: var(--surface-2); border: 1px solid var(--grid); border-radius: 12px; padding: 10px 12px; position: relative; }
+  .step.green { border-color: var(--good); box-shadow: 0 0 0 2px var(--good-bg); }
+  .step.lost { border-style: dashed; border-color: var(--warn); background: var(--warn-bg); }
+  .step.lost .t { font-size: 12px; font-weight: 500; color: var(--warn-ink); }
+  .arrow { flex: 0 0 34px; display: grid; place-items: center; color: var(--muted); font-size: 18px; }
+  .step .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  .step .t { font-weight: 600; font-size: 13px; margin: 2px 0 6px; word-break: break-word; min-height: 19px; }
+  .bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--grid); }
+  .bar .p { background: var(--good); } .bar .f { background: var(--bad); } .bar .n { background: var(--notrun); }
+  .nums { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+  .nums b.p { color: var(--good); } .nums b.f { color: var(--bad); } .nums b.n { color: var(--muted); }
+  .verdict { font-size: 11.5px; margin-top: 4px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 16px; }
+  .grid2 > * { min-width: 0; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .panel { border: 1px solid var(--grid); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+  .panel h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .fail { border-left: 3px solid var(--bad); padding: 4px 10px; margin: 6px 0; background: var(--surface-2); border-radius: 0 8px 8px 0; }
+  .fail .id { font-size: 12px; color: var(--muted); word-break: break-all; }
+  .fail .msg { font-size: 13px; word-break: break-word; }
+  .fixbox { background: var(--fix-bg); border: 1px solid var(--fix-border); border-radius: 12px; padding: 12px 14px; margin-top: 8px; }
+  .fixbox .why { margin: 6px 0; color: var(--ink-2); }
+  pre.cmd { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 10px 12px; font-size: 12px; overflow-x: auto; margin: 8px 0 0; white-space: pre-wrap; word-break: break-all; }
+  .ai { background: var(--ai-bg); border: 1px solid var(--ai-border); border-radius: 12px; padding: 12px 14px; }
+  .ai .h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+  .ai p { margin: 8px 0 0; color: var(--ink-2); overflow-wrap: anywhere; }
+  .k2 { font-weight: 600; color: var(--ink); }
+  details { margin-top: 8px; } summary { cursor: pointer; color: var(--blue); font-size: 13px; }
+  .cited { font-size: 11px; font-weight: 600; color: var(--good-ink); background: var(--good-bg); border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+  .snip { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 8px 10px; font-size: 11.5px; overflow-x: auto; margin: 6px 0; }
+  .ev { font-size: 12px; color: var(--muted); word-break: break-all; }
+  .perm { border: 1px dashed var(--violet); border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: var(--violet-bg); color: var(--violet-ink); }
+  table.state { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.state td { border-top: 1px solid var(--grid); padding: 4px 6px; vertical-align: top; word-break: break-word; }
+  table.state td:first-child { color: var(--muted); white-space: nowrap; width: 110px; }
+  .step.code { background: var(--fix-bg); border-color: var(--fix-border); }
+  .step.code.bad { background: var(--bad-bg); border-color: var(--bad); }
+  .step .files { font-size: 12px; color: var(--ink-2); word-break: break-all; }
+  pre.diff { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 10px 12px; font-size: 11.5px; overflow-x: auto; margin: 8px 0 0; white-space: pre-wrap; word-break: break-all; }
+  pre.diff .add { color: var(--good); } pre.diff .del { color: var(--bad); } pre.diff .hunk { color: var(--blue); } pre.diff .meta { color: var(--muted); }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 10px 16px 30px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <h1>xTS Fix Loop</h1>
+    <div class="sub">
+      <span>run &rarr; root-cause in OEM code &rarr; patch &rarr; build &rarr; flash &rarr; re-run, until green</span>
+      {% if fingerprint %}<span class="mono">{{ fingerprint }}</span>{% endif %}
+      <span>{{ devices|length }} DUT{{ 's' if devices|length != 1 }}: {{ devices|join(', ') }}</span>
+      {% if model %}<span>LLM: {{ model }} (local GPU)</span>{% endif %}
+      <span>{{ generated }}</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap" style="padding: 0 16px;">
+  <div class="kpis">
+    <div class="kpi"><div class="v">{{ sessions|length }}</div><div class="l">Failing targets</div></div>
+    {% if counts.get('FIXED_IN_CODE', 0) or builds %}<div class="kpi good"><div class="v">{{ counts.get('FIXED_IN_CODE', 0) }}</div><div class="l">Fixed in OEM code</div></div>{% endif %}
+    {% if counts.get('FIXED', 0) %}<div class="kpi good"><div class="v">{{ counts.get('FIXED', 0) }}</div><div class="l">Fixed (lab / environment)</div></div>{% endif %}
+    {% if counts.get('WORKAROUND_VERIFIED', 0) %}<div class="kpi violet"><div class="v">{{ counts.get('WORKAROUND_VERIFIED', 0) }}</div><div class="l">Product root cause proven</div></div>{% endif %}
+    <div class="kpi bad"><div class="v">{{ counts.get('NEEDS_CODE_FIX', 0) + counts.get('NO_FIX_FOUND', 0) }}</div><div class="l">Still failing</div></div>
+    <div class="kpi"><div class="v">{{ runs }}</div><div class="l">Real TradeFed runs</div></div>
+    {% if builds %}<div class="kpi"><div class="v">{{ builds }}</div><div class="l">Builds &amp; flashes</div></div>{% endif %}
+    <div class="kpi"><div class="v">{{ total_duration }}</div><div class="l">Loop wall time</div></div>
+  </div>
+</div>
+
+<main class="wrap">
+  <section class="how">
+    <b>How each target is handled</b>
+    <ol>
+      <li>Baseline CTS run on the OEM build</li>
+      <li>Root cause: device probes + local LLM reading the OEM source</li>
+      <li>{% if builds %}Patch the OEM source (smallest change){% else %}Apply one allow-listed remediation{% endif %}</li>
+      <li>{% if builds %}Build the image &amp; flash the DUT{% else %}Re-run the same tests{% endif %}</li>
+      <li>Re-run CTS; revert the change if it did not help, try again</li>
+      <li>Green twice &rarr; patch handed over for review</li>
+    </ol>
+  </section>
+
+  {% for s in sessions %}
+  <article class="card">
+    <div class="head">
+      <div>
+        <h2 class="mono">{{ s.target.name }}</h2>
+        <div class="meta">DUT {{ s.serial }} · {{ s.runs }} TradeFed run{{ 's' if s.runs != 1 }} · {{ s.duration }}</div>
+      </div>
+      <span class="badge st-{{ s.status }}">{{ s.status_label }}</span>
+    </div>
+    <div class="body">
+      <p class="summary">{{ s.summary }}</p>
+
+      <div class="loop">
+        {% for st in s.steps %}
+        {% if not loop.first %}<div class="arrow">&rarr;</div>{% endif %}
+        {% if st.kind == 'failover' or st.verdict == 'device_lost' %}
+        <div class="step lost">
+          <div class="k">{{ 'DUT failover' if st.kind == 'failover' else st.label ~ ' · DUT lost' }}</div>
+          <div class="t">{{ st.note }}</div>
+        </div>
+        {% elif st.kind in ('code_fix', 'restore') %}
+        <div class="step code{% if st.verdict not in ('flashed', 'restored') %} bad{% endif %}">
+          <div class="k">{{ st.label }} · step {{ st.n + 1 }}</div>
+          <div class="t">{% if st.patch_files %}<span class="mono">{{ st.patch_files|join(', ') }}</span>{% else %}{{ st.note }}{% endif %}</div>
+          <div class="files">{% if st.build %}build {{ '&#10003;'|safe if st.build.ok else '&#10007;'|safe }} {{ st.build_time }}{% endif %}{% if st.deploy %} · flash {{ '&#10003;'|safe if st.deploy.ok else '&#10007;'|safe }} {{ st.flash_time }}{% endif %}</div>
+          <div class="verdict">{{ st.verdict|replace('_', ' ') }}{% if st.patch and st.patch.model %} · {{ st.patch.model }}{% endif %}</div>
+        </div>
+        {% else %}
+        <div class="step{% if st.green %} green{% endif %}">
+          <div class="k">{{ st.label }} · step {{ st.n + 1 }}</div>
+          <div class="t mono">{{ st.title or ('original state' if st.kind == 'baseline' else ('same state' if st.kind in ('retry', 'confirm') else '')) }}</div>
+          <div class="bar"><span class="p" style="width: {{ st.pass_pct }}%"></span><span class="f" style="width: {{ st.fail_pct }}%"></span><span class="n" style="width: {{ st.notrun_pct }}%"></span></div>
+          <div class="nums"><b class="p">{{ st.passed }}</b> pass · <b class="f">{{ st.failed }}</b> fail{% if st.skipped %} · {{ st.skipped }} skipped{% endif %}{% if st.not_run %} · <b class="n">{{ st.not_run }}</b> module not run{% endif %}</div>
+          <div class="verdict">{% if st.green %}&#10003; green{% elif st.verdict %}{{ st.verdict|replace('_', ' ') }}{% endif %} · {{ st.duration }}</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h3>What failed first</h3>
+          {% if s.baseline %}
+            {% for f in s.baseline.failures %}
+            <div class="fail"><div class="id mono">{{ f.kind }} · {{ f.test_id }}</div><div class="msg">{{ f.message[:260] }}</div></div>
+            {% else %}<div class="ev">No failures in baseline.</div>{% endfor %}
+            <div class="ev">Evidence: <span class="mono">{{ s.baseline.results_dir }}</span></div>
+          {% endif %}
+        </div>
+        <div class="panel">
+          <h3>What fixed it</h3>
+          {% if s.patch %}
+          <div class="fixbox">
+            <div><span class="cat cat-PRODUCT_BUG">OEM CODE</span> <b>Source patch, built and flashed</b>
+              <span class="ev">· written by {{ s.patch.model }} (local) · verified on the DUT, not committed</span></div>
+            {% if s.patch.root_cause %}<div class="why"><span class="k2">Root cause.</span> {{ s.patch.root_cause }}</div>{% endif %}
+            {% if s.patch.explanation %}<div class="why"><span class="k2">Why this fixes it.</span> {{ s.patch.explanation }}</div>{% endif %}
+            <pre class="diff">{% for ln in s.patch.diff.splitlines() %}{% if ln.startswith('+++') or ln.startswith('---') or ln.startswith('diff ') or ln.startswith('index ') %}<span class="meta">{{ ln }}</span>{% elif ln.startswith('@@') %}<span class="hunk">{{ ln }}</span>{% elif ln.startswith('+') %}<span class="add">{{ ln }}</span>{% elif ln.startswith('-') %}<span class="del">{{ ln }}</span>{% else %}{{ ln }}{% endif %}
+{% endfor %}</pre>
+            {% if s.patch.review_notes %}<div class="perm"><b>For the owning team:</b> {{ s.patch.review_notes|join(' ') }}</div>{% endif %}
+            {% if s.patch_file %}<div class="ev" style="margin-top:6px">For review: <span class="mono">{{ s.patch_file }}</span></div>{% endif %}
+          </div>
+          {% endif %}
+          {% for a in s.applied %}
+          <div class="fixbox">
+            <div><span class="cat cat-{{ a.category }}">{{ a.category|replace('_', ' ') }}</span> <b>{{ a.title }}</b>
+              <span class="ev">· chosen by {{ 'rule' if a.source == 'rule' else 'local LLM' }}</span></div>
+            <div class="why">{{ a.why }}</div>
+            <pre class="cmd">{% for act in a.actions %}{{ act }}
+{% endfor %}</pre>
+            {% if a.prep_hint %}<div class="ev" style="margin-top:6px"><b>Lab follow-up:</b> {{ a.prep_hint }}</div>{% endif %}
+            {% if a.workaround and a.permanent_fix %}
+            <div class="perm"><b>Workaround only &mdash; ship the permanent fix:</b> {{ a.permanent_fix }}</div>
+            {% endif %}
+          </div>
+          {% else %}
+            {% if not s.patch %}<div class="ev">{% if s.status in ('FIXED', 'WORKAROUND_VERIFIED') %}-{% else %}Nothing tried made these tests pass.{% endif %}</div>{% endif %}
+          {% endfor %}
+          {% for st in s.patch_attempts if st.patch is not sameas s.patch %}
+          <details><summary>Attempt that did not work: {{ st.verdict|replace('_', ' ') }}</summary>
+            <div class="ev">{{ st.note }}</div>
+            {% if st.patch and st.patch.diff %}<pre class="diff">{{ st.patch.diff }}</pre>{% endif %}
+            {% if st.build and st.build.errors %}<pre class="cmd">{{ st.build.errors|join('\n') }}</pre>{% endif %}
+          </details>
+          {% endfor %}
+          {% if s.final %}<div class="ev" style="margin-top:8px">Final run: <span class="mono">{{ s.final.results_dir }}</span></div>{% endif %}
+        </div>
+      </div>
+
+      {% if s.ai or (s.oem and s.oem.hits) %}
+      <div class="grid2">
+        {% if s.ai and s.ai.root_cause %}
+        <div class="ai">
+          <div class="h">&#10024; {% if s.patch and s.ai.classification != 'PRODUCT_BUG' %}First triage hypothesis (superseded: the verified patch shows the real cause){% else %}Local LLM root cause{% endif %} <span class="cat cat-{{ s.ai.classification }}">{{ (s.ai.classification or '')|replace('_', ' ') }}</span>
+            <span class="ev">{{ s.ai.model }} · {{ ((s.ai.confidence or 0) * 100)|round|int }}% self-reported · advisory</span></div>
+          <p>{{ s.ai.root_cause }}</p>
+          {% if s.ai.suggested_fix %}<p><span class="k2">Suggested fix.</span> {{ s.ai.suggested_fix }}</p>{% endif %}
+          {% if s.ai.evidence %}<p><span class="k2">Evidence.</span> {{ s.ai.evidence }}</p>{% endif %}
+        </div>
+        {% endif %}
+        {% if s.oem and s.oem.hits %}
+        <div class="panel">
+          <h3>OEM code consulted</h3>
+          <div class="ev">Searched for: <span class="mono">{{ s.oem.terms|join(', ') }}</span>{% if s.oem.implicated %} · implicated: {{ s.oem.implicated|join(', ') }}{% endif %}</div>
+          {% for h in s.oem.hits[:4] %}
+          <details{% if loop.first %} open{% endif %}>
+            <summary><b>{{ h.source }}</b> <span class="mono">{{ h.file.split('/')[-4:]|join('/') }}:{{ h.line }}</span> ({{ h.term }}){% if h.patched %}<span class="cited">patched</span>{% elif h.cited %}<span class="cited">cited in root cause</span>{% endif %}</summary>
+            <pre class="snip">{{ h.snippet }}</pre>
+          </details>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <details>
+        <summary>Device state at diagnosis &amp; every run's evidence</summary>
+        <table class="state">
+          {% for k, v in s.device_state.items() %}<tr><td>{{ k }}</td><td class="mono">{{ v }}</td></tr>{% endfor %}
+          {% for st in s.steps %}<tr><td>run {{ st.n + 1 }} ({{ st.label }})</td><td class="mono">{{ st.results_dir or 'no result dir' }}<br>{{ st.log_path }}{% if st.note %}<br>{{ st.note }}{% endif %}</td></tr>{% endfor %}
+        </table>
+      </details>
+    </div>
+  </article>
+  {% endfor %}
+</main>
+<footer>
+  Every step above is a real TradeFed invocation on the listed DUT; pass/fail counts come from its test_result.xml.
+  Device-side changes come only from config/remediations.yaml. Source patches touch only OEM trees marked editable,
+  never CTS or tests; each one is built, flashed and re-tested, and reverted if the tests still fail.
+  "Root cause proven" means a device-side workaround made the tests pass; the permanent fix must ship in the build.
+</footer>
+</body>
+</html>

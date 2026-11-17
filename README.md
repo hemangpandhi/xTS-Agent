@@ -427,11 +427,13 @@ or set one of these, which always override YAML:
 | Variable | Setting |
 |----------|---------|
 | `XTS_GEMINI_API_KEY` | `ai_rca.gemini_api_key` |
+| `XTS_LLM_API_KEY` | `ai_rca.openai_api_key` (OpenAI-compatible endpoint) |
 | `XTS_ATS2_API_KEY` | `ats2.api_key` |
 | `XTS_SLACK_WEBHOOK` | Slack webhook for notifications |
 | `XTS_WIFI_PASSWORD` | Wi-Fi password for device preparation |
 | `XTS_JIRA_TOKEN` | Jira PAT (Server/DC) or API token (Cloud) |
 | `XTS_DATABASE_URL` | Optional PostgreSQL URL for the shared results database |
+| `XTS_LOG_LEVEL` | Console log level before the plan is loaded (`ERROR` for quiet shells); `agent.log_level` applies after |
 
 In GitLab, store them as **masked + protected** CI/CD variables (or inject
 from Vault); on bare metal, export them from a root-owned env file.
@@ -480,9 +482,53 @@ Tables are created on first use. Credentials are masked in logs.
 ## AI RCA (on-prem by default)
 
 `ai_rca` defaults to `provider: llama_cpp`, so failure logs, stack traces and
-retrieved OEM source never leave the host. External providers (`gemini`) are
+retrieved OEM source never leave the host. External providers (`gemini`, or an
+`openai_compatible` endpoint that is not on this host or a private network) are
 refused unless `ai_rca.allow_external_providers: true` is set explicitly —
 get your security/legal sign-off before enabling it.
+
+| Provider | Runs where | Typical use |
+|----------|-----------|-------------|
+| `llama_cpp` | In-process, GGUF file on the GPU | Air-gapped lab |
+| `openai_compatible` | Any chat-completions server: Ollama, vLLM, llama.cpp server, LM Studio (on-prem, no opt-in) or OpenAI / Gemini's OpenAI endpoint / OpenRouter (hosted, opt-in) | Shared lab LLM server, or a hosted model for a demo |
+| `gemini` | Google API (opt-in) | Hosted |
+
+Example with a local Ollama server and the AOSP/OEM source indexed for retrieval:
+
+```yaml
+ai_rca:
+  enabled: true
+  provider: openai_compatible
+  openai_base_url: "http://127.0.0.1:11434/v1"
+  openai_model: "qwen2.5-coder:32b"
+  source_code_paths: ["/mnt/aosp/frameworks/base/services/core", "/mnt/aosp/vendor"]
+```
+
+Build the index once with `xts-agent index-code --plan P`, then every triage adds
+to each failure group a root cause, a category, a confidence, a suggested fix and
+the source files the answer was grounded on. The same configuration with a hosted
+`openai_base_url` and `XTS_LLM_API_KEY` is the quickest way to try it before the
+OEM lab has a local model.
+
+## Fix loop (root cause → patch → build → flash → re-run)
+
+`xts-agent fix-loop` takes failing tests and keeps working on them on the DUT
+until they pass twice. For product bugs it reads the OEM source (CarLauncher,
+CarSettings, CarSystemUI, device overlays; local folders or an MCP code server,
+`fix_loop.oem_sources`), has the local LLM write the smallest source change,
+builds the image, flashes the DUT and re-runs the tests; a change that does not
+build or does not help is reverted (`fix_loop.code_fix`). Lab problems are
+handled with reviewed device-side remediations from `config/remediations.yaml`.
+Each step is a real TradeFed run. A DUT that hangs is restarted
+(`fix_loop.restart_command`) or replaced by a `--spare`.
+
+```bash
+xts-agent fix-loop --plan config/test_plans/oem_code_fix.yaml --serial 0.0.0.0:6528 \
+  --test "CtsSettingsTestCases android.settings.cts.AutoPrivacySettingsTest"
+# page: results/fixloop/fixloop_<stamp>.html · verified patches: results/fixloop/patches/
+```
+
+Details, safety model and catalog format: [docs/FIX_LOOP.md](docs/FIX_LOOP.md).
 
 ---
 
@@ -490,6 +536,8 @@ get your security/legal sign-off before enabling it.
 
 | Artifact | Path |
 |----------|------|
+| Triage page: groups, categories, history, owners, AI root cause with source, Jira preview (self-contained HTML) | `results/triage/triage_<stamp>.html` |
+| Fix-loop page: per-target run timeline, fixes applied, LLM root cause, OEM code consulted | `results/fixloop/fixloop_<stamp>.html` (sessions: `results/fixloop/sessions/*.json`) |
 | HTML / JSON report | `results/reports/xts_report_*.{html,json}` |
 | JUnit (CI) | `results/junit/` |
 | Triage (groups, labels, owners, AI RCA) and Jira preview | `results/triage/` |
@@ -509,7 +557,7 @@ get your security/legal sign-off before enabling it.
 | `retry --plan P [--max-retries N]` | Retry the latest results of a plan |
 | `analyze --plan P [--rca] [--classify-failures]` | RCA and triage on the latest results |
 | `report --plan P --format html,json,junit` | Regenerate reports |
-| `triage --results-dir D` / `--import-history D` | Triage any TradeFed results dir; seed history |
+| `triage --results-dir D [--report]` / `--import-history D` | Triage any TradeFed results dir (optionally with HTML/JSON/JUnit reports); seed history |
 | `dashboard --plan P` | Regenerate the trends dashboard |
 | `index-code --plan P` | Build the local source index for AI RCA |
 | `device-check --min-devices N` | Fail unless N devices are online |

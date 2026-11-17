@@ -84,6 +84,41 @@ patterns:
     description: "Permission not granted for test operation"
     suggested_action: "Check test permissions, run on userdebug build"
 
+  - pattern: "was focused instead|must have window focus|Timed out waiting for window to be on top|Failed to find sharesheet on screen|Unable to wait for the .* activity|Could not launch intent .* within \\d+ milliseconds"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Another window/activity held focus, obscured the screen, or blocked activity launch"
+    suggested_action: "Close or disable interfering foreground/system apps (e.g. KitchenSink, overlays) and verify screen state"
+
+  - pattern: "not found within the timeout:\\s*(ImeEventStream|A\\d*yImeEventStream)|showSoftInput must success if the View has IME focus|InputMethodVisibilityVerifier\\.expectImeVisible|mDefaultDeviceImeListener\\.onShow|Editor label must exists on WebView|The panel should receive IME insets|Wait until InProcIme becomes ready|CtsInputMethod1\\.onStartInput is called|VirtualDeviceImeTest\\.customImeComponent|FocusHandlingTest\\.testKeyboardStateAfterImeFocusableFlagChanged|InputMethodManagerTest\\.testIsAcceptingText"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "IME input binding/visibility failed because the test window did not receive window focus"
+    suggested_action: "Ensure no background/debug activity (e.g. KitchenSink) is holding window focus during IME tests"
+
+  - pattern: "WindowUntrustedTouchTestBase\\.removeActivityOverlays"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Cascading @After tearDown() NPE on null mContext after @Before setUp() aborted waiting for activity focus"
+    suggested_action: "Dismiss interfering foreground activity (com.google.android.car.kitchensink) so test activity setUp() completes"
+
+  - pattern: "(?s:UiObject2\\.(findObjects|click|getText).*on a null object reference)|TestUtils\\.scrollToAndGetTextObject"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "UIAutomator UiObject2 was null because the test activity was occluded by an interfering foreground window"
+    suggested_action: "Dismiss interfering foreground activity (e.g. KitchenSink) so the test UI is visible on screen"
+
+  - pattern: "OnBackInvokedCallback\\.onBackInvoked\\(\\) was not called|OnBackPressed should have been called|No SurfaceView found,\\s*condition=false|MediaStoreUiTest\\.(findDocument|assertToolbarTitleEquals)|DownloadManagerTest\\.findDocument|UiDumpWrapperException:\\s*(View with text|Notification list|No scrollable exists)|Targeted input event injection.*was not directed at a window|Window did not become visible|Given dialog title.*not shown|Policy transparency dialog.*not found|(?s:SuspendPackageTest\\.dismissPolicyTransparencyDialog)|ClipboardManagerTest\\.testClipSourceRecordedWhenClipSet|ClipDescriptionTest\\.testClassificationNotPerformedForVeryLongText|HideOverlayWindowsTest.*getMotionEvent|CtsRequirementException:.*does not have focus|TestActivity should be resumed|window to be focused|Activity with id=placeholderActivity should be resumed|WindowChangeTimeoutException:\\s*no window change event|TestUtils\\.doEscalation|SensorPrivacyBaseTest\\.unblockSensorWithDialogAndAssert|MultipleStepsSignInActivityTest\\.testShowFillDialog|ActivityLaunchUriPermissionTest\\.testImplicitGrantForSend|ActionBarTest\\.testOptionsMenuKey|SearchManagerTest\\.testStopSearch|App hasn't come to the top of LRU list after getting back to foreground"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Test window, clipboard access, or system confirmation dialog was occluded or unfocused due to an interfering foreground activity"
+    suggested_action: "Force-stop interfering foreground apps (e.g. com.google.android.car.kitchensink) before running UI/WM suites"
+
+  - pattern: "Setup issue:.*network|No valid test network|Make sure you have WiFi|Network should be available|Timed out waiting for network availability|Expected disconnected and connected atoms|Active network doesn't support setting metered status|PrivateDnsPolicyTest|Wi-Fi network unavailable|Wifi not connected|Could not connect to any of the test domains|CapabilitiesChanged.*CELLULAR"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Missing Wi-Fi, metered network, or internet connectivity required by CTS"
+    suggested_action: "Connect device to a valid Wi-Fi/internet network before running connectivity/download suites"
+
+  - pattern: "No initial user available|initial user was null|SelfManagedConnectionTest\\.getDefaultDialer|TelephonyStatsTests\\.testCarrierServiceConfigOverridesReported|does not have a CDM association|(?s:Companion Device Associations:.*mDeviceMacAddress=null)|BatteryHealthTests\\.testBatteryHealthAtomValid|(?s:SystemUtil\\.eventually.*Hibernation)|(?s:XrWindowProperties.*Error: Hidden field accessible)|UID=2000 \\[com\\.android\\.shell\\]"
+    classification: "ENVIRONMENT_ISSUE"
+    description: "Missing device/emulator precondition or userdebug/@FlaggedApi build-config skew"
+    suggested_action: "Verify AAOS device provisioning and match CTS suite release config / user build variant"
+
   # ── Flaky Test Indicators ──────────────────────────────────
   - pattern: "SocketTimeoutException"
     classification: "FLAKY_TEST"
@@ -95,15 +130,10 @@ patterns:
     description: "Animation timing issue - common source of flakiness"
     suggested_action: "Disable animations on device, retry test"
 
-  - pattern: "AssertionError.*expected:.*but was:"
+  - pattern: "UiObjectNotFoundException|RetryableException:\\s*waitForObject|RetryableException:\\s*no event|UiDumpWrapperException:\\s*View not found after waiting|SafeCleanerRule\\$MultipleExceptions|should not time out waiting on latch|TestUtils\\.waitOnMainUntil|Timeout on command s_command_get_config|Timed out waiting for next line|CompletableFuture\\.timedGet|Timed out executing test|AssertionError:\\s*Timeout for waiting|(?s:ExternalStorageTest#testDownloadManagerPackage.*TimeoutException)"
     classification: "FLAKY_TEST"
-    description: "Value assertion mismatch - may be timing-dependent"
-    suggested_action: "Retry, check if values are time-sensitive"
-
-  - pattern: "UiObjectNotFoundException"
-    classification: "FLAKY_TEST"
-    description: "UI element not found - timing-dependent"
-    suggested_action: "Retry with longer wait, check UI state"
+    description: "UI element or async event not received within timeout - contention or rendering delay"
+    suggested_action: "Retry under lower shard load or inspect UI hierarchy dump"
 
   # ── Product Bug Indicators ─────────────────────────────────
   - pattern: "FATAL EXCEPTION.*in.*android\\."
@@ -122,10 +152,10 @@ patterns:
     suggested_action: "Check service manifest, verify system build"
 
   # ── Test Bug Indicators ────────────────────────────────────
-  - pattern: "java\\.lang\\.NullPointerException.*at.*cts\\."
+  - pattern: "Mock ConnectionService exists\\. Failed to call setUp"
     classification: "TEST_BUG"
-    description: "Null pointer in CTS test code"
-    suggested_action: "Check test for null safety issues, report upstream"
+    description: "Previous test leaked MockConnectionService state into subsequent test setUp"
+    suggested_action: "Ensure Telecom CTS test tearDown cleans up MockConnectionService"
 
   - pattern: "NoSuchMethodError.*at.*test"
     classification: "TEST_BUG"

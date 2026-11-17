@@ -220,6 +220,7 @@ Google's tooling runs the tests and writes the results. Everything that turns th
 | Result integrity | Results-dir detection from the console log, confirmed with `list results`; completeness gate (INCOMPLETE, FAILED outranks it); filtered certification plans refused | `execution/tradefed_runner.py`, `results/result_parser.py`, `config_loader.py` |
 | Live progress | TradeFed console parser: modules started and finished per device, failures so far, stall warning | `execution/progress.py` |
 | Triage engine | Failure-signature algorithm (normalised message, framework frames skipped, `[instant]` twins merged); NEW / PERSISTENT / FLAKY history with retry de-duplication; expiring report-only waivers; ownership routing; Jira filing deduplicated by signature label | `triage/` |
+| Triage page | Self-contained HTML per run: failures to root causes, previous-run delta, regressions, waived lab noise, categories, teams, group cards with AI root cause, evidence and the source lines it was grounded on, Jira preview | `reporting/triage_report.py` |
 | AI RCA | One structured answer per group (cause, category, confidence, fix, evidence) from a local model with retrieval over OEM source; cached; agreement with human classification measured | `triage/ai_rca.py`, `rca/` |
 | Observability and reporting | Offline HTML report, trends dashboard, JUnit for CI, Prometheus gauges without a running exporter, tagged rotated logs | `reporting/`, `utils/logger.py` |
 | Operations | Disk guard, results retention that keeps resumable sessions, `cleanup` scoped to the agent's own processes | `utils/retention.py`, `cli.py` |
@@ -404,8 +405,9 @@ graph LR
 - **Known issues.** Each entry matches by signature, message, test or module pattern. A waiver must have an expiry date, and it changes only the report label, never the TradeFed result.
 - **Owners.** Module and package patterns in `config/ownership.yaml` map to a team, a Jira component, an assignee and watchers.
 - **AI RCA.** One structured answer per group, not per test: root cause, category, confidence, suggested fix and evidence.
-  - It runs on llama.cpp by default.
-  - External providers are refused unless `ai_rca.allow_external_providers: true`.
+  - It runs on llama.cpp by default. `openai_compatible` talks to any chat-completions server (Ollama, vLLM, llama.cpp server on-prem; OpenAI or Gemini hosted), so a demo on a hosted model and the OEM lab on a local one share one configuration.
+  - External providers, including an OpenAI-compatible endpoint outside the host or private network, are refused unless `ai_rca.allow_external_providers: true`.
+  - The prompt carries the top source chunks retrieved from the indexed AOSP/OEM tree, and the answer's `evidence` and `code_refs` name the files it relied on.
   - Answers are cached by signature and model.
   - Agreement with human-classified known issues is measured, so you can decide how far to trust it.
 - **Jira.**

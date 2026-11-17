@@ -32,6 +32,20 @@ ENVIRONMENT_SIGNALS = (
     "unknownhostexception",
     "no internet connection",
     "not connected to wifi",
+    "make sure you have wifi",
+    "setup issue:",
+    "no valid test network",
+    "network should be available",
+    "no initial user available",
+    "initial user was null",
+    "was focused instead",
+    "must have window focus",
+    "timed out waiting for window to be on top",
+    "failed to find sharesheet on screen",
+    "unable to wait for the uninstaller activity",
+    "could not launch intent",
+    "not found within the timeout: imeeventstream",
+    "showsoftinput must success if the view has ime focus",
 )
 
 

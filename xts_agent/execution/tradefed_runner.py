@@ -356,10 +356,19 @@ class TradefedRunner:
     ) -> Optional[str]:
         """Locate this invocation's results dir (must contain test_result.xml).
 
-        Prefers the dir that appeared since ``before`` was snapshotted, then the
-        ``RESULT DIRECTORY`` line TradeFed prints at the end of a completed run.
-        Never falls back to "newest dir", which could belong to another run.
+        Prefers the ``RESULT DIRECTORY`` line TradeFed prints at the end of a
+        completed run (unambiguous even when several runs share the results
+        root), then the single dir that appeared since ``before`` was
+        snapshotted. Never guesses between several new dirs, which could
+        belong to another run.
         """
+        for match in reversed(list(self.RESULT_DIR_PATTERN.finditer(output))):
+            path = Path(match.group(1).strip().strip("'\""))
+            if path.name == "test_result.xml":
+                path = path.parent
+            if (path / "test_result.xml").exists() and (before is None or str(path) not in before):
+                return str(path)
+
         if before is not None:
             new_dirs = [
                 d
@@ -367,20 +376,13 @@ class TradefedRunner:
                 for d in self._session_dirs(root)
                 if str(d) not in before
             ]
+            if len(new_dirs) == 1:
+                return str(new_dirs[0])
             if new_dirs:
-                if len(new_dirs) > 1:
-                    logger.warning(
-                        "Multiple new result dirs appeared (concurrent run?): %s",
-                        [d.name for d in new_dirs],
-                    )
-                return str(max(new_dirs, key=lambda p: p.name))
-
-        for match in reversed(list(self.RESULT_DIR_PATTERN.finditer(output))):
-            path = Path(match.group(1).strip().strip("'\""))
-            if path.name == "test_result.xml":
-                path = path.parent
-            if (path / "test_result.xml").exists():
-                return str(path)
+                logger.warning(
+                    "Multiple new result dirs appeared (concurrent run?) and TradeFed printed none: %s",
+                    [d.name for d in new_dirs],
+                )
         return None
 
     def resolve_session_id(

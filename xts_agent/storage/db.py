@@ -36,7 +36,13 @@ class Database:
             self.url = url
         else:
             self.dialect = "sqlite"
-            self.url = url[len("sqlite:///"):] if url.startswith("sqlite:///") else url
+            # Accept a plain path, sqlite:///path and the sqlite:path form the
+            # repr prints, so a copied value from a log works as configuration
+            for prefix in ("sqlite:///", "sqlite://", "sqlite:"):
+                if url.startswith(prefix):
+                    url = url[len(prefix):]
+                    break
+            self.url = url
             Path(self.url).parent.mkdir(parents=True, exist_ok=True)
 
     def __repr__(self) -> str:

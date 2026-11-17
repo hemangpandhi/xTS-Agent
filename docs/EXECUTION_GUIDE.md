@@ -142,6 +142,62 @@ agent import as OK, and `check_ready.sh` ends with `RESULT: READY`
 
 ---
 
+## Stage 0.5: Triage and AI RCA on existing results (no devices needed)
+
+Everything below the TradeFed run can be shown and validated offline from any
+`test_result.xml`. This is the demo path: it takes seconds, except the first
+AI pass.
+
+```bash
+XA=xts-agent; P=config/test_plans/full_cts.yaml; CFG="--config config/default_config.yaml"
+# 1. Seed history with an earlier run, then triage the newer one
+$XA triage --plan $P $CFG --import-history /opt/xts/android-cts/results/<older_session>
+$XA triage --plan $P $CFG --results-dir /opt/xts/android-cts/results/<newer_session> --top 15 --report
+xdg-open results/triage/triage_*.html   # the triage page: start here
+# 2. Inspect one group
+T=$(ls -t results/triage/triage_*.json | head -1)
+jq '.summary' $T
+jq '.groups[0] | {title, count, modules, label, classification, owner, known_issue, ai}' $T
+# 3. Jira dry run (jira.enabled: true, mode: dry_run)
+jq '.[0]' $(ls -t results/triage/jira_preview_*.json | head -1)
+```
+
+Pass: failures collapse to a short list of groups (the lab's 1,303-failure
+run gives 183), groups seen in the older run are `PERSISTENT`, groups that
+match `config/known_issues.yaml` carry the issue id, every group has an owner
+from `config/ownership.yaml`, `--report` writes the HTML report with the triage
+section, and the Jira preview holds one ticket per actionable group.
+
+For the AI root cause, index the source once and enable `ai_rca`:
+
+```yaml
+ai_rca:
+  enabled: true
+  provider: openai_compatible            # local Ollama / vLLM / llama.cpp server
+  openai_base_url: "http://127.0.0.1:11434/v1"
+  openai_model: "qwen2.5-coder:32b"
+  max_groups: 8
+  source_code_paths:                     # AOSP now, OEM tree later
+    - "/mnt/aosp/cts/common/device-side/util-axt"
+    - "/mnt/aosp/frameworks/base/services/core/java/com/android/server/wm"
+    - "/mnt/aosp/packages/services/Car/service"
+```
+
+```bash
+$XA index-code --plan $P $CFG                       # minutes; re-run after source updates
+$XA triage --plan $P $CFG --results-dir <session> --report
+jq '.groups[0].ai' $T                              # root_cause, classification, confidence, suggested_fix, evidence, code_refs
+```
+
+Pass: each analysed group has a root cause, a category from the fixed set, a
+confidence, a suggested fix and `code_refs` naming the indexed files (with line)
+the answer was grounded on. Answers are cached by signature and model, so the
+second run is instant. A hosted model (`provider: gemini`, or an
+`openai_compatible` URL off-host with `allow_external_providers: true`) gives
+the same output for a demo before the lab has a local model.
+
+---
+
 ## Stage A: Cuttlefish AAOS cluster
 
 Purpose: prove the agent's own behaviour with failures you can inject on
@@ -507,7 +563,8 @@ checkpoint, and the next pipeline can run with `--resume`.
 | What | Where |
 |------|-------|
 | Summary report (start here) | `results/reports/xts_report_*.html` |
-| Failure groups, history labels, owners, AI hints | `results/triage/` |
+| **Triage page** (groups, categories, history, owners, AI root cause with source, Jira preview) | `results/triage/triage_<stamp>.html` |
+| Failure groups as JSON | `results/triage/triage_<stamp>.json` |
 | Proposed or filed Jira tickets | `results/triage/jira_preview_*.json` |
 | Trends across runs | `results/reports/dashboard.html` (`$XA dashboard --plan P $CFG`) |
 | Checkpoint and live progress | `results/run_state/<plan>.json` |

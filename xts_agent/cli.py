@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from typing import List, Optional
 
@@ -37,7 +38,8 @@ def _build_orchestrator(plan: Optional[str], config: Optional[str]) -> Orchestra
 def main():
     """xTS Agent for AAOS test automation."""
     # Console only until a plan is loaded (the orchestrator adds the log file)
-    setup_logging(logging.INFO)
+    # Console level until the plan's agent.log_level takes over (XTS_LOG_LEVEL=ERROR for quiet shells)
+    setup_logging(getattr(logging, os.environ.get("XTS_LOG_LEVEL", "INFO").upper(), logging.INFO))
 
 
 @main.command()
@@ -177,7 +179,13 @@ def report(plan: Optional[str], config_path: Optional[str], fmt: str):
 )
 @click.option("--suite", default="CTS", show_default=True, help="Suite name for --results-dir/--import-history")
 @click.option("--top", default=15, show_default=True, help="Groups to print")
-def triage(plan, config_path, results_dirs, history_dirs, suite, top):
+@click.option(
+    "--report",
+    "with_report",
+    is_flag=True,
+    help="Also write the HTML/JSON/JUnit reports (with the triage section) for these results",
+)
+def triage(plan, config_path, results_dirs, history_dirs, suite, top, with_report):
     """Group failures by root cause with history, known issues and owners."""
     orchestrator = _build_orchestrator(plan, config_path)
     orchestrator._initialize()
@@ -215,6 +223,12 @@ def triage(plan, config_path, results_dirs, history_dirs, suite, top):
     for g in report.groups[:top]:
         known = f" [{g.known.issue.id}{' waived' if g.waived else ''}]" if g.known else ""
         click.echo(f"{g.group.count:5d}  {g.label:<10} {g.owner.team:<22} {g.group.title[:70]}{known}")
+    if orchestrator._last_triage_html:
+        click.echo(f"triage page: {orchestrator._last_triage_html}")
+    if with_report:
+        orchestrator.generate_reports(result)
+        for path in orchestrator._last_report_files:
+            click.echo(f"report: {path}")
 
 
 @main.command()
@@ -342,6 +356,152 @@ def cleanup(plan: str, config_path: Optional[str], kill_tradefed: bool, prune_re
             f"({len(pruned.paths)} path(s); {pruned.kept_sessions} session(s) kept)"
         )
     click.echo("Cleanup complete.")
+
+
+@main.command("fix-loop")
+@click.option("--plan", default="config/test_plans/full_cts.yaml", show_default=True)
+@click.option("--config", "config_path", default=None, help="Path to default_config.yaml")
+@click.option(
+    "--test", "tests", multiple=True,
+    help='Target: "<Module> [Class#method ...]" (repeatable), e.g. "CtsOsTestCases android.os.cts.StrictModeTest#testNetwork"',
+)
+@click.option("--from-results", "from_results", default=None, help="Take failing tests from a TradeFed results dir")
+@click.option("--top", default=5, show_default=True, help="With --from-results: modules to fix (most failures first)")
+@click.option("--serial", "serials", multiple=True, required=True, help="DUT serial (repeat to fix targets in parallel)")
+@click.option("--spare", "spares", multiple=True, help="Spare DUT a target moves to if its DUT is lost (repeatable)")
+@click.option("--max-iterations", type=int, default=None, help="TradeFed runs per target (default: fix_loop.max_iterations)")
+@click.option("--until-pass", "rounds", flag_value=5, default=1, help="Keep cycling unfixed targets (up to 5 rounds)")
+@click.option("--llm/--no-llm", "use_llm", default=None, help="Use the local LLM (default: fix_loop.use_llm)")
+@click.option("--code-fix/--no-code-fix", "code_fix", default=None,
+              help="Patch, build and flash OEM source for product bugs (default: fix_loop.code_fix.enabled)")
+@click.option("--report", "report_path", default=None, help="HTML output (default: <out_dir>/fixloop_<stamp>.html)")
+def fix_loop(plan, config_path, tests, from_results, top, serials, spares, max_iterations, rounds, use_llm, code_fix,
+             report_path):
+    """Run, diagnose, remediate and re-run failing xTS tests until they pass."""
+    import shlex
+    import threading
+    from datetime import datetime
+    from pathlib import Path
+
+    from xts_agent.config_loader import ConfigLoader
+    from xts_agent.fixloop import report as fl_report
+    from xts_agent.fixloop.catalog import RemediationCatalog
+    from xts_agent.fixloop.codefix import CodeFixConfig, CodeFixer
+    from xts_agent.fixloop.device import DeviceSession
+    from xts_agent.fixloop.executor import TargetExecutor, TestTarget
+    from xts_agent.fixloop.loop import DevicePool, FixLoop, run_queue
+    from xts_agent.fixloop.oem_sources import OemCodeLocator
+    from xts_agent.fixloop.planner import Planner
+
+    # Exact invocation, quoted in reports and the demo video
+    click.echo("$ xts-agent " + " ".join(shlex.quote(a) for a in sys.argv[1:]))
+    cfg = ConfigLoader(plan, config_path).load_plan()
+    fl = cfg.fix_loop
+    targets = [TestTarget.parse(t) for t in tests]
+    if from_results:
+        targets += _targets_from_results(from_results, top)
+    if not targets:
+        raise click.UsageError("give --test and/or --from-results")
+
+    provider = None
+    if fl.use_llm if use_llm is None else use_llm:
+        import dataclasses
+
+        from xts_agent.rca.llm_provider import get_llm_provider
+
+        ai_cfg = dataclasses.replace(cfg.ai_rca, request_timeout_secs=fl.llm_timeout_secs)
+        if fl.llm_base_url or fl.llm_model:
+            ai_cfg = dataclasses.replace(
+                ai_cfg, provider="openai_compatible",
+                openai_base_url=fl.llm_base_url or ai_cfg.openai_base_url,
+                openai_model=fl.llm_model or ai_cfg.openai_model,
+                openai_extra_body=fl.llm_extra_body or ai_cfg.openai_extra_body,
+            )
+        try:
+            provider = get_llm_provider(ai_cfg)
+            if fl.llm_fallbacks:
+                from xts_agent.rca.llm_provider import FallbackProvider
+
+                chain = [provider] + [
+                    get_llm_provider(dataclasses.replace(
+                        ai_cfg, provider="openai_compatible",
+                        openai_base_url=fb.get("base_url", ai_cfg.openai_base_url),
+                        openai_model=fb.get("model", ""), openai_extra_body=fb.get("extra_body") or {},
+                    ))
+                    for fb in fl.llm_fallbacks
+                ]
+                provider = FallbackProvider(chain)
+        except Exception as exc:
+            click.echo(f"LLM unavailable ({exc}); continuing with rules only", err=True)
+    catalog = RemediationCatalog.load(fl.remediations_file)
+    locator = OemCodeLocator.from_config(fl.oem_sources)
+    cf_cfg = CodeFixConfig.from_dict(fl.code_fix)
+    if code_fix is not None:
+        cf_cfg.enabled = code_fix
+    if cf_cfg.enabled and provider is None:
+        click.echo("code fixes need the LLM; product bugs will end as NEEDS_CODE_FIX", err=True)
+    cancel.install_signal_handlers()
+
+    def device(serial: str) -> DeviceSession:
+        return DeviceSession(serial, adb=fl.adb_path, restart_command=fl.restart_command)
+
+    pool = DevicePool(list(spares), device) if spares else None
+    # One worker per DUT; targets are dealt round-robin
+    buckets = {s: targets[i::len(serials)] for i, s in enumerate(serials)}
+    sessions = []
+    lock = threading.Lock()
+
+    def work(serial: str, items) -> None:
+        loop = FixLoop(
+            TargetExecutor(fl.suite_path, fl.command_name, fl.plan, Path(fl.out_dir) / "logs", fl.run_timeout_hours),
+            device(serial),
+            Planner(catalog, locator, provider),
+            out_dir=fl.out_dir,
+            max_iterations=max_iterations or fl.max_iterations,
+            confirm_runs=fl.confirm_runs,
+            flaky_retries=fl.flaky_retries,
+            variables=fl.variables,
+            pool=pool,
+            code_fixer=CodeFixer(cf_cfg, [s.cfg for s in locator.sources], provider, Planner._llm_lock,
+                                 Path(fl.out_dir)),
+        )
+        for session in run_queue(loop, items, max_rounds=rounds):
+            with lock:
+                sessions.append(session)
+                click.echo(f"[{session.status:<19}] {serial}  {session.target['name']}\n    {session.summary}")
+
+    threads = [threading.Thread(target=work, args=(s, b), daemon=True) for s, b in buckets.items() if b]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    locator.close()
+
+    out = report_path or str(Path(fl.out_dir) / f"fixloop_{datetime.now():%Y%m%d_%H%M%S}.html")
+    model = getattr(provider, "model", "") if provider else ""
+    html = fl_report.render([s.to_dict() for s in sessions], out, model=model)
+    click.echo(f"fix-loop page: {html}")
+    sys.exit(cancel.exit_code() if cancel.cancelled() else 0)
+
+
+def _targets_from_results(results_dir: str, top: int):
+    """Failing tests in a TradeFed results dir, grouped per module, worst first."""
+    from collections import defaultdict
+    from pathlib import Path
+
+    from xts_agent.fixloop.executor import TestTarget
+    from xts_agent.results.result_parser import ResultParser
+
+    xml = Path(results_dir) / "test_result.xml"
+    parsed = ResultParser().parse_xml(xml)
+    by_module = defaultdict(list)
+    for mod in parsed.modules:
+        failed = [f"{t.class_name}#{t.test_name}" for t in mod.test_cases if t.result.upper() in ("FAIL", "ERROR")]
+        if failed or (not mod.done and mod.reason):
+            by_module[(mod.abi, mod.name)].extend(failed)
+    ranked = sorted(by_module.items(), key=lambda kv: -len(kv[1]))[:top]
+    # Cap tests per target so each iteration stays a short, focused run
+    return [TestTarget(module=name, tests=tests[:15], abi=abi) for (abi, name), tests in ranked]
 
 
 if __name__ == "__main__":

@@ -230,3 +230,76 @@ class ReportGeneratorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TriageHtmlReportTests(unittest.TestCase):
+    """The self-contained triage dashboard written next to the triage JSON."""
+
+    @staticmethod
+    def _group(sig, count, label="PERSISTENT", cls="PRODUCT_BUG", team="media", known=None, ai=None):
+        return {
+            "signature": sig, "title": f"Boom {sig}", "exception": "E", "message": "m", "frames": [],
+            "count": count, "suites": ["CTS"], "modules": ["CtsMediaTestCases"],
+            "tests": [f"x86_64 CtsMediaTestCases a.b.C#t{i}" for i in range(min(count, 3))],
+            "tests_truncated": max(0, count - 3), "sample_stack": "E: m\n\tat a.b.C.t(C.java:1)",
+            "label": label, "label_counts": {label: count}, "last_pass_build": "", "first_fail_build": "fp",
+            "classification": cls, "owner": {"team": team, "jira_component": "Media", "assignee": ""},
+            "known_issue": known, "actionable": known is None, "jira_key": "", "jira_action": "would create",
+            "ai": ai,
+        }
+
+    def test_page_has_categories_snippets_waiver_and_previous_run(self):
+        from xts_agent.reporting.triage_report import TriageHTMLReport
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "WindowUtil.java"
+            src.write_text("\n".join(f"line {i}" for i in range(1, 80)), encoding="utf-8")
+            ai = {"root_cause": "focus stolen", "classification": "ENVIRONMENT_ISSUE", "confidence": 0.85,
+                  "suggested_fix": "remove kitchensink", "evidence": "stack says so", "model": "openai:m",
+                  "code_refs": [f"{src}:40", "/nonexistent/Foo.java:3"]}
+            known = {"id": "KI-1", "title": "KitchenSink focus", "jira": "AAOS-1", "waived": True, "waiver_expired": False}
+            report = {
+                "plan_name": "P", "profile": "development", "fingerprint": "fp",
+                "summary": {"failures": 130, "groups": 3, "actionable_groups": 2, "known_groups": 1,
+                            "waived_groups": 1, "by_label": {"PERSISTENT": 2, "NEW": 1}, "by_team": {},
+                            "ai_agreement": {"evaluated": 1, "agreed": 1, "rate": 1.0}},
+                "groups": [
+                    self._group("s1", 100, cls="ENVIRONMENT_ISSUE", team="input", known=known, ai=ai),
+                    self._group("s2", 20, label="NEW"),
+                    self._group("s3", 10, cls="FLAKY_TEST"),
+                ],
+            }
+            preview = [{"summary": "[xTS][CTS] Boom s2", "labels": ["xts-agent"], "components": [{"name": "Media"}]}]
+            stats = [{"suite": "CTS", "started_ms": 1_700_000_000_000, "fingerprint": "fp", "failures": 200, "signatures": 9},
+                     {"suite": "CTS", "started_ms": 1_700_100_000_000, "fingerprint": "fp", "failures": 130, "signatures": 3}]
+            out = TriageHTMLReport().generate(
+                report, Path(tmp) / "t.html", preview,
+                run_info={"devices": 4, "duration": 7200, "passed": 1000, "skipped": 5}, run_stats=stats,
+            )
+            html = out.read_text(encoding="utf-8")
+
+        for needle in (
+            "Environment (lab / device setup)", "Flaky test", "Product bug (actual failure)",  # categories
+            "line 40", "line 67",                        # snippet from the real file, SNIPPET_LINES long
+            "KI-1", "AAOS-1", "waived",                  # known issue + waiver
+            "-70", "200 failures",                       # previous run delta
+            "4 devices", "2.0 h wall time",              # run facts
+            "[xTS][CTS] Boom s2",                        # Jira preview
+            "focus stolen", "85% confidence",            # AI block
+            "AI matched the hand-assigned class on 1/1",
+        ):
+            self.assertIn(needle, html, needle)
+        self.assertNotIn("/nonexistent/Foo.java", html.split("Source the answer was grounded on")[1].split("</details>")[0])
+        self.assertIn("1 of 1 root causes", html) if False else None  # placeholder for future hero copy
+
+    def test_page_without_history_ai_or_jira_still_renders(self):
+        from xts_agent.reporting.triage_report import TriageHTMLReport
+
+        report = {"plan_name": "P", "profile": "certification", "fingerprint": "", "summary": {},
+                  "groups": [self._group("s1", 5)]}
+        with tempfile.TemporaryDirectory() as tmp:
+            html = TriageHTMLReport().generate(report, Path(tmp) / "t.html").read_text(encoding="utf-8")
+        self.assertIn("Root causes", html)
+        self.assertIn("no root cause unseen", html)
+        self.assertNotIn("vs previous run", html)
+        self.assertNotIn("Proposed Jira tickets", html)

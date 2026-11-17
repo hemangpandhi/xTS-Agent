@@ -58,6 +58,7 @@ class Orchestrator:
         self.last_triage = None
         self._last_report_files: List[Path] = []
         self._last_triage_path: Optional[Path] = None
+        self._last_triage_html: Optional[Path] = None
         self._results_dir = Path("results")
         self._metrics: Optional[MetricsPublisher] = None
 
@@ -418,13 +419,18 @@ class Orchestrator:
         cfg = self.plan.ai_rca
         return OEMCodeIndexer(cfg.index_db_path, cfg.source_code_paths, cfg.embedding_model)
 
-    def _run_group_ai(self, report) -> None:
+    def _run_group_ai(self, report, results: Optional[PlanResult] = None) -> None:
         cfg = self.plan.ai_rca
         if not cfg.enabled:
             return
         from xts_agent.rca.llm_provider import get_llm_provider
         from xts_agent.triage.ai_rca import GroupAIAnalyzer
 
+        results_dirs = [
+            s.results_dir
+            for s in (results.suites_results.values() if results and results.suites_results else [])
+            if getattr(s, "results_dir", "")
+        ]
         try:
             provider = get_llm_provider(cfg)  # refuses external providers without opt-in
             indexer = self.code_indexer() if cfg.source_code_paths else None
@@ -433,6 +439,7 @@ class Orchestrator:
                 indexer=indexer,
                 cache_db=self.database(),
                 max_groups=cfg.max_groups,
+                results_dirs=results_dirs,
             ).analyze(report)
         except Exception as exc:
             logger.error("AI RCA skipped: %s", exc)
@@ -479,6 +486,11 @@ class Orchestrator:
     def _run_triage(self, results: PlanResult, rca_report=None):
         if not self.plan.triage.enabled:
             return None
+        if rca_report is None and self.plan.post_execution.rca.enabled:
+            try:
+                rca_report = self._run_rca(results, probe_devices=False)
+            except Exception as exc:
+                logger.warning("Pre-triage rule RCA skipped: %s", exc)
         try:
             report = self.triage_engine().triage(results, rca_report)
         except Exception as exc:
@@ -486,13 +498,83 @@ class Orchestrator:
             logger.exception("Triage failed: %s", exc)
             return None
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._run_group_ai(report)
+        self._run_group_ai(report, results=results)
+        if rca_report is not None:
+            self._sync_rca_with_triage(rca_report, report)
+            self.last_rca_report = rca_report
+        logger.info("Triage post-AI summary: %s", report.summary)
         self._file_jira(report, stamp)
         path = report.save(self._results_dir / "triage" / f"triage_{stamp}.json")
         self._last_triage_path = path
         logger.info("Triage report: %s", path)
+        self._write_triage_html(report, stamp, results)
         self.last_triage = report
         return report
+
+    @staticmethod
+    def _sync_rca_with_triage(rca_report, triage_report) -> None:
+        """Keep per-test RCAReport aligned with post-AI TriagedGroup classifications."""
+        from xts_agent.rca.rca_engine import FailureType
+
+        by_test: dict = {}
+        for tg in getattr(triage_report, "groups", None) or []:
+            for tc in tg.group.tests:
+                by_test[tc.test_id] = tg
+        summary: dict = {}
+        for fa in getattr(rca_report, "failures", None) or []:
+            tg = by_test.get(fa.test_id)
+            if tg is not None and tg.classification in FailureType.__members__:
+                fa.classification = FailureType[tg.classification]
+                if tg.ai:
+                    fa.confidence = float(tg.ai.get("confidence", fa.confidence))
+                    fa.root_cause = tg.ai.get("root_cause") or fa.root_cause
+                    fa.suggested_action = tg.ai.get("suggested_fix") or fa.suggested_action
+            cls_name = fa.classification.name
+            summary[cls_name] = summary.get(cls_name, 0) + 1
+        if summary:
+            rca_report.summary = summary
+            rca_report.recommendations = [
+                f"{cnt} failure(s) classified as {k}"
+                for k, cnt in sorted(summary.items(), key=lambda kv: kv[1], reverse=True)
+            ]
+
+    def _write_triage_html(self, report, stamp: str, results: Optional[PlanResult] = None) -> Optional[Path]:
+        """Self-contained triage dashboard next to the JSON (never fails the run)."""
+        import json
+
+        from xts_agent.reporting.triage_report import TriageHTMLReport
+
+        triage_dir = self._results_dir / "triage"
+        preview_path = triage_dir / f"jira_preview_{stamp}.json"
+        preview = None
+        if preview_path.exists():
+            try:
+                preview = json.loads(preview_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                logger.warning("Jira preview unreadable for the triage page: %s", exc)
+        run_info = None
+        if results is not None:
+            run_info = {
+                "devices": len(results.device_serials),
+                "duration": results.duration,
+                "passed": results.total_pass,
+                "skipped": results.total_skip,
+            }
+        try:
+            run_stats = self.triage_engine().history.run_stats(limit=10)
+        except Exception as exc:
+            logger.warning("Run history unavailable for the triage page: %s", exc)
+            run_stats = None
+        try:
+            html = TriageHTMLReport().generate(
+                report, triage_dir / f"triage_{stamp}.html", preview, run_info=run_info, run_stats=run_stats
+            )
+        except Exception as exc:
+            logger.error("Triage HTML page skipped: %s", exc)
+            return None
+        self._last_triage_html = html
+        logger.info("Triage page: %s", html)
+        return html
 
     def generate_reports(self, results: PlanResult, rca_report=None, formats: Optional[List[str]] = None):
         formats = formats or list(self.plan.post_execution.reporting.formats)
@@ -572,12 +654,14 @@ class Orchestrator:
             logger.info("Uploading compliance zip %s to ATS 2.0...", zip_file)
             client.upload_results(suite_name, self.plan.name, str(zip_file))
 
-    def _run_rca(self, results: PlanResult):
+    def _run_rca(self, results: PlanResult, probe_devices: bool = True):
         rca_cfg = self.plan.post_execution.rca
         pattern_matcher = PatternMatcher(rca_cfg.patterns_file)
         classifier = FailureClassifier() if rca_cfg.failure_classification else None
-        diagnostics = DiagnosticCollector(
-            AdbWrapper, self._results_dir / "diagnostics"
+        diagnostics = (
+            DiagnosticCollector(AdbWrapper, self._results_dir / "diagnostics")
+            if probe_devices
+            else None
         )
         # AI analysis runs once per failure group in triage, not per test here
         engine = RCAEngine(

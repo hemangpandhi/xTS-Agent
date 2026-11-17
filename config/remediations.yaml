@@ -1,0 +1,142 @@
+# Allow-listed remediations for `xts-agent fix-loop`.
+#
+# The fix loop only ever runs actions listed here. An LLM may pick an `id`
+# from this file, but it can never supply commands. Review changes to this
+# file like code: every `apply` line runs on lab devices.
+#
+# Fields
+#   match        regexes over the failure text (test message + stack + module setup errors)
+#   scope        device     adb shell commands in `apply` / `revert`
+#                host_tool  put a working `tool` first on TradeFed's PATH (host untouched)
+#                reboot     reboot the DUT and wait for boot
+#   detect       read-only adb shell probe; the remediation is used only when
+#   broken_if    this regex matches the probe output (device really is broken)
+#   {m1}..{m9}   groups captured by `match`; must pass capture_pattern
+#   workaround   true = proves a product root cause on the device but is not
+#                the shippable fix; `permanent_fix` says what to change
+#   prep_hint    what to add to device prep / lab setup once proven
+
+remediations:
+  # ---------------------------------------------------------------- host ---
+  - id: host_aapt2_outdated
+    title: Host aapt2 cannot parse APKs (no `dump badging`)
+    category: INFRASTRUCTURE_FAILURE
+    scope: host_tool
+    match:
+      - "AAPT_PARSER_FAILED"
+      - "Unable to open 'badging'"
+    tool: aapt2
+    tool_candidates:
+      - "$ANDROID_HOME/build-tools/*"
+      - "~/Android/Sdk/build-tools/*"
+      - "/mnt/aosp-17-master/out/host/linux-x86/bin"
+    verify_args: ["dump", "badging", "{any_test_apk}"]
+    why: >-
+      TradeFed runs `aapt2 dump badging` on every test APK before installing it.
+      The distro aapt2 on PATH (/usr/bin/aapt2, 2:19) has no `badging`
+      subcommand, so SuiteApkInstaller fails and the whole module is reported
+      as not run. A build-tools aapt2 works.
+    prep_hint: "Put Android SDK build-tools (34+) before /usr/bin on the TradeFed host PATH, or remove the distro aapt2 package."
+    references:
+      - "TradeFed AaptParser / SuiteApkInstaller: TargetSetupError AAPT_PARSER_FAILED (520050)"
+
+  # -------------------------------------------------------------- network ---
+  - id: device_connect_lab_wifi
+    title: DUT has no usable network; join the lab Wi-Fi
+    category: ENVIRONMENT_ISSUE
+    scope: device
+    match:
+      - "No valid test network"
+      - "UnknownHostException"
+      - "Unable to resolve host"
+      - "Make sure you have WiFi or some other connectivity"
+      - "NetworkConnectivityChecker is still failing"
+    detect: "cmd wifi status | head -3; ping -c1 -W3 www.google.com 2>&1 | head -1"
+    broken_if: "Wifi is disabled|Wifi is not connected|unknown host|100% packet loss"
+    apply:
+      - "cmd wifi set-wifi-enabled enabled"
+      - "sleep 8; cmd wifi connect-network {var.lab_wifi_ssid} {var.lab_wifi_security}"
+      - "sleep 10; cmd wifi status | head -4"
+    revert:
+      - "cmd wifi set-wifi-enabled disabled"
+    settle_secs: 5
+    why: >-
+      Network CTS tests need internet and, for Wi-Fi suggestion tests, a saved
+      Wi-Fi network in range. On this lab's Cuttlefish DUTs Wi-Fi is off and
+      the cellular data path only routes for instance 1, so DNS fails.
+      Joining the lab access point (VirtWifi on Cuttlefish; your lab SSID on
+      hardware) gives the DUT a validated network.
+    prep_hint: "Add Wi-Fi enable + join the lab AP to device prep (CTS requires a Wi-Fi network with internet)."
+    references:
+      - "CTS setup: https://source.android.com/docs/compatibility/cts/setup#wifi"
+
+  # ------------------------------------------------- product configuration ---
+  - id: device_assign_default_dialer_role
+    title: No default Dialer role holder on the current (headless) user
+    category: PRODUCT_BUG
+    scope: device
+    workaround: true
+    match:
+      - "SelfManagedConnectionTest\\.getDefaultDialer"
+      - "getRoleHolders\\(RoleManager\\.ROLE_DIALER\\)"
+    detect: "cmd role get-role-holders --user $(am get-current-user) android.app.role.DIALER; echo END"
+    broken_if: "\\A\\s*END"
+    apply:
+      - "cmd role add-role-holder --user $(am get-current-user) android.app.role.DIALER com.android.car.dialer"
+      - "cmd role get-role-holders --user $(am get-current-user) android.app.role.DIALER"
+    revert:
+      - "cmd role remove-role-holder --user $(am get-current-user) android.app.role.DIALER com.android.car.dialer"
+    why: >-
+      ROLE_DIALER is available but has no holder on the foreground user, so
+      SelfManagedConnectionTest.setUp() calls getRoleHolders(ROLE_DIALER).get(0)
+      on an empty list. Assigning the car dialer on the device makes the tests
+      pass, which proves the root cause is the default-role configuration.
+    permanent_fix: >-
+      Make the product grant the Dialer role at first boot of every user:
+      set config_defaultDialer to the car dialer package in the framework-res
+      overlay this product really builds with (check the built image with
+      `aapt2 dump resources framework-res.apk | grep -A1 config_defaultDialer`;
+      an overlay dir the product makefiles do not include has no effect).
+    prep_hint: "Do not add to device prep: this must ship in the build."
+
+  # --------------------------------------------------------- device state ---
+  - id: device_stop_focus_stealing_app
+    title: Another app holds window focus over the test activity
+    category: ENVIRONMENT_ISSUE
+    scope: device
+    match:
+      - "\\b([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+){2,}) was focused instead"
+    apply:
+      - "am force-stop {m1}"
+      - "input keyevent KEYCODE_HOME"
+    why: >-
+      A preinstalled app (seen in run 5909: com.google.android.car.kitchensink)
+      launches over the test activity, so WindowUtil.waitForFocus times out.
+    prep_hint: "Remove debug apps such as KitchenSink from CTS builds, or stop them in device prep."
+
+  - id: device_dismiss_keyguard
+    title: Keyguard or screen-off blocks the test window
+    category: ENVIRONMENT_ISSUE
+    scope: device
+    match:
+      - "must have window focus"
+      - "Timed out waiting for window to be on top"
+      - "[Kk]eyguard"
+    detect: "dumpsys window | grep -iE 'isKeyguardShowing=true|mShowingLockscreen=true|mDreamingLockscreen=true'; dumpsys power | grep -E 'mWakefulness=(Asleep|Dozing)'"
+    broken_if: "true|Asleep|Dozing"
+    apply:
+      - "input keyevent KEYCODE_WAKEUP"
+      - "wm dismiss-keyguard"
+      - "svc power stayon true"
+    why: "Activity-based tests need an awake, unlocked display."
+    prep_hint: "Disable the lock screen and keep the screen on in device prep."
+
+  - id: device_reboot_unresponsive
+    title: Device or system_server unresponsive
+    category: INFRASTRUCTURE_FAILURE
+    scope: reboot
+    match:
+      - "DeviceNotAvailableException"
+      - "DeviceUnresponsiveException"
+      - "Instrumentation run failed due to 'Process crashed.'"
+    why: "A clean boot clears a wedged system_server or adb transport."

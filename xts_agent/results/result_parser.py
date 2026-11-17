@@ -39,6 +39,8 @@ class ModuleResult:
     runtime: int
     test_cases: List[TestCaseResult] = field(default_factory=list)
     abi: str = ""
+    # <Reason message=...> on modules that did not finish (e.g. a preparer failed)
+    reason: str = ""
 
     @property
     def module_id(self) -> str:
@@ -181,6 +183,9 @@ class ResultParser:
                 runtime=int(mod.attrib.get("runtime", 0) or 0),
                 abi=mod.attrib.get("abi", ""),
             )
+            reason = mod.find("Reason")
+            if reason is not None:
+                mod_res.reason = reason.attrib.get("message", "") or ""
             for tc in mod.findall(".//TestCase"):
                 for t in tc.findall("Test"):
                     fail = t.find("Failure")

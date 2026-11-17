@@ -17,3 +17,7 @@ suites:
     retry:
       max_retries: 0
       strategy: "RETRY_ANY_FAILURE"
+
+ai_rca:
+  enabled: true
+  max_groups: 200
