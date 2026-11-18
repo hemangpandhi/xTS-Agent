@@ -232,6 +232,7 @@ label select, label input[type=text], label input[type=number] { margin-left: 6p
   <a class="nav" href="#/runs" data-v="runs"><svg class="i" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Runs</span></a>
   <a class="nav" href="#/triage" data-v="triage"><svg class="i" viewBox="0 0 24 24"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"/></svg><span>Triage</span></a>
   <a class="nav" href="#/devices" data-v="devices"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><span>Devices</span></a>
+  <a class="nav" href="#/fleet" data-v="fleet"><svg class="i" viewBox="0 0 24 24"><rect x="2" y="3" width="8" height="6" rx="1"/><rect x="14" y="3" width="8" height="6" rx="1"/><rect x="8" y="15" width="8" height="6" rx="1"/><path d="M6 9v3h12V9M12 12v3"/></svg><span>Fleet</span></a>
   <div class="navlabel">Setup</div>
   <a class="nav" href="#/settings" data-v="settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
   <div id="sidelinks"></div>
@@ -246,6 +247,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const ICONS = {
+  fleet: '<rect x="2" y="3" width="8" height="6" rx="1"/><rect x="14" y="3" width="8" height="6" rx="1"/><rect x="8" y="15" width="8" height="6" rx="1"/><path d="M6 9v3h12V9M12 12v3"/>',
   play: '<polygon points="6 3 20 12 6 21 6 3"/>', stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>', check: '<path d="M20 6 9 17l-5-5"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>', alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
   device: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -264,6 +266,9 @@ try { TOKEN = sessionStorage.getItem("xts-ui-token") || ""; } catch (e) {}
   const m = location.hash.match(/token=([^&]+)/);
   if (m) { TOKEN = decodeURIComponent(m[1]); try { sessionStorage.setItem("xts-ui-token", TOKEN); } catch (e) {} history.replaceState(null, "", location.pathname + "#/live"); }
 })();
+// "Run on" at Launch: with a worker chosen, device and module lists come from that PC through the master
+let RUN_ON = "";
+const wapi = (path, opts) => api((RUN_ON ? "/api/fleet/w/" + encodeURIComponent(RUN_ON) : "") + path, opts);
 const fileHref = (u) => (!u ? "" : TOKEN ? u + (u.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(TOKEN) : u);
 async function api(path, opts = {}) {
   const init = { headers: TOKEN ? { Authorization: "Bearer " + TOKEN } : {} };
@@ -347,11 +352,134 @@ const every = (fn, ms) => { fn(); timers.push(setInterval(fn, ms)); };
 const clearTimers = () => { timers.forEach(clearInterval); timers = []; };
 const views = {};
 let skipRoute = false;
+// ------------------------------------------------------------------ fleet
+views.fleet = async function () {
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Fleet</h1><p>Every lab PC this console controls: its devices and runs, and one suite divided across PCs. TradeFed always runs on the PC that holds the devices.</p></div><div class="spacer"></div><button class="btn" id="frf">${ic("refresh")} Refresh</button></div>
+    <div class="kpis" id="fk">${'<div class="card skeleton" style="height:76px"></div>'.repeat(4)}</div>
+    <div id="fworkers"><div class="skeleton" style="height:120px"></div></div><div id="fsplit"></div><div id="flog"></div><div id="fruns"></div><div id="fdevs"></div>`;
+  let plans = [], me = {}, workers = [], splitKey = "", logOf = null;
+  const picked = new Set(); let pickedInit = false;
+  try { [plans, me] = await Promise.all([api("/api/plans"), api("/api/overview")]); } catch (e) { /* drawn below */ }
+  const short = (fp) => { const m = String(fp || "").split("/"); return m.length > 4 ? m.slice(3).join("/") : fp || "–"; };
+  const devState = (d) => (d.quarantine ? ["warn", "quarantined"] : d.state !== "device" ? ["bad", d.state] : d.leased_by ? ["skip", "in use"] : ["ok", "free"]);
+
+  const drawWorkers = () => {
+    const on = workers.filter((w) => w.online);
+    $("#fk").innerHTML = kpi(on.length === workers.length ? "ok" : "warn", "fleet", "PCs online", `${on.length} / ${workers.length}`) +
+      kpi("info", "device", "Devices online", num(on.reduce((a, w) => a + w.counts.devices, 0))) +
+      kpi("ok", "check", "Free devices", num(on.reduce((a, w) => a + w.counts.free, 0))) +
+      kpi("accent", "activity", "Runs in progress", num(on.reduce((a, w) => a + w.counts.running, 0)));
+    if (!workers.length) {
+      $("#fworkers").innerHTML = `<div class="card"><div class="empty-hero"><div class="big">${ic("fleet")}</div><h2>No worker PCs yet</h2><div class="muted">Add the other lab PCs in Settings. Each one runs its own <code>xts-agent ui</code> with a token.</div><div class="quick"><a class="btn primary" href="#/settings">Open Settings</a></div></div></div>`;
+      return;
+    }
+    $("#fworkers").innerHTML = `<div class="grid g-2 mb" style="grid-template-columns:repeat(auto-fill,minmax(420px,1fr))">${workers.map((w) => {
+      const running = (w.live || []).filter((r) => r.state === "running");
+      const warn = [];
+      if (w.online && me.version && w.version && w.version !== me.version) warn.push(`agent ${esc(w.version)} here is ${esc(me.version)}`);
+      if (w.online && w.fingerprints.length > 1) warn.push(`${w.fingerprints.length} different builds on its free devices`);
+      return `<div class="card"><div class="card-hd"><h2>${ic("fleet")} ${esc(w.name)}</h2><span class="pill t-${w.online ? "ok" : "bad"}"><span class="d"></span>${w.online ? "online" : "offline"}</span>
+        <span class="spacer"></span><a class="btn sm ghost" href="${esc(w.url)}" target="_blank" rel="noopener">${ic("ext")} Console</a></div>
+        <div class="card-bd"><div class="muted mono" style="font-size:12px;margin-bottom:8px">${esc(w.host || "")}${w.host ? " · " : ""}${esc(w.url)}</div>
+        ${!w.online ? `<div class="alert bad" style="margin:0">${ic("alert")}<div>${esc(w.error || "unreachable")}</div></div>` : `
+          <div class="row" style="gap:18px;margin-bottom:8px"><span><b>${w.counts.devices}</b> device${w.counts.devices === 1 ? "" : "s"}</span><span><b>${w.counts.free}</b> free</span><span class="muted mono" style="font-size:12px" title="${esc(w.fingerprints.join("\n"))}">${esc(short(w.fingerprints[0]))}</span></div>
+          ${warn.length ? `<div class="alert warn" style="margin:0 0 8px">${ic("alert")}<div>${warn.join(" · ")}</div></div>` : ""}
+          ${running.length ? running.map((r) => `<div class="row" style="padding:7px 0;border-top:1px solid var(--border)"><span class="pill t-info"><span class="d pulse"></span>${esc(r.phase || "running")}</span>
+            <span style="min-width:0;flex:1" class="ell"><b>${esc(r.plan)}</b> <span class="muted">${num((r.totals || {}).pass || 0)} passed · ${num((r.totals || {}).fail || 0)} failed</span></span>
+            <button class="btn sm ghost" data-flog="${esc(w.name)}|${esc(r.key)}|${esc(((r.suites || [])[0] || {}).name || "")}">Log</button>
+            <button class="btn sm" data-fstop="${esc(w.name)}|${esc(r.key)}">${ic("stop")} Stop</button></div>`).join("") : '<div class="muted" style="font-size:12.5px">No run in progress.</div>'}`}
+        </div></div>`;
+    }).join("")}</div>`;
+    $$("[data-fstop]").forEach((b) => b.addEventListener("click", async () => {
+      const [w, k] = b.dataset.fstop.split("|");
+      if (!confirm(`Stop the run on ${w}? TradeFed saves a partial result and the run can be resumed.`)) return;
+      try { await api(`/api/fleet/w/${encodeURIComponent(w)}/api/runs/${encodeURIComponent(k)}/stop`, { body: {} }); toast(`Stopping the run on ${w}`); } catch (e) { toast(e.message, 7000, "bad"); }
+    }));
+    $$("[data-flog]").forEach((b) => b.addEventListener("click", () => { const [w, k, suite] = b.dataset.flog.split("|"); logOf = { w, k, suite }; drawLog(); }));
+    const all = workers.flatMap((w) => (w.online ? w.devices : []));
+    $("#fdevs").innerHTML = all.length ? `<div class="card"><div class="card-hd"><h2>${ic("device")} Devices across the fleet</h2></div><div class="tw"><table><thead><tr><th>PC</th><th>Serial</th><th>State</th><th>Model</th><th>Build</th></tr></thead><tbody>
+      ${all.map((d) => { const [t, l] = devState(d); return `<tr><td><b>${esc(d.worker)}</b></td><td class="mono">${esc(d.serial)}</td><td><span class="pill t-${t}"><span class="d"></span>${esc(l)}</span></td><td>${esc(d.model || "–")}</td><td class="mono muted" style="font-size:12px">${esc(short(d.fingerprint))}</td></tr>`; }).join("")}</tbody></table></div></div>` : "";
+  };
+
+  const drawLog = async () => {
+    if (!logOf) { $("#flog").innerHTML = ""; return; }
+    let text = "";
+    try { const r = await api(`/api/fleet/w/${encodeURIComponent(logOf.w)}/api/runs/${encodeURIComponent(logOf.k)}/log?suite=${encodeURIComponent(logOf.suite)}&offset=-1`); text = r.missing ? "No log yet." : r.text.split("\n").slice(-200).join("\n"); }
+    catch (e) { text = e.message; }
+    if (!logOf) return;
+    $("#flog").innerHTML = `<div class="card mb"><div class="card-hd"><h2>${ic("terminal")} ${esc(logOf.w)} · ${esc(logOf.suite || "run")} log</h2><span class="sub">last 200 lines, refreshed with the page</span><span class="spacer"></span><button class="btn sm ghost" id="flogx">Close</button></div>
+      <pre class="codebox" style="max-height:340px;overflow:auto;margin:0;border-radius:0 0 12px 12px">${esc(text)}</pre></div>`;
+    $("#flogx").addEventListener("click", () => { logOf = null; drawLog(); });
+  };
+
+  const drawSplit = () => {
+    const on = workers.filter((w) => w.online);
+    const key = on.map((w) => `${w.name}:${w.counts.free}`).join(",");
+    if (key === splitKey) return;  // keep the form (and a preview) while polling
+    splitKey = key;
+    if (!pickedInit && on.length) { on.forEach((w) => { if (w.counts.free) picked.add(w.name); }); pickedInit = true; }
+    if (!on.length) { $("#fsplit").innerHTML = ""; return; }
+    const prevPlan = $("#fsplan") ? $("#fsplan").value : "";
+    $("#fsplit").innerHTML = `<div class="card mb"><div class="card-hd"><h2>${ic("layers")} Split a suite across PCs</h2><span class="sub">each PC runs its share of the modules on its own devices</span></div>
+      <div class="card-bd"><div class="row" style="margin-bottom:12px"><b>Plan</b><select id="fsplan">${plans.filter((p) => !p.error).map((p) => `<option value="${esc(p.file)}" ${p.file === prevPlan ? "selected" : ""}>${esc(p.name)} (${esc(p.suites.filter((x) => x.enabled).map((x) => x.name).join(", "))})</option>`).join("")}</select>
+        <label class="chk"><input type="checkbox" id="fsretry" checked> Auto-retry failures</label><label class="chk"><input type="checkbox" id="fsdry"> Dry run</label></div>
+      <div class="row" style="margin-bottom:12px"><b>PCs</b>${on.map((w) => `<label class="chk"><input type="checkbox" data-fsw="${esc(w.name)}" ${picked.has(w.name) ? "checked" : ""} ${w.counts.free ? "" : "disabled"}> ${esc(w.name)} <span class="muted">· ${w.counts.free} free</span></label>`).join("")}</div>
+      <div class="row"><button class="btn" id="fsprev">Preview the split</button><button class="btn primary" id="fsgo" disabled>${ic("play")} Start</button><span class="muted" id="fsmsg" style="font-size:12.5px"></span></div>
+      <div id="fsout" style="margin-top:12px"></div>
+      <p class="muted" style="font-size:12.5px;margin-bottom:0">Modules are dealt out in proportion to each PC's free devices. All devices must run one build and all PCs the same suite package. Each PC produces its own TradeFed result, and the parts run with the development profile, so use a single PC for a submission run.</p></div></div>`;
+    const req = (extra) => ({ plan: $("#fsplan").value, workers: [...picked], auto_retry: $("#fsretry").checked, dry_run: $("#fsdry").checked, ...extra });
+    const stale = () => { $("#fsgo").disabled = true; $("#fsout").innerHTML = ""; $("#fsmsg").textContent = ""; };
+    $$("[data-fsw]").forEach((cb) => cb.addEventListener("change", () => { cb.checked ? picked.add(cb.dataset.fsw) : picked.delete(cb.dataset.fsw); stale(); }));
+    $("#fsplan").addEventListener("change", stale);
+    $("#fsprev").addEventListener("click", async () => {
+      if (!picked.size) { $("#fsmsg").textContent = "Pick at least one PC."; return; }
+      $("#fsmsg").textContent = "Reading the module list from the workers. The first time takes a minute or two…"; $("#fsprev").disabled = true;
+      try {
+        const r = await api("/api/fleet/split", { body: req({ preview: true }) });
+        $("#fsmsg").textContent = `${num(r.total_modules)} ${esc(r.suite.toUpperCase())} modules from ${r.module_source}`;
+        $("#fsout").innerHTML = `<div class="tw" style="border:1px solid var(--border);border-radius:10px"><table><thead><tr><th>PC</th><th class="n">Devices</th><th class="n">Modules</th><th>First modules</th></tr></thead><tbody>
+          ${r.parts.map((p) => `<tr><td><b>${esc(p.worker)}</b></td><td class="n" title="${esc(p.devices.join("\n"))}">${p.devices.length}</td><td class="n">${num(p.modules)}</td><td class="mono muted" style="font-size:12px">${esc(p.sample.join(", "))}${p.modules > p.sample.length ? " …" : ""}</td></tr>`).join("")}</tbody></table></div>`;
+        $("#fsgo").disabled = false; $("#fsgo").innerHTML = `${ic("play")} Start on ${r.parts.length} PC${r.parts.length === 1 ? "" : "s"}`;
+      } catch (e) { $("#fsmsg").textContent = ""; $("#fsout").innerHTML = `<div class="alert bad" style="margin:0">${ic("alert")}<div>${esc(e.message)}</div></div>`; }
+      $("#fsprev").disabled = false;
+    });
+    $("#fsgo").addEventListener("click", async () => {
+      $("#fsgo").disabled = true;
+      try { const r = await api("/api/fleet/split", { body: req({}) }); const bad = r.parts.filter((p) => p.error); toast(bad.length ? `Started, but not on ${bad.map((p) => p.worker).join(", ")}` : `Started ${r.id} on ${r.parts.length} PCs`, 6000, bad.length ? "bad" : "ok"); stale(); pull(); }
+      catch (e) { toast("Not started: " + e.message, 8000, "bad"); $("#fsgo").disabled = false; }
+    });
+  };
+
+  const drawRuns = (runs) => {
+    $("#fruns").innerHTML = runs.length ? `<div class="card mb"><div class="card-hd"><h2>${ic("activity")} Fleet runs</h2><span class="sub">one suite divided across PCs, merged</span></div><div class="tw"><table><thead><tr><th>Run</th><th>Status</th><th>Parts</th><th class="n">Passed</th><th class="n">Failed</th><th></th></tr></thead><tbody>
+      ${runs.map((r) => `<tr><td><div style="font-weight:600">${esc(r.plan_name)} <span class="muted" style="font-weight:400">· ${esc(r.suite.toUpperCase())} · ${num(r.total_modules)} modules${r.dry_run ? " · dry run" : ""}</span></div><div class="muted mono" style="font-size:12px">${esc(r.id)} · ${fmtTime(r.created_at)}</div></td>
+        <td>${pill(r.status)}</td>
+        <td>${r.parts.map((p) => `<div style="font-size:12.5px;padding:2px 0"><b>${esc(p.worker)}</b> <span class="muted">· ${num(p.modules)} modules · ${p.devices.length} device${p.devices.length === 1 ? "" : "s"} ·</span> ${p.error ? `<span style="color:var(--bad)">${esc(p.error)}</span>` : `${esc(p.status || p.state || "")}${p.counts ? ` <span class="muted">· ${num(p.counts.pass)} / ${num(p.counts.fail)}</span>` : ""}`}</div>`).join("")}</td>
+        <td class="n">${num(r.totals.pass)}</td><td class="n">${num(r.totals.fail)}</td>
+        <td>${r.state === "running" ? `<button class="btn sm" data-frstop="${esc(r.id)}">${ic("stop")} Stop all</button>` : ""}</td></tr>`).join("")}</tbody></table></div></div>` : "";
+    $$("[data-frstop]").forEach((b) => b.addEventListener("click", async () => {
+      if (!confirm("Stop every part of this fleet run?")) return;
+      try { await api(`/api/fleet/runs/${encodeURIComponent(b.dataset.frstop)}/stop`, { body: {} }); toast("Stopping all parts"); } catch (e) { toast(e.message, 7000, "bad"); }
+    }));
+  };
+
+  const pull = async (refresh) => {
+    try { workers = (await api("/api/fleet" + (refresh === true ? "?refresh=1" : ""))).workers; } catch (e) { if ($("#fworkers")) $("#fworkers").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+    if (!$("#fworkers")) return;
+    drawWorkers(); drawSplit();
+    if (workers.length) { try { drawRuns(await api("/api/fleet/runs")); } catch (e) { /* keep the last table */ } }
+    if (logOf) drawLog();
+  };
+  $("#frf").addEventListener("click", () => pull(true));
+  every(pull, 5000);
+};
+
 function route() {
   if (skipRoute) { skipRoute = false; return; }
   if (window.onbeforeunload && window.onbeforeunload() && !confirm("Leave Settings without saving your changes?")) { skipRoute = true; history.back(); return; }
   window.onbeforeunload = null;
   clearTimers();
+  RUN_ON = "";
   const parts = (location.hash || "#/live").slice(2).split("/");
   const name = parts[0] || "live", arg = decodeURIComponent(parts.slice(1).join("/"));
   $$("aside a.nav[data-v]").forEach((a) => a.classList.toggle("on", a.dataset.v === (name === "run" ? "runs" : name)));
@@ -598,9 +726,9 @@ function renderIdle(runs) {
 // ("CtsFoo android.foo.BarTest#testX", "x86_64 CtsFoo") from the advanced box.
 const MODCACHE = {};
 async function fetchModules(suite, arch, refresh) {
-  const key = suite + "|" + arch;
+  const key = RUN_ON + "|" + suite + "|" + arch;
   if (!refresh && MODCACHE[key]) return MODCACHE[key];
-  const p = api(`/api/modules?suite=${encodeURIComponent(suite)}&arch=${encodeURIComponent(arch)}${refresh ? "&refresh=1" : ""}`);
+  const p = wapi(`/api/modules?suite=${encodeURIComponent(suite)}&arch=${encodeURIComponent(arch)}${refresh ? "&refresh=1" : ""}`);
   MODCACHE[key] = p; p.catch(() => { delete MODCACHE[key]; });
   return p;
 }
@@ -700,6 +828,7 @@ function planDefaultShardSummary(enabledSuites, freeCount, planSerials) {
 
 // ================================================================ launch
 views.launch = async function (preselect) {
+  let fleetWorkers = [];
   $("#view").innerHTML = `<div class="page-hd"><div><h1>Launch a run</h1><p>Starts <code>xts-agent run</code> as its own process: closing this page or restarting the console never stops it.</p></div><div class="spacer"></div>
       <a class="btn" href="#/plans/new">${ic("file")} New plan</a></div>
     <div class="grid g-32"><div style="min-width:0">
@@ -741,6 +870,8 @@ views.launch = async function (preselect) {
     const enabled = p.suites.filter((s) => s.enabled !== false);
     const fc = freeDevsCount();
     $("#opts").innerHTML = `${p.description ? `<p style="margin-top:0" class="muted">${esc(p.description)}</p>` : ""}
+      ${fleetWorkers.length ? `<div class="row" style="margin-bottom:12px"><b>Run on</b><select id="runon"><option value="">This PC</option>${fleetWorkers.map((w) => `<option value="${esc(w.name)}" ${w.online ? "" : "disabled"} ${RUN_ON === w.name ? "selected" : ""}>${esc(w.name)}${w.online ? ` · ${w.counts.free} free device${w.counts.free === 1 ? "" : "s"}` : " · offline"}</option>`).join("")}</select>
+        <span class="muted" style="font-size:12.5px">${RUN_ON ? "the plan is sent to that PC and runs on its devices; package paths below are this PC's" : `or split one suite across PCs on the <a href="#/fleet">Fleet</a> page`}</span></div>` : ""}
       <div class="row" style="margin-bottom:12px"><b>Device architecture</b><div class="seg" id="archseg">${["x86_64", "arm64"].map((a) => `<button data-a="${a}">${a}</button>`).join("")}</div>
         <span class="muted" style="font-size:12.5px">picks the suite packages for these devices · <a href="#/settings">Settings</a></span><input type="hidden" id="arch"></div>
       <div class="row" style="margin-bottom:12px"><b>Shards / device count</b>
@@ -757,6 +888,7 @@ views.launch = async function (preselect) {
       <div style="margin-top:14px" class="row"><label class="chk"><input type="checkbox" id="retry" checked> Auto-retry failures</label>
       <label class="chk"><input type="checkbox" id="resume"> Resume last interrupted run</label><label class="chk"><input type="checkbox" id="dry"> Dry run</label>
       <label class="chk">AI RCA <select id="ai"><option value="">plan default (${p.ai_rca ? "on" : "off"})</option><option value="1">on</option><option value="0">off</option></select></label></div>`;
+    if ($("#runon")) $("#runon").addEventListener("change", () => { RUN_ON = $("#runon").value; pickedSerials.clear(); loadDevs(); renderOpts(); });
     const syncShardOptions = () => {
       const f = freeDevsCount(), defSum = planDefaultShardSummary(enabled, f, p.serials);
       const cur = shardMode;
@@ -866,12 +998,14 @@ views.launch = async function (preselect) {
     }));
     if ($("#devclear")) $("#devclear").addEventListener("click", () => { pickedSerials.clear(); renderDevSum(); triggerUpd(); });
   };
-  render(); renderOpts();
-  api("/api/devices").then((ds) => {
+  const loadDevs = () => wapi("/api/devices").then((ds) => {
     devs = ds;
     renderDevSum();
     triggerUpd();
   }).catch((e) => { $("#devsum").textContent = e.message; });
+  render(); renderOpts();
+  loadDevs();
+  api("/api/fleet").then((f) => { fleetWorkers = f.workers || []; if (fleetWorkers.length) renderOpts(); }).catch(() => {});
   const body = () => {
     const p = plans[sel];
     const b = { plan: p.file, suite_modules: selection(), auto_retry: $("#retry").checked, resume: $("#resume").checked, dry_run: $("#dry").checked };
@@ -885,7 +1019,10 @@ views.launch = async function (preselect) {
   $("#go").addEventListener("click", async () => {
     if (!plans[sel]) return;
     $("#go").disabled = true;
-    try { const r = await api("/api/launch", { body: body() }); toast(`Started ${r.run_id} (pid ${r.pid})`); location.hash = "#/live"; }
+    try {
+      if (RUN_ON) { const on = RUN_ON, r = await api("/api/fleet/launch", { body: { ...body(), worker: on } }); toast(`Started ${r.run_id} on ${on}`); location.hash = "#/fleet"; }
+      else { const r = await api("/api/launch", { body: body() }); toast(`Started ${r.run_id} (pid ${r.pid})`); location.hash = "#/live"; }
+    }
     catch (e) { toast("Launch failed: " + e.message, 7000, "bad"); $("#go").disabled = false; }
   });
   $("#saveas").addEventListener("click", async () => {
@@ -1269,6 +1406,7 @@ views.settings = async function () {
     if (f && f.ok) return `<span class="faint" style="font-size:12px">Default folder:</span> ${cellStatus({ path: f.path, inspect: f })}${archWarn({ inspect: f }, a)}`;
     return `<span class="faint" style="font-size:12px">Not installed${f && f.problems && f.problems[0] && !/does not exist/.test(f.problems[0]) ? ` · default folder: ${esc(f.problems[0])}` : ""}</span>`;
   };
+  state.fleet = ((st.fleet || {}).workers || []).map((w) => ({ name: w.name, url: w.url, token: "", has_token: w.has_token }));
   $("#sbody").innerHTML = `
     <div class="card mb"><div class="card-hd"><h2>${ic("layers")} Test suites</h2><span class="sub">one package per suite and device architecture: Google ships separate x86 and ARM downloads</span>
       <span class="spacer"></span><span class="muted" style="font-size:12.5px">Default architecture</span><div class="seg" id="defarch">${st.arches.map((a) => `<button data-a="${a}" class="${a === state.default_arch ? "on" : ""}">${a}</button>`).join("")}</div></div>
@@ -1286,6 +1424,9 @@ views.settings = async function () {
         <input type="text" class="mono" data-tool="${k}" value="${esc(state.paths[k] || "")}" placeholder="${esc(ph)}" style="width:100%;font-size:12.5px">
         <div data-toolst="${k}" style="font-size:12px;margin-top:4px">${toolStatus(st.paths_check[k])}</div></div>`).join("")}</div></div>
       <div class="card"><div class="card-hd"><h2>${ic("brain")} AI root-cause analysis</h2><span class="sub">optional — Level-1 triage is always deterministic</span></div><div class="card-bd" id="aicard"></div></div></div>
+    <div class="card mb"><div class="card-hd"><h2>${ic("fleet")} Fleet workers</h2><span class="sub">other lab PCs this console controls — leave empty on a single PC</span></div>
+      <div class="card-bd"><div id="fleetrows"></div>
+      <div class="row" style="margin-top:10px"><button class="btn sm" id="fleetadd">Add a worker PC</button><span class="muted" style="font-size:12.5px">On each worker run <code>xts-agent ui --host &lt;its LAN address&gt; --token &lt;secret&gt;</code>. Tokens are stored in this PC's settings file and are never shown again. Use a trusted lab network: plain <code>http://</code> sends the token unencrypted.</span></div></div></div>
     <div class="card" id="savebar" hidden style="position:sticky;bottom:16px;box-shadow:var(--shadow-lg)"><div class="card-bd row"><span>${ic("alert")} Unsaved changes</span><span class="muted mono" style="font-size:12px">${esc(st.file)}</span><span class="spacer"></span>
       <button class="btn" id="discard">Discard</button><button class="btn primary" id="save">${ic("check")} Save settings</button></div></div>
     <p class="muted" style="font-size:12.5px">Saved to <code>${esc(st.file)}</code>${st.file_exists ? "" : " (created on first save)"}, which is merged over <code>default_config.yaml</code> for every run. Runs already in progress keep the settings they started with.</p>`;
@@ -1510,13 +1651,25 @@ views.settings = async function () {
     });
   };
   renderAiCard();
+  const renderFleet = () => {
+    $("#fleetrows").innerHTML = state.fleet.length ? state.fleet.map((w, i) => `<div class="row" style="margin-bottom:8px">
+      <input type="text" class="mono" data-fw="${i}" data-k="name" value="${esc(w.name)}" placeholder="name, e.g. lab-pc-2" style="width:170px">
+      <input type="text" class="mono" data-fw="${i}" data-k="url" value="${esc(w.url)}" placeholder="http://192.168.1.22:8765" style="flex:1;min-width:220px">
+      <input type="password" class="mono" data-fw="${i}" data-k="token" value="${esc(w.token)}" placeholder="${w.has_token ? "token saved · leave empty to keep" : "access token"}" style="width:240px" autocomplete="off">
+      <button class="btn sm ghost" data-fwx="${i}" title="Remove">${ic("x")}</button></div>`).join("") : '<div class="muted" style="font-size:12.5px">No workers. This console controls only this PC.</div>';
+    $$("[data-fw]").forEach((inp) => inp.addEventListener("input", () => { state.fleet[+inp.dataset.fw][inp.dataset.k] = inp.value.trim(); markDirty(); }));
+    $$("[data-fwx]").forEach((b) => b.addEventListener("click", () => { state.fleet.splice(+b.dataset.fwx, 1); markDirty(); renderFleet(); }));
+  };
+  $("#fleetadd").addEventListener("click", () => { state.fleet.push({ name: "", url: "", token: "", has_token: false }); renderFleet(); });
+  renderFleet();
   // save
   $("#discard").addEventListener("click", () => { dirty = false; views.settings(); });
   $("#save").addEventListener("click", async () => {
     syncAiProvider();
     if (state.aiMode === "online" && $("#aiurl")) state.ai.openai_base_url = $("#aiurl").value.trim();
     const installations = Object.entries(state.inst).filter(([, v]) => v && v.path).map(([k, v]) => { const [suite, arch] = k.split("|"); return { suite, arch, path: v.path }; });
-    const body = { paths: state.paths, suites: { default_arch: state.default_arch, installations }, ai_rca: state.ai };
+    const body = { paths: state.paths, suites: { default_arch: state.default_arch, installations }, ai_rca: state.ai,
+      fleet: { workers: state.fleet.filter((w) => w.name || w.url).map(({ name, url, token }) => ({ name, url, token })) } };
     $("#save").disabled = true;
     try { await api("/api/settings", { body }); dirty = false; toast("Settings saved. New runs and interactive triage use them."); views.settings(); }
     catch (e) { toast("Not saved: " + e.message, 7000, "bad"); $("#save").disabled = false; }

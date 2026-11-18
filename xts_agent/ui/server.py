@@ -48,7 +48,9 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import yaml
 
+from xts_agent import __version__ as AGENT_VERSION
 from xts_agent import settings as host_settings
+from xts_agent.fleet import Fleet, WorkerError, validate_workers
 
 from .data import (
     DevicesView,
@@ -100,7 +102,7 @@ def google_suite_links(run_key: str, suite_name: str, results_dir: str) -> Optio
 # Module or "Module class#method" include filters, as TradeFed takes them
 _FILTER_RE = re.compile(r"^[A-Za-z0-9_.$#\[\]-]+( [A-Za-z0-9_.$#\[\]-]+){0,2}$")
 _SERIAL_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-MAX_MODULES = 500
+MAX_MODULES = 3000  # a fleet split sends one worker's share of a whole suite
 MAX_DEVICES = 64
 _PLAN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,59}$")
 CUSTOM_PLAN_MARKER = "# created by xts-agent ui"
@@ -206,6 +208,7 @@ class UiApp:
         self.runs = RunsView(cfg.results_dir, cfg.db_path)
         self.devices = DevicesView(cfg.lease_dir)
         self.triage = TriageWorkspace(cfg.root, cfg.results_dir, cfg.db_path)
+        self.fleet = Fleet(cfg.settings_file, cfg.results_dir, cfg.plans_dir)
         self._launch_lock = threading.Lock()
 
     # ----------------------------------------------------------- launch
@@ -432,6 +435,7 @@ class UiApp:
                 "has_llm_api_key": bool(os.environ.get("XTS_LLM_API_KEY")),
                 "has_gemini_api_key": bool(os.environ.get("XTS_GEMINI_API_KEY")),
             },
+            "fleet": {"workers": self.fleet.public_workers()},
             "discovered": host_settings.scan(str(paths.get("xts_packages_dir") or "/opt/xts")),
             # What an empty cell falls back to: <xts_packages_dir>/android-<suite>
             "fallback": {
@@ -447,7 +451,19 @@ class UiApp:
         for section in ("paths", "suites", "ai_rca"):
             if section in body and section not in clean:
                 current.pop(section, None)  # cleared in the form
+        if "fleet" in body:
+            raw = body.get("fleet") or {}
+            workers = validate_workers(raw.get("workers") or [] if isinstance(raw, dict) else [],
+                                       (current.get("fleet") or {}).get("workers") or [])
+            if workers:
+                current["fleet"] = {"workers": workers}
+            else:
+                current.pop("fleet", None)
         host_settings.save(self.cfg.settings_file, current)
+        try:  # the file may now hold worker tokens
+            os.chmod(self.cfg.settings_file, 0o600)
+        except OSError:
+            pass
         logger.info("Host settings saved to %s", self.cfg.settings_file)
         return self.settings()
 
@@ -728,6 +744,8 @@ class UiApp:
         dash = rd / "reports" / "dashboard.html"
         return {
             "host": os.uname().nodename,
+            "version": AGENT_VERSION,
+            "fleet_workers": len(self.fleet.workers()),
             "results_dir": str(rd.resolve()),
             "latest_report": file_url(str(reports[0]), rd) if reports else "",
             "latest_triage": file_url(str(triage[0]), rd) if triage else "",
@@ -823,7 +841,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _body(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length") or 0)
-        if length > 64_000:
+        if length > 1_000_000:
             raise ValueError("request too large")
         raw = self.rfile.read(length) if length else b"{}"
         data = json.loads(raw or b"{}")
@@ -898,6 +916,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(app.settings())
             if path == "/api/devices":
                 return self._json(app.devices.list(refresh=bool(query.get("refresh"))))
+            if path == "/api/fleet":
+                return self._json({"workers": app.fleet.status(refresh=bool(query.get("refresh")))})
+            if path == "/api/fleet/runs":
+                return self._json(app.fleet.runs())
+            m = re.match(r"^/api/fleet/runs/([A-Za-z0-9-]+)$", path)
+            if m:
+                return self._json(app.fleet.run(m.group(1)))
+            m = re.match(r"^/api/fleet/w/([a-z0-9_-]+)(/api/.+)$", path)
+            if m:
+                flat = {k: v[0] for k, v in query.items() if k != "t"}
+                return self._json(app.fleet.proxy(m.group(1), "GET", m.group(2), flat))
             if path == "/api/triage/runs":
                 return self._json(app.triage_runs())
             m = re.match(r"^/api/triage/([^/]+)/([0-9a-f]{8,24})$", path)
@@ -918,6 +947,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(400, str(exc).strip("'\""))
         except LookupError as exc:  # suite not installed, plan not found
             return self._error(404, str(exc))
+        except WorkerError as exc:
+            return self._error(502, str(exc))
+        except RuntimeError as exc:
+            return self._error(409, str(exc))
         except Exception:
             logger.exception("GET %s failed", path)
             return self._error(500, "internal error; see the console's log")
@@ -974,6 +1007,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(app.delete_plan(str(body.get("file") or "")))
             if path == "/api/settings/test-llm":
                 return self._json(app.test_llm(body))
+            if path == "/api/fleet/launch":
+                return self._json(app.fleet.dispatch(body), 202)
+            if path == "/api/fleet/split":
+                preview = bool(body.get("preview"))
+                return self._json(app.fleet.split(body, preview=preview), 200 if preview else 202)
+            m = re.match(r"^/api/fleet/runs/([A-Za-z0-9-]+)/stop$", path)
+            if m:
+                return self._json(app.fleet.stop(m.group(1)))
+            m = re.match(r"^/api/fleet/w/([a-z0-9_-]+)(/api/.+)$", path)
+            if m:
+                return self._json(app.fleet.proxy(m.group(1), "POST", m.group(2), body=body))
             if path == "/api/triage/verdict":
                 return self._json(app.triage_verdict(body))
             if path == "/api/triage/known-issue":
@@ -995,6 +1039,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"released": app.devices.release_quarantine(serial)})
         except LookupError as exc:
             return self._error(404, str(exc))
+        except WorkerError as exc:
+            return self._error(502, str(exc))
         except RuntimeError as exc:
             return self._error(409, str(exc))
         except (ValueError, json.JSONDecodeError) as exc:

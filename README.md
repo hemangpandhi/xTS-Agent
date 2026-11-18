@@ -15,6 +15,7 @@ TradeFed and its `test_result.xml` stay untouched, so certification output is ex
 | [docs/OEM_OVERVIEW.md](docs/OEM_OVERVIEW.md) | Explaining the agent to an OEM: problem, benefits, limits, pilot KPIs, talk track, FAQ |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agent architecture (perception, reasoning, memory, actions, learning loops, communication), harness layers, technology stack, what is built in-house vs Google tooling, components, run flow, triage pipeline, data, deployment |
 | [docs/EXECUTION_UI.md](docs/EXECUTION_UI.md) | **Day-to-day process** and the web console: launch runs, watch them live, review results and devices |
+| [docs/FLEET.md](docs/FLEET.md) | **Several lab PCs** (experimental): one master console that starts runs on worker PCs and splits a suite across them |
 | [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) | **Step-by-step execution**: host setup, Cuttlefish validation, Pixel Tablet (AAOS), OEM head unit, CI, reading results, troubleshooting, sign-off sheet |
 | This README | Installing, configuring and operating it (reference) |
 
