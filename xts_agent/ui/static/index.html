@@ -85,8 +85,8 @@ main { min-width: 0; padding: 26px 32px 64px; max-width: 1480px; width: 100%; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; } .btn.primary:hover { background: var(--accent-2); }
 .btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); } .btn.danger:hover { background: var(--bad-soft); }
 .btn.sm { padding: 5px 10px; font-size: 12.5px; } .btn.ghost { border-color: transparent; background: transparent; }
-input[type=text], select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border-2); border-radius: 8px; padding: 7px 10px; }
-input[type=text]:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 0; border-color: var(--accent); }
+input[type=text], input[type=number], select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border-2); border-radius: 8px; padding: 7px 10px; }
+input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 0; border-color: var(--accent); }
 textarea { width: 100%; font-family: var(--mono); font-size: 12.5px; min-height: 96px; }
 label.chk { display: inline-flex; gap: 7px; align-items: center; margin-right: 14px; cursor: pointer; }
 .stepper { display: flex; align-items: flex-start; overflow-x: auto; padding: 2px 0 4px; }
@@ -191,9 +191,25 @@ pre.cmd { font-family: var(--mono); font-size: 12px; background: var(--log-bg); 
 .flabel { font-weight: 600; font-size: 12.5px; margin-bottom: 5px; }
 .plitem { display: block; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
 .plitem:hover { background: var(--panel-2); text-decoration: none; } .plitem.on { background: var(--accent-soft); }
-label select, label input[type=text] { margin-left: 6px; }
+label select, label input[type=text], label input[type=number] { margin-left: 6px; }
 .kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 10px; font-size: 12.5px; margin-top: 12px; }
 .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trgrid { display: grid; grid-template-columns: minmax(310px, 1.05fr) minmax(0, 2.2fr); gap: 16px; align-items: start; }
+@media (max-width: 1080px) { .trgrid { grid-template-columns: 1fr; } }
+.tritem { display: block; padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; color: var(--text); border-left: 3px solid transparent; }
+.tritem:last-child { border-bottom: 0; } .tritem:hover { background: var(--panel-2); text-decoration: none; }
+.tritem.on { background: var(--accent-soft); border-left-color: var(--accent); }
+.aibox { border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border)); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--panel)), color-mix(in srgb, var(--info) 6%, var(--panel))); border-radius: 10px; padding: 13px 15px; }
+.fixbox { border-left: 3px solid var(--ok); background: var(--ok-soft); border-radius: 7px; padding: 8px 12px; margin-top: 9px; font-size: 13px; }
+.chatlist { display: flex; flex-direction: column; gap: 10px; max-height: 440px; overflow: auto; padding: 4px 2px; }
+.chatmsg { border: 1px solid var(--border); border-radius: 10px; padding: 10px 13px; background: var(--panel-2); font-size: 13.5px; line-height: 1.55; }
+.chatmsg.ai { background: color-mix(in srgb, var(--accent) 6%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); }
+.chatmsg.sys { background: transparent; border-style: dashed; padding: 7px 11px; font-size: 12.5px; color: var(--muted); }
+.chatmsg pre { font-family: var(--mono); font-size: 12px; background: var(--log-bg); color: var(--log-text); padding: 9px 11px; border-radius: 8px; overflow-x: auto; margin: 7px 0 0; white-space: pre-wrap; }
+.codebox { font-family: var(--mono); font-size: 12px; line-height: 1.48; background: var(--log-bg); color: var(--log-text); padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 6px 0 0; }
+.codebox .ln { display: inline-block; width: 42px; color: #64748b; text-align: right; margin-right: 12px; user-select: none; }
+.qprompt { font: inherit; font-size: 12px; border: 1px solid var(--border-2); background: var(--panel-2); color: var(--text-2); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.qprompt:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 @media (max-width: 860px) {
   .app { grid-template-columns: 1fr; }
   aside { height: auto; flex-direction: row; align-items: center; padding: 8px 10px; z-index: 10; overflow-x: auto; }
@@ -214,6 +230,7 @@ label select, label input[type=text] { margin-left: 6px; }
   <a class="nav" href="#/launch" data-v="launch"><svg class="i" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg><span>Launch</span></a>
   <a class="nav" href="#/plans" data-v="plans"><svg class="i" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg><span>Plans</span></a>
   <a class="nav" href="#/runs" data-v="runs"><svg class="i" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Runs</span></a>
+  <a class="nav" href="#/triage" data-v="triage"><svg class="i" viewBox="0 0 24 24"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"/></svg><span>Triage</span></a>
   <a class="nav" href="#/devices" data-v="devices"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><span>Devices</span></a>
   <div class="navlabel">Setup</div>
   <a class="nav" href="#/settings" data-v="settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
@@ -559,8 +576,9 @@ function renderIdle(runs) {
           <div><i style="background:var(--ok)"></i>Passed<b>${num(t.pass)}</b></div><div><i style="background:var(--bad)"></i>Failed<b>${num(t.fail)}</b></div>
           <div><i style="background:var(--skip)"></i>Skipped<b>${num(t.skip)}</b></div>${ts ? `<div><i style="background:var(--accent)"></i>Triage groups<b>${num(ts.groups)}</b></div>` : ""}</div></div>
         <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">${stepper(r, true)}</div>
-        <div class="row" style="margin-top:14px">${r.links.triage_html ? `<a class="btn sm primary" href="${esc(fileHref(r.links.triage_html))}" target="_blank" rel="noopener">${ic("brain")} Triage page</a>` : ""}
-          ${html ? `<a class="btn sm" href="${esc(fileHref(html))}" target="_blank" rel="noopener">${ic("file")} HTML report</a>` : ""}</div></div></div>`;
+        <div class="row" style="margin-top:14px"><a class="btn sm primary" href="#/triage/${encodeURIComponent(r.run_id || r.key)}">${ic("brain")} Interactive triage</a>
+          ${((r.links.google_reports || [])[0] && r.links.google_reports[0].primary_url) ? `<a class="btn sm" href="${esc(fileHref(r.links.google_reports[0].primary_url))}" target="_blank" rel="noopener" title="Official Google TradeFed compatibility report">${ic("ext")} Official Google report</a>` : ""}
+          ${html ? `<a class="btn sm" href="${esc(fileHref(html))}" target="_blank" rel="noopener">${ic("file")} Agent report</a>` : ""}</div></div></div>`;
   };
   $("#below").innerHTML = `<div class="grid g-23">${last ? lastCard(last) : '<div class="card"><div class="empty">No runs yet.</div></div>'}
     <div class="card"><div class="card-hd"><h2>Recent runs</h2><span class="sub">pass rate and failed tests per run</span><span class="spacer"></span><a href="#/runs" class="btn sm ghost">All runs</a></div>
@@ -656,6 +674,30 @@ function modulePicker(host, opts) {
   return { value };
 }
 
+// ================================================================ shard & device helpers
+const SHARD_PRESETS = ["auto", "1", "2", "3", "4", "6", "8", "16"];
+function shardOptionLabel(v, freeCount) {
+  if (v === "auto") return `All free devices (auto${freeCount != null ? ` · ${freeCount} free now` : ""})`;
+  if (v === "1") return "1 device (single DUT, no sharding)";
+  return `${v} devices (${v} shards)`;
+}
+function shardExplain(val, freeCount, pinnedCount) {
+  const s = String(val ?? "auto").toLowerCase();
+  if (pinnedCount > 0 && (!val || s === "auto")) return `Runs across the ${pinnedCount} pinned device${pinnedCount > 1 ? "s" : ""} selected.`;
+  if (s === "auto") return `Uses every healthy, unleased device on the same build${freeCount != null ? ` (${freeCount} free now)` : ""}. Choose "1 device" to run on a single DUT.`;
+  if (s === "1") return pinnedCount > 1 ? `Runs on 1 device picked from the ${pinnedCount} pinned devices.` : "Runs on 1 device only (no sharding).";
+  const n = parseInt(s, 10) || 1;
+  return `Splits tests across up to ${n} same-build devices${freeCount != null && n > freeCount ? ` (${freeCount} free right now)` : ""}.`;
+}
+function planDefaultShardSummary(enabledSuites, freeCount, planSerials) {
+  if (planSerials && planSerials.length) return `${planSerials.length} pinned (${planSerials.slice(0, 2).join(", ")}${planSerials.length > 2 ? "…" : ""})`;
+  const vals = [...new Set((enabledSuites || []).map((s) => String(s.shard_count || 1)))];
+  if (!vals.length) return "1 device";
+  if (vals.length > 1) return vals.join(" / ");
+  if (vals[0].toLowerCase() === "auto") return `auto${freeCount != null ? ` · ${freeCount} free` : ""}`;
+  return vals[0] === "1" ? "1 device" : `${vals[0]} shards`;
+}
+
 // ================================================================ launch
 views.launch = async function (preselect) {
   $("#view").innerHTML = `<div class="page-hd"><div><h1>Launch a run</h1><p>Starts <code>xts-agent run</code> as its own process: closing this page or restarting the console never stops it.</p></div><div class="spacer"></div>
@@ -667,29 +709,44 @@ views.launch = async function (preselect) {
       <div class="card-bd" style="border-top:1px solid var(--border)"><button class="btn primary" id="go" disabled style="width:100%;justify-content:center;padding:10px">${ic("play")} Start run</button>
       <button class="btn" id="saveas" disabled style="width:100%;justify-content:center;margin-top:8px">${ic("file")} Save selection as a new plan</button>
       <div class="muted" id="gohint" style="text-align:center;margin-top:8px;font-size:12.5px">Pick a plan.</div><pre class="cmd" id="cmd" hidden></pre></div></div></div></div>`;
-  let plans = [], sel = null, defaultArch = "x86_64", devs = [], pickers = {};
+  let plans = [], sel = null, defaultArch = "x86_64", devs = null, pickers = {}, pickedSerials = new Set(), shardMode = "", shardCustom = "2";
   try { plans = await api("/api/plans"); } catch (e) { $("#plans").textContent = e.message; return; }
   try { defaultArch = (await api("/api/settings")).default_arch || defaultArch; } catch (e) { /* keep */ }
   if (preselect) { const i = plans.findIndex((p) => p.file === preselect); if (i >= 0) sel = i; }
   const famOf = (abi) => (/^arm/.test(abi || "") ? "arm64" : /^x86/.test(abi || "") ? "x86_64" : "");
+  const freeDevsCount = () => devs ? devs.filter((d) => d.state === "device" && !d.leased_by && !d.quarantine).length : null;
+  const effectiveShardOverride = () => {
+    if (!shardMode) return null;
+    if (shardMode === "auto") return "auto";
+    const raw = shardMode === "custom" ? shardCustom : shardMode;
+    const n = parseInt(raw, 10);
+    return isNaN(n) ? 1 : Math.max(1, Math.min(64, n));
+  };
   const render = () => {
     const q = ($("#pq").value || "").toLowerCase();
     $("#plans").innerHTML = plans.map((p, i) => ({ p, i })).filter(({ p }) => !q || (p.name + p.file + (p.description || "")).toLowerCase().includes(q)).map(({ p, i }) => `<div class="plan ${sel === i ? "sel" : ""}" data-i="${i}">
       <div class="t">${esc(p.name)}</div><div class="d mono">${esc(p.file)}</div>
       <div class="row" style="gap:5px;margin-top:9px">${p.custom ? '<span class="tag" style="background:var(--ok-soft);color:var(--ok)">custom</span>' : ""}<span class="tag" style="${p.profile === "certification" ? "background:var(--warn-soft);color:var(--warn)" : ""}">${esc(p.profile)}</span>${p.ai_rca ? '<span class="tag" style="background:var(--accent-soft);color:var(--accent)">AI RCA</span>' : ""}${p.arch ? `<span class="tag">${esc(p.arch)}</span>` : ""}
-        ${p.suites.map((s) => `<span class="tag">${esc(s.name.toUpperCase())}${s.include_filters.length ? ` · ${s.include_filters.length} mod` : ""}</span>`).join("")}</div></div>`).join("") || '<div class="muted">No plan matches.</div>';
-    $$(".plan").forEach((el) => el.addEventListener("click", () => { sel = +el.dataset.i; render(); renderOpts(); }));
+        ${(p.serials || []).length ? `<span class="tag" title="${esc(p.serials.join(", "))}">${p.serials.length} pinned</span>` : ""}
+        ${p.suites.map((s) => `<span class="tag">${esc(s.name.toUpperCase())} · ${String(s.shard_count || 1) === "auto" ? "auto shards" : (s.shard_count || 1) == 1 ? "1 dev" : `${esc(s.shard_count)} shards`}${s.include_filters.length ? ` · ${s.include_filters.length} mod` : ""}</span>`).join("")}</div></div>`).join("") || '<div class="muted">No plan matches.</div>';
+    $$(".plan").forEach((el) => el.addEventListener("click", () => { sel = +el.dataset.i; render(); renderOpts(); renderDevSum(); }));
   };
   $("#pq").addEventListener("input", render);
   const selection = () => { const out = {}; for (const [k, pk] of Object.entries(pickers)) { const v = pk.value(); if (v.length) out[k] = v; } return out; };
+  let triggerUpd = () => {};
   const renderOpts = () => {
-    const p = plans[sel]; if (!p) { $("#opts").innerHTML = '<span class="muted">Pick a plan first.</span>'; return; }
+    const p = plans[sel]; if (!p) { $("#opts").innerHTML = '<span class="muted">Pick a plan first.</span>'; triggerUpd = () => {}; return; }
     const keep = $("#arch") ? $("#arch").value : "";
     const planArch = p.arch || defaultArch;
     const enabled = p.suites.filter((s) => s.enabled !== false);
+    const fc = freeDevsCount();
     $("#opts").innerHTML = `${p.description ? `<p style="margin-top:0" class="muted">${esc(p.description)}</p>` : ""}
       <div class="row" style="margin-bottom:12px"><b>Device architecture</b><div class="seg" id="archseg">${["x86_64", "arm64"].map((a) => `<button data-a="${a}">${a}</button>`).join("")}</div>
         <span class="muted" style="font-size:12.5px">picks the suite packages for these devices · <a href="#/settings">Settings</a></span><input type="hidden" id="arch"></div>
+      <div class="row" style="margin-bottom:12px"><b>Shards / device count</b>
+        <select id="shsel"></select>
+        <input type="number" id="shnum" min="1" max="64" value="${esc(shardCustom)}" style="width:74px" ${shardMode === "custom" ? "" : "hidden"}>
+        <span class="muted" id="shhint" style="font-size:12.5px"></span></div>
       <div class="tw" style="border:1px solid var(--border);border-radius:10px"><table><thead><tr><th>Suite</th><th>Plan modules</th><th>Package for this architecture</th><th class="n">Shards</th></tr></thead><tbody id="suiterows"></tbody></table></div>
       <div id="archwarn"></div>
       <div style="margin-top:18px"><div style="font-weight:650;margin-bottom:4px">Run only some modules <span class="muted" style="font-weight:400">· optional</span></div>
@@ -700,6 +757,16 @@ views.launch = async function (preselect) {
       <div style="margin-top:14px" class="row"><label class="chk"><input type="checkbox" id="retry" checked> Auto-retry failures</label>
       <label class="chk"><input type="checkbox" id="resume"> Resume last interrupted run</label><label class="chk"><input type="checkbox" id="dry"> Dry run</label>
       <label class="chk">AI RCA <select id="ai"><option value="">plan default (${p.ai_rca ? "on" : "off"})</option><option value="1">on</option><option value="0">off</option></select></label></div>`;
+    const syncShardOptions = () => {
+      const f = freeDevsCount(), defSum = planDefaultShardSummary(enabled, f, p.serials);
+      const cur = shardMode;
+      $("#shsel").innerHTML = `<option value="">Plan default (${esc(defSum)})</option>` +
+        SHARD_PRESETS.map((v) => `<option value="${v}">${esc(shardOptionLabel(v, f))}</option>`).join("") +
+        `<option value="custom">Custom count…</option>`;
+      $("#shsel").value = cur;
+      $("#shnum").hidden = cur !== "custom";
+    };
+    syncShardOptions();
     $$("#ptabs button").forEach((b) => b.addEventListener("click", () => { $$("#ptabs button").forEach((x) => x.classList.toggle("on", x === b)); $$("[data-pk]").forEach((d) => { d.hidden = d.dataset.pk !== b.dataset.t; }); }));
     const mountPickers = () => {
       pickers = {};
@@ -710,7 +777,11 @@ views.launch = async function (preselect) {
     };
     const setArch = (a) => { const changed = $("#arch").value !== a; $("#arch").value = a; $$("#archseg button").forEach((b) => b.classList.toggle("on", b.dataset.a === a)); if (changed) mountPickers(); upd(); };
     const upd = () => {
+      syncShardOptions();
       const arch = $("#arch").value, chosen = selection(), nSel = Object.values(chosen).reduce((n, v) => n + v.length, 0);
+      const f = freeDevsCount(), shOver = effectiveShardOverride(), nPinned = pickedSerials.size || (p.serials || []).length;
+      const hintBase = shOver !== null ? shOver : (pickedSerials.size ? String(pickedSerials.size) : (enabled[0] ? (enabled[0].shard_count || 1) : 1));
+      $("#shhint").textContent = shardExplain(hintBase, f, nPinned);
       let missing = 0;
       $("#suiterows").innerHTML = enabled.map((s) => {
         const r = (s.resolved || {})[arch] || {}; const runs = !nSel || chosen[s.name.toLowerCase()];
@@ -718,45 +789,97 @@ views.launch = async function (preselect) {
         const status = r.ok ? `<span class="pill t-ok" style="padding:1px 8px">${ic("check")} ${esc((r.abis || []).join(", ") || "installed")}</span>`
           : `<span class="pill t-bad" style="padding:1px 8px">${ic("x")} ${esc((r.problems || []).slice(-1)[0] || "not installed")}</span>`;
         const sc = chosen[s.name.toLowerCase()];
+        const effSh = shOver !== null ? shOver : (pickedSerials.size ? pickedSerials.size : (s.shard_count || 1));
+        const shCell = String(effSh) === "auto"
+          ? `<b>auto</b>${f != null ? ` <span class="muted">(${nPinned ? Math.min(nPinned, f) : f})</span>` : ""}`
+          : `${shOver !== null || pickedSerials.size ? `<b>${esc(effSh)}</b>` : esc(effSh)}${pickedSerials.size && shOver === null ? ' <span class="muted">(pinned)</span>' : ""}`;
         return `<tr style="${runs ? "" : "opacity:.45"}"><td><b>${esc(s.name.toUpperCase())}</b><div class="muted mono" style="font-size:11.5px">${esc(s.plan)}</div></td>
           <td>${sc ? `<b style="color:var(--accent)">${sc.length} picked</b>` : s.include_filters.length ? esc(s.include_filters.join(", ")) : '<span class="muted">all</span>'}${!runs ? '<div class="muted" style="font-size:12px">skipped this run</div>' : ""}</td>
           <td><div class="mono ell" style="max-width:300px" title="${esc(r.path || "")}">${esc(r.path || "–")}</div><div class="row" style="gap:6px;margin-top:3px">${status}${r.pinned ? '<span class="tag">pinned in plan</span>' : ""}</div></td>
-          <td class="n">${esc(s.shard_count || 1)}</td></tr>`;
+          <td class="n">${shCell}</td></tr>`;
       }).join("");
-      const online = devs.filter((d) => d.state === "device"), fams = [...new Set(online.map((d) => famOf(d.abi)).filter(Boolean))];
+      const allDevs = devs || [], online = allDevs.filter((d) => d.state === "device");
+      const targetDevs = pickedSerials.size ? online.filter((d) => pickedSerials.has(d.serial)) : online;
+      const fams = [...new Set(targetDevs.map((d) => famOf(d.abi)).filter(Boolean))];
       const warn = [];
       if (missing) warn.push(`<div class="alert bad" style="margin:10px 0 0">${ic("alert")}<div>${missing} suite package${missing > 1 ? "s are" : " is"} not installed for <b>${esc(arch)}</b>. Add ${missing > 1 ? "them" : "it"} in <a href="#/settings">Settings → Test suites</a>, pick the other architecture, or pick modules only from installed suites.</div></div>`);
-      if (online.length && fams.length && !fams.includes(arch)) warn.push(`<div class="alert warn" style="margin:10px 0 0">${ic("alert")}<div>The devices online are <b>${esc(fams.join(", "))}</b>, not ${esc(arch)}. TradeFed would skip every module.</div></div>`);
+      if (targetDevs.length && fams.length && !fams.includes(arch)) warn.push(`<div class="alert warn" style="margin:10px 0 0">${ic("alert")}<div>The target device(s) are <b>${esc(fams.join(", "))}</b>, not ${esc(arch)}. TradeFed would skip every module.</div></div>`);
+      if (pickedSerials.size > 1) {
+        const pBuilds = [...new Set(targetDevs.map((d) => d.fingerprint).filter(Boolean))];
+        if (pBuilds.length > 1) warn.push(`<div class="alert warn" style="margin:10px 0 0">${ic("alert")}<div>Pinned devices run <b>${pBuilds.length} different builds</b>; xTS Agent will only shard across the largest same-build group.</div></div>`);
+      }
+      if (shOver !== null && shOver !== "auto" && pickedSerials.size && shOver > pickedSerials.size) {
+        warn.push(`<div class="alert warn" style="margin:10px 0 0">${ic("alert")}<div>Shards is set to <b>${shOver}</b>, but only <b>${pickedSerials.size}</b> device${pickedSerials.size > 1 ? "s are" : " is"} pinned — execution will cap at ${pickedSerials.size}.</div></div>`);
+      }
       $("#archwarn").innerHTML = warn.join("");
       $("#go").disabled = !!missing; $("#saveas").disabled = false;
-      $("#gohint").textContent = missing ? "Install the missing suite packages first." : `${p.name}${nSel ? ` · ${nSel} module${nSel > 1 ? "s" : ""}` : ""}`;
+      const devNote = pickedSerials.size ? ` · ${pickedSerials.size} pinned device${pickedSerials.size > 1 ? "s" : ""}` : (shOver !== null ? ` · ${shOver === "auto" ? "auto shards" : `${shOver} shard${shOver == 1 ? "" : "s"}`}` : "");
+      $("#gohint").textContent = missing ? "Install the missing suite packages first." : `${p.name}${nSel ? ` · ${nSel} module${nSel > 1 ? "s" : ""}` : ""}${devNote}`;
       $("#cmd").hidden = false;
-      const derived = nSel || $("#ai").value || arch !== planArch;
+      const serList = [...pickedSerials];
+      const derived = nSel || $("#ai").value || arch !== planArch || shOver !== null || serList.length;
       $("#cmd").textContent = `$ xts-agent run --plan ${derived ? "results/ui_plans/" + p.file.replace(".yaml", ".<run>.yaml") : "config/test_plans/" + p.file}` +
         ($("#retry").checked ? " --auto-retry" : "") + ($("#resume").checked ? " --resume" : "") + ($("#dry").checked ? " --dry-run" : "") +
-        (arch !== planArch ? `\n# arch: ${arch}` : "") + Object.entries(chosen).map(([k, v]) => `\n# ${k} include_filters: ${v.slice(0, 6).join(", ")}${v.length > 6 ? ` … (+${v.length - 6})` : ""}`).join("");
+        (arch !== planArch ? `\n# arch: ${arch}` : "") +
+        (shOver !== null ? `\n# shards: ${shOver}` : "") +
+        (serList.length ? `\n# devices.serials: ${serList.join(", ")}` : "") +
+        Object.entries(chosen).map(([k, v]) => `\n# ${k} include_filters: ${v.slice(0, 6).join(", ")}${v.length > 6 ? ` … (+${v.length - 6})` : ""}`).join("");
     };
+    triggerUpd = upd;
     $$("#archseg button").forEach((b) => b.addEventListener("click", () => setArch(b.dataset.a)));
+    $("#shsel").addEventListener("change", () => { shardMode = $("#shsel").value; $("#shnum").hidden = shardMode !== "custom"; upd(); });
+    $("#shnum").addEventListener("input", () => { shardCustom = $("#shnum").value; upd(); });
     ["#retry", "#resume", "#dry", "#ai"].forEach((s) => $(s).addEventListener("input", upd));
     $("#go").dataset.planArch = planArch;
     setArch(keep || planArch);
   };
+  const renderDevSum = () => {
+    if (!devs) return;
+    const ds = devs, on = ds.filter((d) => d.state === "device"), busy = on.filter((d) => d.leased_by), q = ds.filter((d) => d.quarantine);
+    const builds = [...new Set(on.map((d) => d.fingerprint).filter(Boolean))], abis = [...new Set(on.map((d) => d.abi).filter(Boolean))];
+    const row = (t, l, v) => `<div class="row" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span class="row" style="gap:9px"><span class="pill t-${t}" style="padding:3px"><span class="d"></span></span>${l}</span><b>${v}</b></div>`;
+    const attached = ds.filter((d) => d.state !== "absent");
+    const curPlan = plans[sel], planPinned = (curPlan && curPlan.serials) || [];
+    const pickerHtml = attached.length ? `<div style="margin-top:14px">
+        <div class="row" style="justify-content:space-between;margin-bottom:4px"><b style="font-size:13px">Pin specific device(s) <span class="muted" style="font-weight:400">· optional</span></b>
+          ${pickedSerials.size ? `<button class="btn sm ghost" id="devclear" style="padding:2px 7px;font-size:12px">Clear (${pickedSerials.size})</button>` : ""}</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Leave unchecked to auto-pick free device(s), or check device(s) to run only on them.${!pickedSerials.size && planPinned.length ? ` <b>Plan pins:</b> <code>${esc(planPinned.join(", "))}</code>` : ""}</div>
+        <div class="mplist" style="max-height:220px">${attached.map((d) => {
+          const ok = d.state === "device" && !d.quarantine;
+          const badge = d.quarantine ? '<span class="pill t-warn" style="padding:1px 7px;font-size:11px">quarantined</span>'
+            : d.state !== "device" ? `<span class="pill t-bad" style="padding:1px 7px;font-size:11px">${esc(d.state)}</span>`
+            : d.leased_by ? '<span class="pill t-skip" style="padding:1px 7px;font-size:11px">in use</span>'
+            : '<span class="pill t-ok" style="padding:1px 7px;font-size:11px">free</span>';
+          const checked = pickedSerials.has(d.serial);
+          return `<label class="mprow ${checked ? "on" : ""}" style="${ok ? "" : "opacity:.55"}">
+            <input type="checkbox" data-pickdev="${esc(d.serial)}" ${checked ? "checked" : ""} ${ok || checked ? "" : "disabled"}>
+            <span class="mono mpname" title="${esc(d.serial)}">${esc(d.serial)}</span>
+            <span class="muted ell" style="font-size:11.5px;flex:1">${esc([d.model, d.abi].filter(Boolean).join(" · "))}</span>
+            ${badge}</label>`;
+        }).join("")}</div></div>` : "";
+    $("#devsum").innerHTML = row("ok", "Online", on.length) + row("info", "Free to allocate", on.length - busy.length) + row("skip", "In use by another run", busy.length) + row("warn", "Quarantined", q.length) +
+      row("accent", "CPU ABI", esc(abis.join(", ") || "–")) + pickerHtml +
+      `<div class="muted" style="font-size:12px;margin-top:12px">${builds.length > 1 ? `<b style="color:var(--warn)">${builds.length} different builds online.</b> A suite only shards across devices with the same build.` : builds.length ? "All online devices run the same build." : "No device online."} Devices are health-checked and leased per run, never shared.</div>`;
+    $$("[data-pickdev]", $("#devsum")).forEach((cb) => cb.addEventListener("change", () => {
+      cb.checked ? pickedSerials.add(cb.dataset.pickdev) : pickedSerials.delete(cb.dataset.pickdev);
+      renderDevSum(); triggerUpd();
+    }));
+    if ($("#devclear")) $("#devclear").addEventListener("click", () => { pickedSerials.clear(); renderDevSum(); triggerUpd(); });
+  };
   render(); renderOpts();
   api("/api/devices").then((ds) => {
     devs = ds;
-    const on = ds.filter((d) => d.state === "device"), busy = on.filter((d) => d.leased_by), q = ds.filter((d) => d.quarantine);
-    const builds = [...new Set(on.map((d) => d.fingerprint).filter(Boolean))], abis = [...new Set(on.map((d) => d.abi).filter(Boolean))];
-    const row = (t, l, v) => `<div class="row" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span class="row" style="gap:9px"><span class="pill t-${t}" style="padding:3px"><span class="d"></span></span>${l}</span><b>${v}</b></div>`;
-    $("#devsum").innerHTML = row("ok", "Online", on.length) + row("info", "Free to allocate", on.length - busy.length) + row("skip", "In use by another run", busy.length) + row("warn", "Quarantined", q.length) +
-      row("accent", "CPU ABI", esc(abis.join(", ") || "–")) +
-      `<div class="muted" style="font-size:12.5px;margin-top:12px">${builds.length > 1 ? `<b style="color:var(--warn)">${builds.length} different builds online.</b> A suite only shards across devices with the same build.` : builds.length ? "All online devices run the same build." : "No device online."} Devices are health-checked and leased per run, never shared.</div>`;
-    $$("#archseg button.on").forEach((b) => b.click());
+    renderDevSum();
+    triggerUpd();
   }).catch((e) => { $("#devsum").textContent = e.message; });
   const body = () => {
     const p = plans[sel];
     const b = { plan: p.file, suite_modules: selection(), auto_retry: $("#retry").checked, resume: $("#resume").checked, dry_run: $("#dry").checked };
     if ($("#ai").value) b.ai_rca = $("#ai").value === "1";
     if ($("#arch").value && $("#arch").value !== $("#go").dataset.planArch) b.arch = $("#arch").value;
+    const sh = effectiveShardOverride();
+    if (sh !== null) b.shard_count = sh;
+    if (pickedSerials.size) b.serials = [...pickedSerials];
     return b;
   };
   $("#go").addEventListener("click", async () => {
@@ -775,6 +898,21 @@ views.launch = async function (preselect) {
       if (Object.keys(picked).length) for (const s of data.suites || []) { const k = String(s.name || "").toLowerCase(); if (picked[k]) s.include_filters = picked[k]; else if (s.enabled !== false) s.enabled = false; }
       if (b.arch) data.arch = b.arch;
       if (b.ai_rca !== undefined) { data.ai_rca = data.ai_rca || {}; data.ai_rca.enabled = b.ai_rca; }
+      if (b.serials && b.serials.length) {
+        data.devices = data.devices || data.device_requirements || {};
+        delete data.device_requirements;
+        data.devices.serials = b.serials;
+        if ((data.devices.min_devices || 1) > b.serials.length) data.devices.min_devices = b.serials.length;
+      }
+      if (b.shard_count !== undefined) {
+        for (const s of data.suites || []) { s.sharding = s.sharding || {}; s.sharding.shard_count = b.shard_count; }
+        if (typeof b.shard_count === "number") {
+          data.devices = data.devices || data.device_requirements || {};
+          if ((data.devices.min_devices || 1) > b.shard_count) data.devices.min_devices = b.shard_count;
+        }
+      } else if (b.serials && b.serials.length) {
+        for (const s of data.suites || []) if (s.enabled !== false) { s.sharding = s.sharding || {}; s.sharding.shard_count = b.serials.length; }
+      }
       if (Object.keys(picked).length && data.profile === "certification") data.profile = "development";
       data.name = (data.name || (data.plan && data.plan.name) || p.name) + " (custom)";
       try { sessionStorage.setItem("xts-plan-draft", JSON.stringify({ data, from: p.file })); } catch (e) { /* ignore */ }
@@ -820,9 +958,12 @@ function planEditor(host, o) {
   if (data.plan && typeof data.plan === "object") { for (const k of ["name", "description", "profile", "arch"]) if (data[k] == null && data.plan[k] != null) data[k] = data.plan[k]; }
   data.suites = Array.isArray(data.suites) ? data.suites : [];
   data.devices = data.devices || data.device_requirements || {};
+  if (typeof data.devices.serials === "string") data.devices.serials = [data.devices.serials];
   const readOnly = !o.isNew && !o.custom;
   let fileName = o.isNew ? (slug(data.name) || "") : o.file.replace(/\.yaml$/, "");
-  let fileTouched = !o.isNew, tab = "form", defaultArch = "x86_64", tfPlans = {};
+  let fileTouched = !o.isNew, tab = "form", defaultArch = "x86_64", tfPlans = {}, peDevs = null;
+  const peFreeCount = () => peDevs ? peDevs.filter((d) => d.state === "device" && !d.leased_by && !d.quarantine).length : null;
+  const peSerials = () => Array.isArray((data.devices || {}).serials) ? data.devices.serials : [];
   host.innerHTML = `<div class="card"><div class="card-hd"><h2>${o.isNew ? "New plan" : esc(data.name || o.file)}</h2>${readOnly ? '<span class="tag">built-in · read-only</span>' : o.isNew ? "" : '<span class="tag" style="background:var(--ok-soft);color:var(--ok)">custom</span>'}
       ${o.from ? `<span class="sub">from ${esc(o.from)}</span>` : ""}<span class="spacer"></span>
       <div class="seg" id="petab"><button class="on" data-t="form">Form</button><button data-t="yaml">YAML</button></div></div>
@@ -837,10 +978,71 @@ function planEditor(host, o) {
     const d = JSON.parse(JSON.stringify(data));
     delete d.device_requirements; if (d.plan && typeof d.plan === "object") delete d.plan;
     if (!d.arch) delete d.arch; if (!d.description) delete d.description;
+    if (d.devices && Array.isArray(d.devices.serials) && !d.devices.serials.length) delete d.devices.serials;
     for (const s of d.suites) { for (const k of ["include_filters", "exclude_filters"]) if (Array.isArray(s[k]) && !s[k].length) delete s[k]; }
     return d;
   };
   const yamlText = async () => (tab === "yaml" ? $("#peyaml").value : (await api("/api/plans/render", { body: { data: cleaned() } })).yaml);
+  const refreshSuiteShardHints = () => {
+    const fc = peFreeCount(), pc = peSerials().length;
+    data.suites.forEach((s, i) => {
+      const sel = $(`[data-shsel="${i}"]`), hint = $(`[data-shhint="${i}"]`);
+      const raw = String((s.sharding || {}).shard_count ?? "auto");
+      if (sel) {
+        const cur = sel.value;
+        sel.innerHTML = SHARD_PRESETS.map((v) => `<option value="${v}">${esc(shardOptionLabel(v, fc))}</option>`).join("") + `<option value="custom">Custom count…</option>`;
+        sel.value = cur;
+      }
+      if (hint) hint.textContent = shardExplain(raw, fc, pc);
+    });
+  };
+  const renderDevPins = () => {
+    const box = $("#pedevpins"), cnt = $("#pedevcnt");
+    if (!box) return;
+    const dis = readOnly ? "disabled" : "", cur = new Set(peSerials());
+    if (cnt) cnt.textContent = cur.size ? `· ${cur.size} pinned (${[...cur].slice(0, 3).join(", ")}${cur.size > 3 ? "…" : ""})` : "· optional (currently auto-picks any free device)";
+    const attached = (peDevs || []).filter((d) => d.state !== "absent");
+    const known = new Set(attached.map((d) => d.serial));
+    const offlinePinned = [...cur].filter((s) => !known.has(s));
+    box.innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:8px">Leave empty so xTS Agent picks free healthy device(s) automatically, or select/add ADB serials (e.g. <code>0.0.0.0:6520</code>) to run only on those devices.</div>` +
+      (attached.length ? `<div class="mplist" style="max-height:170px;margin-bottom:8px">${attached.map((d) => {
+        const ok = d.state === "device" && !d.quarantine, checked = cur.has(d.serial);
+        const badge = d.quarantine ? '<span class="pill t-warn" style="padding:1px 7px;font-size:11px">quarantined</span>'
+          : d.state !== "device" ? `<span class="pill t-bad" style="padding:1px 7px;font-size:11px">${esc(d.state)}</span>`
+          : d.leased_by ? '<span class="pill t-skip" style="padding:1px 7px;font-size:11px">in use</span>'
+          : '<span class="pill t-ok" style="padding:1px 7px;font-size:11px">free</span>';
+        return `<label class="mprow ${checked ? "on" : ""}" style="${ok ? "" : "opacity:.55"}">
+          <input type="checkbox" data-peser="${esc(d.serial)}" ${checked ? "checked" : ""} ${dis || (!ok && !checked ? "disabled" : "")}>
+          <span class="mono mpname">${esc(d.serial)}</span>
+          <span class="muted ell" style="font-size:11.5px;flex:1">${esc([d.model, d.abi].filter(Boolean).join(" · "))}</span>${badge}</label>`;
+      }).join("")}</div>` : `<div class="muted" style="font-size:12px;margin-bottom:8px">${peDevs ? "No ADB devices attached right now." : "Loading attached ADB devices…"}</div>`) +
+      (offlinePinned.length ? `<div class="row" style="gap:6px;margin-bottom:8px">${offlinePinned.map((s) => `<span class="chip">${esc(s)}${readOnly ? "" : `<button type="button" data-rmser="${esc(s)}" title="Remove">×</button>`}</span>`).join("")}</div>` : "") +
+      (readOnly ? "" : `<div class="row" style="gap:8px"><input type="text" id="peaddser" class="mono" placeholder="Add serial (e.g. 0.0.0.0:6520)" style="width:240px"><button type="button" class="btn sm" id="peaddserbtn">Add</button>${cur.size ? `<button type="button" class="btn sm ghost" id="peclrser">Clear all</button>` : ""}</div>`);
+    if (readOnly) return;
+    const setSerials = (next) => {
+      data.devices = data.devices || {};
+      const arr = [...next];
+      if (arr.length) data.devices.serials = arr; else delete data.devices.serials;
+      renderDevPins(); refreshSuiteShardHints();
+    };
+    $$("[data-peser]", box).forEach((cb) => cb.addEventListener("change", () => {
+      const next = new Set(peSerials());
+      cb.checked ? next.add(cb.dataset.peser) : next.delete(cb.dataset.peser);
+      setSerials(next);
+    }));
+    $$("[data-rmser]", box).forEach((b) => b.addEventListener("click", () => {
+      const next = new Set(peSerials()); next.delete(b.dataset.rmser); setSerials(next);
+    }));
+    const addInput = () => {
+      const v = ($("#peaddser").value || "").trim();
+      if (!v) return;
+      if (!/^[A-Za-z0-9_.:-]{1,64}$/.test(v)) { toast("Invalid ADB serial format", 3000, "bad"); return; }
+      const next = new Set(peSerials()); next.add(v); setSerials(next);
+    };
+    if ($("#peaddserbtn")) $("#peaddserbtn").addEventListener("click", addInput);
+    if ($("#peaddser")) $("#peaddser").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addInput(); } });
+    if ($("#peclrser")) $("#peclrser").addEventListener("click", () => setSerials(new Set()));
+  };
   const renderForm = () => {
     const dis = readOnly ? "disabled" : "";
     $("#pebody").innerHTML = `<div class="card-bd">
@@ -852,12 +1054,14 @@ function planEditor(host, o) {
       <div class="row" style="margin-top:14px;gap:22px">
         <label>Profile <select id="peprof" ${dis}><option value="development">development</option><option value="certification">certification (no filters)</option></select></label>
         <label>Architecture <select id="pearch" ${dis}><option value="">settings default</option><option>x86_64</option><option>arm64</option></select></label>
-        <label>Min devices <input type="text" id="pemin" value="${esc((data.devices || {}).min_devices ?? 1)}" style="width:60px" ${dis}></label>
-        <label class="chk"><input type="checkbox" id="peai" ${(data.ai_rca || {}).enabled ? "checked" : ""} ${dis}> AI root-cause analysis</label></div></div>
+        <label title="Minimum free devices required to start; how many devices actually run is set by Shards on each suite below">Min devices <input type="number" min="1" max="64" id="pemin" value="${esc((data.devices || {}).min_devices ?? 1)}" style="width:68px" ${dis}> <span class="muted" style="font-size:12px">(min required)</span></label>
+        <label class="chk"><input type="checkbox" id="peai" ${(data.ai_rca || {}).enabled ? "checked" : ""} ${dis}> AI root-cause analysis</label></div>
+      <details id="pedevdet" ${peSerials().length ? "open" : ""} style="margin-top:12px"><summary style="cursor:pointer;font-size:12.5px"><b>Pin specific ADB device(s)</b> <span class="muted" id="pedevcnt"></span></summary><div id="pedevpins" style="margin-top:8px"></div></details></div>
       <div class="card-bd" style="border-top:1px solid var(--border)"><div class="row" style="margin-bottom:10px"><b>Suites</b><span class="muted" style="font-size:12.5px">run in this order</span><span class="spacer"></span>
         ${readOnly ? "" : `<select id="peaddsel">${Object.keys(SUITE_LABEL).map((s) => `<option value="${s}">${SUITE_LABEL[s]}</option>`).join("")}</select><button class="btn sm" id="peadd">+ Add suite</button>`}</div>
         <div id="pesuites"></div></div>`;
     $("#peprof").value = data.profile || "development"; $("#pearch").value = data.arch || "";
+    renderDevPins();
     if (readOnly) { renderSuites(); return; }
     $("#pename").addEventListener("input", () => { data.name = $("#pename").value; if (o.isNew && !fileTouched) { fileName = slug(data.name); $("#pefile").value = fileName; } });
     $("#pefile").addEventListener("input", () => { fileTouched = true; fileName = $("#pefile").value.trim(); });
@@ -874,19 +1078,28 @@ function planEditor(host, o) {
   };
   const renderSuites = () => {
     const dis = readOnly ? "disabled" : "", arch = data.arch || defaultArch, cert = data.profile === "certification";
-    $("#pesuites").innerHTML = data.suites.map((s, i) => `<div class="card" style="margin-bottom:12px;box-shadow:none;background:var(--panel-2)">
+    const fc = peFreeCount(), pc = peSerials().length;
+    $("#pesuites").innerHTML = data.suites.map((s, i) => {
+      const rawSh = String((s.sharding || {}).shard_count ?? "auto").toLowerCase() === "auto" ? "auto" : String((s.sharding || {}).shard_count ?? 1);
+      const selVal = SHARD_PRESETS.includes(rawSh) ? rawSh : "custom";
+      return `<div class="card" style="margin-bottom:12px;box-shadow:none;background:var(--panel-2)">
       <div class="card-hd" style="background:transparent"><b>${esc(SUITE_LABEL[String(s.name).toLowerCase()] || s.name)}</b><span class="muted" style="font-size:12px">${esc(SUITE_DESC[String(s.name).toLowerCase()] || "")}</span><span class="spacer"></span>
         <label class="chk" style="margin:0"><input type="checkbox" data-en="${i}" ${s.enabled !== false ? "checked" : ""} ${dis}> enabled</label>
         ${readOnly ? "" : `<button class="btn sm ghost" data-up="${i}" ${i ? "" : "disabled"} title="Move up">↑</button><button class="btn sm ghost" data-rm="${i}" style="color:var(--bad)">Remove</button>`}</div>
       <div class="card-bd"><div class="row" style="gap:18px">
-        <label>TradeFed plan <input type="text" class="mono" list="tfp-${esc(String(s.name).toLowerCase())}" data-tp="${i}" value="${esc(s.plan || "")}" style="width:220px" ${dis}><datalist id="tfp-${esc(String(s.name).toLowerCase())}"></datalist></label>
-        <label>Shards <input type="text" data-sh="${i}" value="${esc((s.sharding || {}).shard_count ?? "auto")}" style="width:70px" ${dis} title="auto = one per free device"></label>
+        <label>TradeFed plan <input type="text" class="mono" list="tfp-${esc(String(s.name).toLowerCase())}" data-tp="${i}" value="${esc(s.plan || "")}" style="width:200px" ${dis}><datalist id="tfp-${esc(String(s.name).toLowerCase())}"></datalist></label>
+        <label>Shards
+          <select data-shsel="${i}" ${dis}>${SHARD_PRESETS.map((v) => `<option value="${v}" ${selVal === v ? "selected" : ""}>${esc(shardOptionLabel(v, fc))}</option>`).join("")}<option value="custom" ${selVal === "custom" ? "selected" : ""}>Custom count…</option></select>
+          <input type="number" data-shnum="${i}" min="1" max="64" value="${esc(selVal === "custom" ? rawSh : "5")}" style="width:70px" ${selVal === "custom" ? "" : "hidden"} ${dis}>
+        </label>
         <label>Retries <select data-rt="${i}" ${dis}>${[0, 1, 2, 3, 4, 5].map((n) => `<option ${((s.retry || {}).max_retries ?? (s.retry || {}).max_attempts ?? 1) == n ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         <label>Timeout <input type="text" data-to="${i}" value="${esc(s.timeout_hours ?? "")}" placeholder="24" style="width:60px" ${dis}> h</label>
         ${s.package_path ? `<span class="tag" title="${esc(s.package_path)}">pinned path</span>` : ""}</div>
+        <div class="muted" data-shhint="${i}" style="font-size:12px;margin-top:6px">${esc(shardExplain(rawSh, fc, pc))}</div>
         ${cert ? `<div class="muted" style="font-size:12.5px;margin-top:10px">Certification runs every module; switch the profile to development to pick modules.</div>` : `<div style="margin-top:12px" data-picker="${i}"></div>
         <details style="margin-top:10px"><summary class="muted" style="cursor:pointer;font-size:12.5px">Exclude modules (${(s.exclude_filters || []).length})</summary>
-          <textarea data-ex="${i}" style="margin-top:6px;min-height:60px" placeholder="One per line" ${dis}>${esc((s.exclude_filters || []).join("\n"))}</textarea></details>`}</div></div>`).join("")
+          <textarea data-ex="${i}" style="margin-top:6px;min-height:60px" placeholder="One per line" ${dis}>${esc((s.exclude_filters || []).join("\n"))}</textarea></details>`}</div></div>`;
+    }).join("")
       || '<div class="muted">No suites yet. Add one above.</div>';
     data.suites.forEach((s, i) => {
       const name = String(s.name).toLowerCase(), box = $(`[data-picker="${i}"]`);
@@ -898,10 +1111,29 @@ function planEditor(host, o) {
       tfPlans[name + arch].then((r) => { const dl = document.getElementById("tfp-" + name); if (dl) dl.innerHTML = (r.plans || []).map((pl) => `<option value="${esc(pl.name)}">${esc(pl.description)}</option>`).join(""); });
     });
     if (readOnly) return;
-    const on = (sel, ev, fn) => $$(sel, $("#pesuites")).forEach((el) => el.addEventListener(ev, () => fn(el, data.suites[+Object.values(el.dataset)[0]])));
+    const on = (sel, ev, fn) => $$(sel, $("#pesuites")).forEach((el) => el.addEventListener(ev, () => fn(el, data.suites[+Object.values(el.dataset)[0]], +Object.values(el.dataset)[0])));
     on("[data-en]", "change", (el, s) => { s.enabled = el.checked; });
     on("[data-tp]", "input", (el, s) => { s.plan = el.value.trim(); });
-    on("[data-sh]", "input", (el, s) => { s.sharding = s.sharding || {}; const v = el.value.trim(); s.sharding.shard_count = /^\d+$/.test(v) ? +v : v || "auto"; });
+    on("[data-shsel]", "change", (el, s, i) => {
+      s.sharding = s.sharding || {};
+      const numEl = $(`[data-shnum="${i}"]`), hintEl = $(`[data-shhint="${i}"]`);
+      if (el.value === "custom") {
+        numEl.hidden = false;
+        const n = parseInt(numEl.value, 10);
+        s.sharding.shard_count = isNaN(n) ? 2 : Math.max(1, Math.min(64, n));
+      } else {
+        numEl.hidden = true;
+        s.sharding.shard_count = el.value === "auto" ? "auto" : +el.value;
+      }
+      if (hintEl) hintEl.textContent = shardExplain(s.sharding.shard_count, peFreeCount(), peSerials().length);
+    });
+    on("[data-shnum]", "input", (el, s, i) => {
+      s.sharding = s.sharding || {};
+      const n = parseInt(el.value, 10);
+      s.sharding.shard_count = isNaN(n) ? 1 : Math.max(1, Math.min(64, n));
+      const hintEl = $(`[data-shhint="${i}"]`);
+      if (hintEl) hintEl.textContent = shardExplain(s.sharding.shard_count, peFreeCount(), peSerials().length);
+    });
     on("[data-rt]", "change", (el, s) => { s.retry = s.retry || {}; delete s.retry.max_attempts; s.retry.max_retries = +el.value; });
     on("[data-to]", "input", (el, s) => { const v = parseFloat(el.value); if (isNaN(v)) delete s.timeout_hours; else s.timeout_hours = v; });
     on("[data-ex]", "input", (el, s) => { s.exclude_filters = el.value.split("\n").map((x) => x.trim()).filter(Boolean); });
@@ -926,7 +1158,14 @@ function planEditor(host, o) {
     if (t === tab) return;
     if (t === "form" && tab === "yaml" && !readOnly) {
       // Re-read the edited YAML into the form via the server's parser
-      try { const r = await fetchParsed($("#peyaml").value); Object.keys(data).forEach((k) => delete data[k]); Object.assign(data, r); data.suites = data.suites || []; data.devices = data.devices || {}; } catch (e) { msg(esc(e.message), "bad"); return; }
+      try {
+        const r = await fetchParsed($("#peyaml").value);
+        Object.keys(data).forEach((k) => delete data[k]);
+        Object.assign(data, r);
+        data.suites = data.suites || [];
+        data.devices = data.devices || data.device_requirements || {};
+        if (typeof data.devices.serials === "string") data.devices.serials = [data.devices.serials];
+      } catch (e) { msg(esc(e.message), "bad"); return; }
     }
     tab = t; $$("#petab button").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
     t === "form" ? renderForm() : renderYaml();
@@ -964,6 +1203,7 @@ function planEditor(host, o) {
     });
   }
   api("/api/settings").then((st) => { defaultArch = st.default_arch || defaultArch; if (tab === "form") renderSuites(); }).catch(() => {});
+  api("/api/devices").then((ds) => { peDevs = ds; if (tab === "form") { renderDevPins(); refreshSuiteShardHints(); } }).catch(() => {});
   renderForm();
 }
 async function fetchParsed(text) {
@@ -982,14 +1222,33 @@ const TOOL_INFO = {
   adb_path: ["adb", "Leave empty to use adb from PATH", "/opt/platform-tools/adb"],
 };
 views.settings = async function () {
-  $("#view").innerHTML = `<div class="page-hd"><div><h1>Settings</h1><p>Host setup for this lab machine: where each test suite is installed, host tools and the local LLM. Every new run uses these.</p></div></div><div id="sbody"><div class="skeleton"></div></div>`;
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Settings</h1><p>Host setup for this lab machine: where each test suite is installed, host tools, and optional AI provider (<code>llama.cpp</code>, <code>Ollama</code>, online ChatGPT/Gemini, or disabled). Every new run uses these.</p></div></div><div id="sbody"><div class="skeleton"></div></div>`;
   let st;
   try { st = await api("/api/settings"); } catch (e) { $("#sbody").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+  const isPrivateUrl = (u) => /^https?:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|host\.docker\.internal|[^/]+\.local)(:|\/|$)/i.test(String(u || ""));
+  const rawAi = st.ai_rca || {};
+  const initMode = rawAi.provider === "none" ? "none"
+    : rawAi.provider === "llama_cpp" ? "llama_cpp"
+    : (rawAi.provider === "gemini" || (rawAi.allow_external_providers && rawAi.openai_base_url && !isPrivateUrl(rawAi.openai_base_url))) ? "online"
+    : "local";
   const state = {
     default_arch: st.default_arch,
     inst: {},  // "suite|arch" -> {path, inspect}
     paths: { ...st.paths },
-    ai: { openai_base_url: st.ai_rca.openai_base_url || "", openai_model: st.ai_rca.openai_model || "" },
+    aiMode: initMode,
+    onlineKind: rawAi.provider === "gemini" ? "gemini" : "openai",
+    llamaCheck: rawAi.llama_check || null,
+    ai: {
+      provider: rawAi.provider || "openai_compatible",
+      enabled: !!rawAi.enabled,
+      allow_external_providers: !!rawAi.allow_external_providers,
+      openai_base_url: rawAi.openai_base_url || "http://127.0.0.1:8080/v1",
+      openai_model: rawAi.openai_model || "",
+      llama_model_path: rawAi.llama_model_path || "",
+      llama_n_ctx: rawAi.llama_n_ctx || 16384,
+      llama_n_gpu_layers: rawAi.llama_n_gpu_layers ?? -1,
+      gemini_model: rawAi.gemini_model || "gemini-2.5-flash",
+    },
   };
   for (const i of st.installations) state.inst[`${i.suite}|${i.arch}`] = { path: i.path, inspect: i.inspect };
   let dirty = false;
@@ -1026,14 +1285,7 @@ views.settings = async function () {
         <div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px">${label}</div><div class="muted" style="font-size:12px;margin-bottom:5px">${help}</div>
         <input type="text" class="mono" data-tool="${k}" value="${esc(state.paths[k] || "")}" placeholder="${esc(ph)}" style="width:100%;font-size:12.5px">
         <div data-toolst="${k}" style="font-size:12px;margin-top:4px">${toolStatus(st.paths_check[k])}</div></div>`).join("")}</div></div>
-      <div class="card"><div class="card-hd"><h2>${ic("brain")} AI root-cause analysis</h2><span class="sub">local LLM, OpenAI-compatible</span></div><div class="card-bd">
-        <div style="font-weight:600;font-size:13px">Server URL</div><div class="muted" style="font-size:12px;margin-bottom:5px">vLLM, Ollama or llama.cpp server on this host or the lab network. Logs and source never leave it.</div>
-        <input type="text" class="mono" id="aiurl" value="${esc(state.ai.openai_base_url)}" placeholder="http://127.0.0.1:8011/v1" style="width:100%;font-size:12.5px">
-        <div style="font-weight:600;font-size:13px;margin-top:14px">Model</div><div class="muted" style="font-size:12px;margin-bottom:5px">Name as the server lists it</div>
-        <div class="row" style="flex-wrap:nowrap"><input type="text" class="mono" id="aimodel" list="aimodels" value="${esc(state.ai.openai_model)}" placeholder="coder" style="flex:1;font-size:12.5px"><datalist id="aimodels"></datalist>
-          <button class="btn" id="aitest">${ic("activity")} Test</button></div><div id="aist" style="font-size:12.5px;margin-top:8px"></div>
-        ${(st.ai_rca.fallbacks || []).length ? `<div class="muted" style="font-size:12px;margin-top:14px">Fallbacks from default_config.yaml: ${st.ai_rca.fallbacks.map((f) => `<code>${esc(f.model)}</code> at <code>${esc(f.base_url)}</code>`).join(", ")}</div>` : ""}
-      </div></div></div>
+      <div class="card"><div class="card-hd"><h2>${ic("brain")} AI root-cause analysis</h2><span class="sub">optional — Level-1 triage is always deterministic</span></div><div class="card-bd" id="aicard"></div></div></div>
     <div class="card" id="savebar" hidden style="position:sticky;bottom:16px;box-shadow:var(--shadow-lg)"><div class="card-bd row"><span>${ic("alert")} Unsaved changes</span><span class="muted mono" style="font-size:12px">${esc(st.file)}</span><span class="spacer"></span>
       <button class="btn" id="discard">Discard</button><button class="btn primary" id="save">${ic("check")} Save settings</button></div></div>
     <p class="muted" style="font-size:12.5px">Saved to <code>${esc(st.file)}</code>${st.file_exists ? "" : " (created on first save)"}, which is merged over <code>default_config.yaml</code> for every run. Runs already in progress keep the settings they started with.</p>`;
@@ -1074,32 +1326,199 @@ views.settings = async function () {
     clearTimeout(timer[k]);
     timer[k] = setTimeout(async () => { try { $(`[data-toolst="${k}"]`).innerHTML = toolStatus(await api("/api/settings/check", { body: { kind: k, path: state.paths[k] } })); } catch (e) { /* ignore */ } }, 450);
   }));
-  // AI
-  $("#aiurl").addEventListener("input", () => { state.ai.openai_base_url = $("#aiurl").value.trim(); markDirty(); });
-  $("#aimodel").addEventListener("input", () => { state.ai.openai_model = $("#aimodel").value.trim(); markDirty(); });
-  $("#aitest").addEventListener("click", async () => {
-    $("#aist").innerHTML = '<span class="muted">Connecting…</span>';
-    try {
-      const r = await api("/api/settings/test-llm", { body: { base_url: state.ai.openai_base_url, model: state.ai.openai_model } });
-      // What runs would actually use when this server is down or lacks the model
-      const fbLine = () => {
-        if (!r.fallbacks) return "";
-        if (r.runs_use) return `<div style="margin-top:6px;color:var(--warn)">${ic("alert")} Runs fall back to <code>${esc(r.runs_use.model)}</code> at <code>${esc(r.runs_use.base_url)}</code>, which is reachable. AI analysis keeps working, on the fallback model.</div>`;
-        return `<div style="margin-top:6px;color:var(--bad)">${ic("alert")} ${r.fallbacks.length ? "No fallback is usable either" : "No fallback is configured"}: runs will skip AI analysis (rule-based triage still runs).</div>`;
-      };
-      if (!r.ok) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(r.error)}</span>${fbLine()}`; return; }
-      $("#aimodels").innerHTML = r.models.map((m) => `<option value="${esc(m)}">`).join("");
-      $("#aist").innerHTML = `<span style="color:var(--ok)">${ic("check")} Reachable · ${r.models.length} model${r.models.length === 1 ? "" : "s"}</span>` +
-        (r.model_found === false ? ` <span style="color:var(--warn)">· "${esc(state.ai.openai_model)}" is not one of them: ${esc(r.models.slice(0, 6).join(", "))}</span>` : r.model_found ? ` · model found` : "") + fbLine();
-    } catch (e) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(e.message)}</span>`; }
-  });
+  // AI provider card
+  const syncAiProvider = () => {
+    if (state.aiMode === "none") {
+      state.ai.provider = "none";
+      state.ai.enabled = false;
+    } else if (state.aiMode === "llama_cpp") {
+      state.ai.provider = "llama_cpp";
+      state.ai.allow_external_providers = false;
+    } else if (state.aiMode === "online") {
+      state.ai.provider = state.onlineKind === "gemini" ? "gemini" : "openai_compatible";
+    } else {
+      state.ai.provider = "openai_compatible";
+      state.ai.allow_external_providers = false;
+    }
+  };
+  const renderAiCard = () => {
+    syncAiProvider();
+    const m = state.aiMode;
+    const batchToggle = m === "none" ? "" : `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <label class="chk" style="margin:0;font-size:12.5px"><input type="checkbox" id="aibatch" ${state.ai.enabled ? "checked" : ""}> Also run AI RCA automatically at the end of batch runs</label>
+      <div class="muted" style="font-size:11.5px;margin-top:3px">Interactive <b>Run AI RCA</b> and <b>Ask AI</b> on <a href="#/triage">Triage</a> always work on demand even if this is unchecked.</div>
+    </div>`;
+    let bodyHtml = "";
+    if (m === "local") {
+      bodyHtml = `
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Connects to an OpenAI-compatible HTTP server on this host or your office LAN. Failure logs and OEM source code never leave your network.</div>
+        <div class="row" style="gap:6px;margin-bottom:10px">
+          <span class="muted" style="font-size:11.5px">Presets:</span>
+          <button type="button" class="qprompt" data-aipreset="llamaserver">llama.cpp server (:8080)</button>
+          <button type="button" class="qprompt" data-aipreset="ollama">Ollama (:11434)</button>
+          <button type="button" class="qprompt" data-aipreset="vllm">vLLM (:8011)</button>
+          <button type="button" class="qprompt" data-aipreset="lmstudio">LM Studio (:1234)</button>
+        </div>
+        <div style="font-weight:600;font-size:13px">Server URL</div>
+        <input type="text" class="mono" id="aiurl" value="${esc(state.ai.openai_base_url)}" placeholder="http://127.0.0.1:8080/v1" style="width:100%;font-size:12.5px;margin-top:4px">
+        <div class="muted" style="font-size:11.5px;margin-top:4px">For <code>llama.cpp</code> HTTP server: <code>llama-server -m /path/to/model.gguf --port 8080 -c 16384 -ngl 99</code></div>
+        <div style="font-weight:600;font-size:13px;margin-top:12px">Model name</div>
+        <div class="row" style="flex-wrap:nowrap;margin-top:4px"><input type="text" class="mono" id="aimodel" list="aimodels" value="${esc(state.ai.openai_model)}" placeholder="local-model or qwen2.5-coder:32b" style="flex:1;font-size:12.5px"><datalist id="aimodels"></datalist>
+          <button type="button" class="btn" id="aitest">${ic("activity")} Test</button></div>
+        <div id="aist" style="font-size:12.5px;margin-top:8px"></div>
+        ${(rawAi.fallbacks || []).length ? `<div class="muted" style="font-size:12px;margin-top:10px">Fallbacks from default_config.yaml: ${rawAi.fallbacks.map((f) => `<code>${esc(f.model)}</code> at <code>${esc(f.base_url)}</code>`).join(", ")}</div>` : ""}`;
+    } else if (m === "llama_cpp") {
+      bodyHtml = `
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Loads a local <code>.gguf</code> weights file directly inside Python via <code>llama-cpp-python</code> (cached in memory across interactive triage questions). If you prefer running your own <code>llama-server</code> binary, pick <b>Local Server</b> above instead.</div>
+        <div style="font-weight:600;font-size:13px">GGUF model file path</div>
+        <div class="row" style="flex-wrap:nowrap;margin-top:4px">
+          <input type="text" class="mono" id="aigguf" value="${esc(state.ai.llama_model_path)}" placeholder="/opt/models/qwen2.5-coder-32b-instruct-q4_k_m.gguf" style="flex:1;font-size:12.5px">
+          <button type="button" class="btn" id="aitest">${ic("activity")} Verify</button>
+        </div>
+        <div id="aiggufst" style="font-size:12px;margin-top:5px">${toolStatus(state.llamaCheck)}</div>
+        <div class="grid g-2" style="margin-top:12px;gap:10px">
+          <div><div style="font-weight:600;font-size:12.5px">Context window (<code>n_ctx</code>)</div>
+            <input type="number" class="mono" id="ainctx" min="512" max="131072" value="${esc(state.ai.llama_n_ctx)}" style="width:100%;font-size:12.5px;margin-top:4px"></div>
+          <div><div style="font-weight:600;font-size:12.5px">GPU layers (<code>n_gpu_layers</code>)</div>
+            <input type="number" class="mono" id="aingpu" min="-1" max="999" value="${esc(state.ai.llama_n_gpu_layers)}" style="width:100%;font-size:12.5px;margin-top:4px">
+            <div class="muted" style="font-size:11px;margin-top:2px"><code>-1</code> = all layers on GPU · <code>0</code> = CPU only</div></div>
+        </div>
+        <div id="aist" style="font-size:12.5px;margin-top:8px"></div>`;
+    } else if (m === "online") {
+      const needVar = state.onlineKind === "gemini" ? "XTS_GEMINI_API_KEY" : "XTS_LLM_API_KEY";
+      const hasKey = state.onlineKind === "gemini" ? !!rawAi.has_gemini_api_key : !!rawAi.has_llm_api_key;
+      bodyHtml = `
+        <div class="row" style="gap:6px;margin-bottom:10px">
+          <span class="muted" style="font-size:11.5px">Service:</span>
+          <button type="button" class="qprompt ${state.onlineKind === "openai" && /api\.openai\.com/.test(state.ai.openai_base_url) ? "on" : ""}" data-onpreset="chatgpt">ChatGPT / OpenAI API</button>
+          <button type="button" class="qprompt ${state.onlineKind === "gemini" ? "on" : ""}" data-onpreset="gemini">Google Gemini API</button>
+          <button type="button" class="qprompt ${state.onlineKind === "openai" && /openrouter/.test(state.ai.openai_base_url) ? "on" : ""}" data-onpreset="openrouter">OpenRouter / Custom HTTPS</button>
+        </div>
+        <div class="alert warn" style="margin-bottom:10px;font-size:12px">${ic("alert")}<div>
+          <b>Data-privacy guard:</b> Online APIs receive stack traces, failure logcat excerpts, and matched code snippets. Only enable when approved by your office security policy.<br>
+          <label class="chk" style="margin:6px 0 0;font-weight:600;color:var(--text)"><input type="checkbox" id="aiallowext" ${state.ai.allow_external_providers ? "checked" : ""}> Allow sending failure context to this external AI API</label>
+        </div></div>
+        ${state.onlineKind === "gemini" ? `
+          <div style="font-weight:600;font-size:13px">Gemini model</div>
+          <div class="row" style="flex-wrap:nowrap;margin-top:4px"><input type="text" class="mono" id="aigemmodel" list="aimodels" value="${esc(state.ai.gemini_model)}" placeholder="gemini-2.5-flash" style="flex:1;font-size:12.5px"><datalist id="aimodels"></datalist>
+            <button type="button" class="btn" id="aitest">${ic("activity")} Test</button></div>
+        ` : `
+          <div style="font-weight:600;font-size:13px">HTTPS API Base URL</div>
+          <input type="text" class="mono" id="aiurl" value="${esc(isPrivateUrl(state.ai.openai_base_url) ? "https://api.openai.com/v1" : state.ai.openai_base_url)}" placeholder="https://api.openai.com/v1" style="width:100%;font-size:12.5px;margin-top:4px">
+          <div style="font-weight:600;font-size:13px;margin-top:10px">Model</div>
+          <div class="row" style="flex-wrap:nowrap;margin-top:4px"><input type="text" class="mono" id="aimodel" list="aimodels" value="${esc(state.ai.openai_model)}" placeholder="gpt-4.1-mini or gpt-4o" style="flex:1;font-size:12.5px"><datalist id="aimodels"></datalist>
+            <button type="button" class="btn" id="aitest">${ic("activity")} Test</button></div>
+        `}
+        <div style="font-size:12px;margin-top:8px">
+          API key env var (<code>${needVar}</code>): ${hasKey ? `<span style="color:var(--ok)">${ic("check")} set in server environment</span>` : `<span style="color:var(--warn)">${ic("alert")} not set — export <code>${needVar}=...</code> before starting <code>xts-agent ui</code> (keys are never saved to YAML)</span>`}
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:6px">Tip: Using ChatGPT / Gemini in a web browser without an API key? Open <a href="#/triage">Triage</a> and click <b>Copy prompt (ChatGPT / Web AI)</b> on any failure group.</div>
+        <div id="aist" style="font-size:12.5px;margin-top:8px"></div>`;
+    } else {
+      bodyHtml = `
+        <div class="alert info" style="font-size:12.5px">${ic("shield")}<div>
+          <b>100% deterministic mode (no LLM calls).</b><br>
+          Every run still groups failures by root-cause signature, matches <code>known_issues.yaml</code> &amp; waivers, tracks history (<code>NEW</code> / <code>PERSISTENT</code> / <code>FLAKY</code>), and supports team notes, human verdicts, and 1-click <b>Copy prompt (ChatGPT / Web AI)</b> on <a href="#/triage">Triage</a>.
+        </div></div>`;
+    }
+
+    $("#aicard").innerHTML = `
+      <div class="seg" id="aimodeseg" style="margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" data-m="local" class="${m === "local" ? "on" : ""}">Local Server (llama.cpp / Ollama)</button>
+        <button type="button" data-m="llama_cpp" class="${m === "llama_cpp" ? "on" : ""}">llama.cpp GGUF Path</button>
+        <button type="button" data-m="online" class="${m === "online" ? "on" : ""}">Online API (ChatGPT / Gemini)</button>
+        <button type="button" data-m="none" class="${m === "none" ? "on" : ""}">Disabled</button>
+      </div>
+      ${bodyHtml}
+      ${batchToggle}`;
+
+    $$("#aimodeseg button").forEach((b) => b.addEventListener("click", () => {
+      state.aiMode = b.dataset.m;
+      if (state.aiMode === "online" && isPrivateUrl(state.ai.openai_base_url)) {
+        state.ai.openai_base_url = "https://api.openai.com/v1";
+        if (!state.ai.openai_model || /^(coder|local-model|qwen)/i.test(state.ai.openai_model)) state.ai.openai_model = "gpt-4.1-mini";
+      }
+      if (state.aiMode === "local" && !isPrivateUrl(state.ai.openai_base_url)) {
+        state.ai.openai_base_url = "http://127.0.0.1:8080/v1";
+      }
+      markDirty();
+      renderAiCard();
+    }));
+    $$("[data-aipreset]").forEach((b) => b.addEventListener("click", () => {
+      const p = b.dataset.aipreset;
+      if (p === "llamaserver") { state.ai.openai_base_url = "http://127.0.0.1:8080/v1"; if (!state.ai.openai_model) state.ai.openai_model = "local-model"; }
+      else if (p === "ollama") { state.ai.openai_base_url = "http://127.0.0.1:11434/v1"; if (!state.ai.openai_model || state.ai.openai_model === "local-model") state.ai.openai_model = "qwen2.5-coder:32b"; }
+      else if (p === "vllm") { state.ai.openai_base_url = "http://127.0.0.1:8011/v1"; if (!state.ai.openai_model || state.ai.openai_model === "local-model") state.ai.openai_model = "coder"; }
+      else if (p === "lmstudio") { state.ai.openai_base_url = "http://127.0.0.1:1234/v1"; }
+      markDirty();
+      renderAiCard();
+    }));
+    $$("[data-onpreset]").forEach((b) => b.addEventListener("click", () => {
+      const p = b.dataset.onpreset;
+      if (p === "chatgpt") { state.onlineKind = "openai"; state.ai.openai_base_url = "https://api.openai.com/v1"; if (!state.ai.openai_model || /^(coder|local-model|qwen)/i.test(state.ai.openai_model)) state.ai.openai_model = "gpt-4.1-mini"; }
+      else if (p === "gemini") { state.onlineKind = "gemini"; if (!state.ai.gemini_model) state.ai.gemini_model = "gemini-2.5-flash"; }
+      else if (p === "openrouter") { state.onlineKind = "openai"; state.ai.openai_base_url = "https://openrouter.ai/api/v1"; }
+      markDirty();
+      renderAiCard();
+    }));
+    if ($("#aiurl")) $("#aiurl").addEventListener("input", () => { state.ai.openai_base_url = $("#aiurl").value.trim(); markDirty(); });
+    if ($("#aimodel")) $("#aimodel").addEventListener("input", () => { state.ai.openai_model = $("#aimodel").value.trim(); markDirty(); });
+    if ($("#aigemmodel")) $("#aigemmodel").addEventListener("input", () => { state.ai.gemini_model = $("#aigemmodel").value.trim(); markDirty(); });
+    if ($("#aiallowext")) $("#aiallowext").addEventListener("change", () => { state.ai.allow_external_providers = $("#aiallowext").checked; markDirty(); });
+    if ($("#aibatch")) $("#aibatch").addEventListener("change", () => { state.ai.enabled = $("#aibatch").checked; markDirty(); });
+    if ($("#aigguf")) $("#aigguf").addEventListener("input", () => {
+      state.ai.llama_model_path = $("#aigguf").value.trim(); markDirty();
+      clearTimeout(timer.gguf);
+      timer.gguf = setTimeout(async () => {
+        try {
+          state.llamaCheck = await api("/api/settings/check", { body: { kind: "llama_model_path", path: state.ai.llama_model_path } });
+          if ($("#aiggufst")) $("#aiggufst").innerHTML = toolStatus(state.llamaCheck);
+        } catch (e) { /* ignore */ }
+      }, 400);
+    });
+    if ($("#ainctx")) $("#ainctx").addEventListener("input", () => { state.ai.llama_n_ctx = parseInt($("#ainctx").value, 10) || 16384; markDirty(); });
+    if ($("#aingpu")) $("#aingpu").addEventListener("input", () => { const v = parseInt($("#aingpu").value, 10); state.ai.llama_n_gpu_layers = Number.isNaN(v) ? -1 : v; markDirty(); });
+    if ($("#aitest")) $("#aitest").addEventListener("click", async () => {
+      $("#aist").innerHTML = '<span class="muted">Checking…</span>';
+      syncAiProvider();
+      try {
+        const r = await api("/api/settings/test-llm", {
+          body: {
+            provider: state.ai.provider,
+            base_url: state.ai.openai_base_url,
+            model: state.ai.provider === "gemini" ? state.ai.gemini_model : state.ai.openai_model,
+            gemini_model: state.ai.gemini_model,
+            llama_model_path: state.ai.llama_model_path,
+            allow_external_providers: state.ai.allow_external_providers,
+          },
+        });
+        if (state.ai.provider === "llama_cpp") {
+          $("#aist").innerHTML = r.ok ? `<span style="color:var(--ok)">${ic("check")} ${esc(r.note)}</span>` : `<span style="color:var(--bad)">${ic("x")} ${esc(r.error)}</span>`;
+          return;
+        }
+        const fbLine = () => {
+          if (!r.fallbacks) return "";
+          if (r.runs_use) return `<div style="margin-top:6px;color:var(--warn)">${ic("alert")} Runs fall back to <code>${esc(r.runs_use.model)}</code> at <code>${esc(r.runs_use.base_url)}</code>, which is reachable.</div>`;
+          return `<div style="margin-top:6px;color:var(--bad)">${ic("alert")} ${r.fallbacks.length ? "No fallback is usable either" : "No fallback is configured"}: runs will skip AI analysis (rule-based triage still runs).</div>`;
+        };
+        if (!r.ok) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(r.error)}</span>${fbLine()}`; return; }
+        if ($("#aimodels")) $("#aimodels").innerHTML = (r.models || []).map((x) => `<option value="${esc(x)}">`).join("");
+        const wantModel = state.ai.provider === "gemini" ? state.ai.gemini_model : state.ai.openai_model;
+        $("#aist").innerHTML = `<span style="color:var(--ok)">${ic("check")} Reachable · ${(r.models || []).length} model${(r.models || []).length === 1 ? "" : "s"}</span>` +
+          (r.model_found === false ? ` <span style="color:var(--warn)">· "${esc(wantModel)}" not listed: ${esc((r.models || []).slice(0, 6).join(", "))}</span>` : r.model_found ? ` · model found` : "") + fbLine();
+      } catch (e) { $("#aist").innerHTML = `<span style="color:var(--bad)">${ic("x")} ${esc(e.message)}</span>`; }
+    });
+  };
+  renderAiCard();
   // save
   $("#discard").addEventListener("click", () => { dirty = false; views.settings(); });
   $("#save").addEventListener("click", async () => {
+    syncAiProvider();
+    if (state.aiMode === "online" && $("#aiurl")) state.ai.openai_base_url = $("#aiurl").value.trim();
     const installations = Object.entries(state.inst).filter(([, v]) => v && v.path).map(([k, v]) => { const [suite, arch] = k.split("|"); return { suite, arch, path: v.path }; });
     const body = { paths: state.paths, suites: { default_arch: state.default_arch, installations }, ai_rca: state.ai };
     $("#save").disabled = true;
-    try { await api("/api/settings", { body }); dirty = false; toast("Settings saved. New runs use them."); views.settings(); }
+    try { await api("/api/settings", { body }); dirty = false; toast("Settings saved. New runs and interactive triage use them."); views.settings(); }
     catch (e) { toast("Not saved: " + e.message, 7000, "bad"); $("#save").disabled = false; }
   });
   window.onbeforeunload = () => (dirty ? true : undefined);
@@ -1132,7 +1551,7 @@ views.runs = async function () {
       <td>${pill(r.status)}</td><td style="width:160px">${sbar(r.pass, r.fail, r.skip)}</td>
       <td class="n">${num(r.pass)}</td><td class="n" ${r.fail ? 'style="color:var(--bad);font-weight:650"' : ""}>${num(r.fail)}</td><td class="n muted">${num(r.skip)}</td>
       <td class="n">${fmtDur(r.duration)}</td><td class="n">${(r.devices || []).length}</td>
-      <td><div class="row" style="gap:6px;flex-wrap:nowrap">${r.triage_url ? `<a class="btn sm" href="${esc(fileHref(r.triage_url))}" target="_blank" rel="noopener" title="Triage page">${ic("brain")} Triage</a>` : ""}${r.report_url ? `<a class="btn sm" href="${esc(fileHref(r.report_url))}" target="_blank" rel="noopener" title="HTML report">${ic("file")}</a>` : ""}</div></td></tr>`).join("")
+      <td><div class="row" style="gap:6px;flex-wrap:nowrap">${(r.fail || r.triage_url) ? `<a class="btn sm" href="#/triage/${encodeURIComponent(r.run_id || r.key)}" title="Interactive triage & discussion">${ic("brain")} Triage</a>` : ""}${r.google_url ? `<a class="btn sm" href="${esc(fileHref(r.google_url))}" target="_blank" rel="noopener" title="Official Google TradeFed report">${ic("ext")} Official</a>` : ""}${r.google_zip_url ? `<a class="btn sm ghost" href="${esc(fileHref(r.google_zip_url))}" title="Download official Google submission .zip">${ic("download")}</a>` : ""}${r.report_url ? `<a class="btn sm" href="${esc(fileHref(r.report_url))}" target="_blank" rel="noopener" title="xTS Agent HTML report">${ic("file")}</a>` : ""}</div></td></tr>`).join("")
       || '<tr><td colspan="9"><div class="empty">No runs match.</div></td></tr>';
     $$("tr.click").forEach((tr) => tr.addEventListener("click", (ev) => { if (!ev.target.closest("a")) location.hash = "#/run/" + encodeURIComponent(tr.dataset.k); }));
   };
@@ -1154,13 +1573,22 @@ views.run = async function (key) {
   $("#detail").innerHTML = `<div class="page-hd"><div><div class="row">${pill(r.overall_status || r.state)}<h1>${esc(r.plan)}</h1></div>
       <p><span class="mono">${esc(r.run_id || r.key)}</span>${r.host ? ` · ${esc(r.user)}@${esc(r.host)}` : ""} · ${fmtTime(r.started_at)}</p></div><div class="spacer"></div>
       ${r.state === "running" ? `<a class="btn primary" href="#/live">${ic("activity")} Watch live</a>` : ""}
-      ${r.links.triage_html ? `<a class="btn primary" href="${esc(fileHref(r.links.triage_html))}" target="_blank" rel="noopener">${ic("brain")} Triage page</a>` : ""}
+      <a class="btn primary" href="#/triage/${encodeURIComponent(r.run_id || r.key)}">${ic("brain")} Interactive triage</a>
+      ${r.links.triage_html ? `<a class="btn" href="${esc(fileHref(r.links.triage_html))}" target="_blank" rel="noopener">${ic("ext")} Static triage HTML</a>` : ""}
       <button class="btn" id="xjson">${ic("download")} JSON</button><button class="btn" id="xcsv">${ic("download")} CSV</button></div>
     <div class="kpis">${kpi("info", "clock", "Duration", fmtDur(dur), `${devs.length} device${devs.length === 1 ? "" : "s"}`)}${kpi("ok", "check", "Passed", num(pass), (rate(pass, fail) ?? "–") + "% pass rate")}
       ${kpi(fail ? "bad" : "ok", "x", "Failed", num(fail), ts ? `${num(ts.groups)} triage group${ts.groups === 1 ? "" : "s"} · ${num(ts.actionable_groups)} actionable` : "tests")}
       ${kpi(mods[2] ? "warn" : "skip", "layers", "Modules", `${num(mods[0])}<span class="muted" style="font-size:15px;font-weight:500"> / ${num(mods[1])}</span>`, mods[2] ? `<b style="color:var(--warn)">${mods[2]} incomplete</b>` : "all complete")}</div>
-    <div class="grid g-32 mb"><div class="card"><div class="card-hd"><h2>Pipeline</h2></div><div class="card-bd">${stepper(r)}
-        <div class="row" style="margin-top:16px">${(r.links.reports || []).map((u) => `<a class="btn sm" href="${esc(fileHref(u))}" target="_blank" rel="noopener">${ic("file")} ${esc(u.split(".").pop().toUpperCase())}</a>`).join("")}</div>
+    <div class="grid g-32 mb"><div class="card"><div class="card-hd"><h2>Pipeline &amp; reports</h2></div><div class="card-bd">${stepper(r)}
+        ${(r.links.google_reports || []).length ? `<div style="margin-top:16px"><div class="muted" style="font-size:12px;font-weight:600;margin-bottom:6px">Official Google / TradeFed reports (submission format)</div>
+          <div class="row" style="gap:8px">${r.links.google_reports.map((g) => {
+            const p = g.suite ? g.suite.toUpperCase() + " " : "";
+            return (g.html_url ? `<a class="btn sm primary" href="${esc(fileHref(g.html_url))}" target="_blank" rel="noopener">${ic("ext")} ${esc(p)}Official Google HTML</a>` : "") +
+              (g.xml_url ? `<a class="btn sm" href="${esc(fileHref(g.xml_url))}" target="_blank" rel="noopener">${ic("file")} ${esc(p)}test_result.xml</a>` : "") +
+              (g.zip_url ? `<a class="btn sm" href="${esc(fileHref(g.zip_url))}">${ic("download")} ${esc(p)}Submission .zip</a>` : "");
+          }).join("")}</div></div>` : ""}
+        ${(r.links.reports || []).length ? `<div style="margin-top:12px"><div class="muted" style="font-size:12px;font-weight:600;margin-bottom:6px">xTS Agent reports</div>
+          <div class="row" style="gap:8px">${(r.links.reports || []).map((u) => `<a class="btn sm" href="${esc(fileHref(u))}" target="_blank" rel="noopener">${ic("file")} Agent ${esc(u.split(".").pop().toUpperCase())}</a>`).join("")}</div></div>` : ""}
         ${r.suites.map((s) => (s.results_dir ? `<div class="muted mono" style="margin-top:12px;font-size:12px">${esc(s.name)} · ${esc(s.results_dir)}</div>` : "")).join("")}</div></div>
       <div class="card"><div class="card-hd"><h2>Result</h2></div><div class="card-bd"><div class="donut-wrap">${donut(pass, fail, skip, 140)}<div class="legend">
         <div><i style="background:var(--ok)"></i>Passed<b>${num(pass)}</b></div><div><i style="background:var(--bad)"></i>Failed<b>${num(fail)}</b></div><div><i style="background:var(--skip)"></i>Skipped<b>${num(skip)}</b></div></div></div></div></div></div>
@@ -1179,10 +1607,13 @@ function suiteDetail(s, i) {
   const res = s.result;
   if (!res) return `<div class="card mb"><div class="card-hd"><h2>${esc(s.name.toUpperCase())}</h2>${pill(s.status)}</div><div class="empty">No test_result.xml${s.error ? ": " + esc(s.error) : " yet"}.</div></div>`;
   if (res.error) return `<div class="card mb"><div class="card-hd"><h2>${esc(s.name.toUpperCase())}</h2></div><div class="card-bd">${esc(res.error)}</div></div>`;
-  const di = res.device_info || {}, fp = di.build_fingerprint || s.fingerprint || "";
+  const di = res.device_info || {}, fp = di.build_fingerprint || s.fingerprint || "", gl = s.google;
   const failing = res.modules.filter((m) => m.fail).sort((a, b) => b.fail - a.fail).slice(0, 8), maxF = Math.max(1, ...failing.map((m) => m.fail));
   return `<div class="card mb"><div class="card-hd"><h2>${esc(s.name.toUpperCase())}</h2>${pill(s.status)}<span class="sub">${num(res.modules_done)} / ${num(res.modules_total)} modules · ${Math.max((res.devices || []).length, (s.devices || []).length)} devices</span>
-      <span class="spacer"></span><span class="mono faint ell" style="max-width:520px" title="${esc(fp)}">${esc(fp)}</span></div>
+      <span class="spacer"></span>
+      ${gl && gl.primary_url ? `<a class="btn sm" href="${esc(fileHref(gl.primary_url))}" target="_blank" rel="noopener">${ic("ext")} Official Google report</a>` : ""}
+      ${gl && gl.zip_url ? `<a class="btn sm ghost" href="${esc(fileHref(gl.zip_url))}" title="Download official submission .zip">${ic("download")} .zip</a>` : ""}
+      <span class="mono faint ell" style="max-width:420px" title="${esc(fp)}">${esc(fp)}</span></div>
     ${failing.length ? `<div class="card-bd" style="border-bottom:1px solid var(--border)"><div style="font-weight:600;margin-bottom:12px;font-size:13px">Modules with the most failures</div>
       ${failing.map((m) => `<div class="row" style="flex-wrap:nowrap;margin-bottom:7px"><span class="mono ell" style="width:260px;flex:none" title="${esc(m.name)}">${esc(m.name)}</span>
         <div style="flex:1;height:14px;background:var(--panel-3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(100 * m.fail) / maxF}%;background:var(--bad);opacity:.7;border-radius:4px"></div></div><b style="width:52px;text-align:right">${num(m.fail)}</b></div>`).join("")}</div>` : ""}
@@ -1251,6 +1682,556 @@ views.devices = function () {
   $$("#dv button").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.v; $$("#dv button").forEach((x) => x.classList.toggle("on", x === b)); draw(); }));
   $("#rf").addEventListener("click", () => load(true));
   every(() => load(false), 10000);
+};
+
+// ================================================================ interactive triage & discussion
+const CLASS_TONE = { PRODUCT_BUG: "bad", ENVIRONMENT_ISSUE: "warn", FLAKY_TEST: "accent", INFRASTRUCTURE_FAILURE: "info", TEST_BUG: "ok" };
+const LABEL_TONE = { NEW: "bad", PERSISTENT: "warn", FLAKY: "accent", NO_HISTORY: "skip" };
+const QUICK_PROMPTS = [
+  "Explain the root cause step by step from the stack trace and source code.",
+  "Is this an ENVIRONMENT_ISSUE, FLAKY_TEST, TEST_BUG, or genuine PRODUCT_BUG? Why?",
+  "Which AOSP/OEM overlay, service, or device config controls this behavior?",
+  "Give exact adb commands to inspect state and reproduce this on a single DUT.",
+  "Suggest a concrete fix (or waiver rationale if this is lab/build-skew noise).",
+];
+function classPill(cls, prefix) {
+  const c = String(cls || "PRODUCT_BUG").toUpperCase();
+  return `<span class="pill t-${CLASS_TONE[c] || "skip"}" style="padding:2px 8px;font-size:11.5px">${esc(prefix ? `${prefix}: ${c}` : c)}</span>`;
+}
+function histPill(lbl) {
+  const l = String(lbl || "NO_HISTORY").toUpperCase();
+  return `<span class="pill t-${LABEL_TONE[l] || "skip"}" style="padding:2px 8px;font-size:11px">${esc(l)}</span>`;
+}
+function fmtChatMd(raw) {
+  const parts = String(raw || "").split(/```(?:\w*\n)?/);
+  return parts.map((chunk, idx) => {
+    if (idx % 2 === 1) return `<pre>${esc(chunk.replace(/\n$/, ""))}</pre>`;
+    return esc(chunk)
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/\n/g, "<br>");
+  }).join("");
+}
+function defaultWaiverDate(days = 30) {
+  const d = new Date(Date.now() + days * 86400 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+views.triage = async function (arg) {
+  const [initRun, initSig] = String(arg || "").split("/");
+  $("#view").innerHTML = `<div class="page-hd"><div><h1>Failure triage &amp; discussion</h1>
+      <p><b>Level 1 (deterministic):</b> groups every failure by root-cause signature, rules, history &amp; waivers · <b>Level 2 (AI &amp; human):</b> grounded root-cause analysis &amp; multi-turn discussion per group.</p></div>
+      <div class="spacer"></div><div class="row" id="trheadact"></div></div>
+    <div id="trbody"><div class="skeleton" style="height:140px"></div></div>`;
+
+  let runsMeta, plans = [], onlineDevs = [];
+  try { runsMeta = await api("/api/triage/runs"); } catch (e) { $("#trbody").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+  api("/api/plans").then((ps) => { plans = ps; }).catch(() => {});
+  api("/api/devices").then((ds) => { onlineDevs = ds.filter((d) => d.state === "device" && !d.quarantine); }).catch(() => {});
+
+  const allRuns = runsMeta.runs || [];
+  let curRunKey = initRun || runsMeta.default_key || (allRuns[0] && allRuns[0].key) || "";
+  if (!curRunKey) {
+    $("#trbody").innerHTML = `<div class="card"><div class="empty-hero"><div class="big">${ic("brain")}</div><h2>No runs to triage yet</h2><div class="muted">Launch a test plan first; deterministic root-cause groups appear here as soon as results exist.</div><div class="quick"><a class="btn primary" href="#/launch">${ic("play")} Launch a run</a></div></div></div>`;
+    return;
+  }
+
+  let payload = null, curSig = initSig || "", detail = null, detailTab = "discuss", onlyAct = false;
+
+  const loadRun = async (rkey, keepSig) => {
+    curRunKey = rkey;
+    $("#trbody").innerHTML = `<div class="skeleton" style="height:120px;margin-bottom:16px"></div><div class="muted">Loading deterministic root-cause groups…</div>`;
+    try { payload = await api("/api/triage/" + encodeURIComponent(rkey)); }
+    catch (e) { $("#trbody").innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+
+    const runOpts = allRuns.some((r) => r.key === payload.key || r.key === rkey) ? allRuns : [{ key: payload.key, plan: payload.plan_name, fail: payload.summary.failures, started_at: payload.started_at }, ...allRuns];
+    const gRep = (payload.google_reports || [])[0];
+    $("#trheadact").innerHTML = `<label class="muted" style="font-size:12.5px">Run <select id="trrunsel" style="max-width:340px">${runOpts.map((r) => {
+      const sel = (r.key === rkey || r.key === payload.key || r.plan_key === rkey) ? "selected" : "";
+      return `<option value="${esc(r.key)}" ${sel}>${esc(r.plan)} · ${num(r.fail || 0)} fail · ${fmtTime(r.started_at)}</option>`;
+    }).join("")}</select></label>
+      <a class="btn sm" href="#/run/${encodeURIComponent(payload.key)}">${ic("layers")} Run detail</a>
+      ${gRep && gRep.primary_url ? `<a class="btn sm" href="${esc(fileHref(gRep.primary_url))}" target="_blank" rel="noopener" title="Official Google TradeFed compatibility report">${ic("ext")} Official Google report</a>` : ""}
+      ${gRep && gRep.zip_url ? `<a class="btn sm ghost" href="${esc(fileHref(gRep.zip_url))}" title="Download official Google submission .zip">${ic("download")} .zip</a>` : ""}
+      ${payload.triage_html_url ? `<a class="btn sm ghost" href="${esc(fileHref(payload.triage_html_url))}" target="_blank" rel="noopener">${ic("ext")} Static triage</a>` : ""}`;
+    $("#trrunsel").addEventListener("change", () => {
+      const nk = $("#trrunsel").value;
+      history.replaceState(null, "", `#/triage/${encodeURIComponent(nk)}`);
+      loadRun(nk, "");
+    });
+
+    const s = payload.summary;
+    const teams = Object.keys(s.by_team || {}).sort();
+    const classes = payload.classifications || [];
+    const firstWithFail = allRuns.find((r) => (r.fail || 0) > 0 && r.key !== payload.key && r.key !== rkey);
+
+    if (!payload.groups.length) {
+      $("#trbody").innerHTML = `<div class="kpis">${kpi("ok", "check", "Failing tests", "0", `${esc(payload.plan_name)} · ${esc(payload.status)}`)}
+        ${kpi("ok", "layers", "Root-cause groups", "0", "clean run — nothing to triage")}${kpi("info", "check", "Passed tests", num((payload.totals || {}).pass), payload.fingerprint ? `<span class="mono ell" style="display:block">${esc(payload.fingerprint)}</span>` : "")}</div>
+        <div class="card"><div class="empty-hero"><div class="big">${ic("check")}</div><h2>Zero failures in ${esc(payload.plan_name)}</h2>
+          <div class="muted">All executed tests passed on this run.${firstWithFail ? " Switch to a run with failures to inspect root-cause groups and open interactive discussion:" : ""}</div>
+          ${firstWithFail ? `<div class="quick"><button class="btn primary" id="trjumpfail">${ic("brain")} Open ${esc(firstWithFail.plan)} (${num(firstWithFail.fail)} failed)</button></div>` : ""}</div></div>`;
+      if ($("#trjumpfail")) $("#trjumpfail").addEventListener("click", () => { history.replaceState(null, "", `#/triage/${encodeURIComponent(firstWithFail.key)}`); loadRun(firstWithFail.key, ""); });
+      return;
+    }
+
+    if (!keepSig || !payload.groups.some((g) => g.signature === keepSig)) curSig = payload.groups[0].signature;
+    else curSig = keepSig;
+
+    $("#trbody").innerHTML = `
+      <div class="kpis">
+        ${kpi("bad", "layers", "Deterministic funnel", `${num(s.failures)} → ${num(s.groups)}`, `${s.reduction}× collapse into root-cause signatures`)}
+        ${kpi(s.actionable_groups ? "warn" : "ok", "alert", "Actionable groups", num(s.actionable_groups), `${num(s.known_groups)} known · ${num(s.waived_groups)} waived`)}
+        ${kpi((s.by_label.NEW || 0) ? "bad" : "info", "activity", "History signals", `${num(s.by_label.NEW || 0)} NEW`, `${num(s.by_label.PERSISTENT || 0)} persistent · ${num(s.by_label.FLAKY || 0)} flaky`)}
+        ${kpi("accent", "brain", "AI & human triage", `${num(s.ai_groups)} AI · ${num(s.reviewed_groups)} human`, `${num(s.discussed_groups)} group(s) with discussion`)}
+      </div>
+      <div class="card mb"><div class="card-bd row" style="padding:11px 16px;gap:12px">
+        <span class="muted">${ic("search")}</span>
+        <input type="text" id="trq" placeholder="Filter by signature, exception, message, module, test, or AI root cause…" style="flex:1;min-width:220px">
+        <label style="font-size:12.5px">History <select id="trlbl"><option value="">All</option>${["NEW", "PERSISTENT", "FLAKY", "NO_HISTORY"].map((l) => `<option value="${l}">${l}${s.by_label[l] ? ` (${s.by_label[l]})` : ""}</option>`).join("")}</select></label>
+        <label style="font-size:12.5px">Category <select id="trcls"><option value="">All</option>${classes.map((c) => `<option value="${c}">${c}${s.by_classification[c] ? ` (${s.by_classification[c]})` : ""}</option>`).join("")}</select></label>
+        <label style="font-size:12.5px">Team <select id="trteam"><option value="">All</option>${teams.map((t) => `<option value="${esc(t)}">${esc(t)} (${s.by_team[t]})</option>`).join("")}</select></label>
+        <label class="chk" style="font-size:12.5px;margin:0"><input type="checkbox" id="tract"> Actionable only</label>
+        <span class="muted" id="trcnt" style="font-size:12px"></span>
+      </div></div>
+      <div class="trgrid">
+        <div class="card"><div class="card-hd"><h2>1 · Deterministic root-cause groups</h2><span class="sub">by signature</span></div>
+          <div id="trlist" style="max-height:76vh;overflow:auto"></div></div>
+        <div id="trwork"><div class="card"><div class="skeleton" style="height:260px"></div></div></div>
+      </div>`;
+
+    ["#trq", "#trlbl", "#trcls", "#trteam", "#tract"].forEach((sel) => $(sel).addEventListener("input", () => { onlyAct = $("#tract").checked; paintList(); }));
+    paintList();
+    await loadGroup(curSig);
+  };
+
+  const paintList = () => {
+    if (!payload || !$("#trlist")) return;
+    const q = ($("#trq").value || "").toLowerCase().trim();
+    const lbl = $("#trlbl").value, cls = $("#trcls").value, team = $("#trteam").value;
+    const vis = payload.groups.filter((g) => {
+      if (onlyAct && !g.actionable) return false;
+      if (lbl && g.label !== lbl) return false;
+      if (cls && g.effective_classification !== cls && !(g.ai && g.ai.classification === cls)) return false;
+      if (team && ((g.owner || {}).team || "") !== team) return false;
+      if (!q) return true;
+      const hay = [g.signature, g.title, g.exception, g.message, (g.modules || []).join(" "), (g.tests || []).join(" "), (g.ai || {}).root_cause || "", ((g.known_issue || {}).id || "")].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+    $("#trcnt").textContent = `${vis.length} / ${payload.groups.length}`;
+    $("#trlist").innerHTML = vis.map((g) => {
+      const ki = g.known_issue, vd = g.verdict;
+      return `<div class="tritem ${g.signature === curSig ? "on" : ""}" data-sig="${esc(g.signature)}">
+        <div class="row" style="gap:6px;justify-content:space-between;flex-wrap:nowrap">
+          <span class="row" style="gap:6px;min-width:0"><b class="mono" style="font-size:12px;color:var(--muted)">#${g.rank}</b>
+            <span class="tag" style="background:var(--bad-soft);color:var(--bad)">${num(g.count)} test${g.count === 1 ? "" : "s"}</span>
+            ${histPill(g.label)}</span>
+          <span class="mono faint" style="font-size:11px">${esc(g.signature)}</span>
+        </div>
+        <div class="mono ell" style="font-weight:650;font-size:12.5px;margin-top:6px" title="${esc(g.title)}">${esc(g.title)}</div>
+        <div class="row" style="gap:5px;margin-top:7px">
+          ${classPill(g.rule_classification, "Rule")}
+          ${g.ai ? `<span class="pill t-${CLASS_TONE[g.ai.classification] || "accent"}" style="padding:2px 7px;font-size:11px">✨ AI: ${esc(g.ai.classification)}</span>` : ""}
+          ${ki ? `<span class="tag" style="background:var(--ok-soft);color:var(--ok)">${esc(ki.id)}${ki.waived ? " · waived" : ""}</span>` : ""}
+          ${vd ? `<span class="tag" style="background:var(--info-soft);color:var(--info)">✓ ${esc(vd.status)}</span>` : ""}
+          ${g.discussion_count ? `<span class="tag">💬 ${g.discussion_count}</span>` : ""}
+        </div>
+        <div class="muted ell" style="font-size:11.5px;margin-top:5px">${esc((g.owner || {}).team || "xts-triage")} · ${esc((g.modules || []).slice(0, 3).join(", "))}${(g.modules || []).length > 3 ? ` +${g.modules.length - 3}` : ""}</div>
+      </div>`;
+    }).join("") || `<div class="empty">No root-cause groups match your filter.</div>`;
+
+    $$("#trlist .tritem").forEach((el) => el.addEventListener("click", () => {
+      const sig = el.dataset.sig;
+      if (sig === curSig) return;
+      curSig = sig;
+      history.replaceState(null, "", `#/triage/${encodeURIComponent(curRunKey)}/${encodeURIComponent(sig)}`);
+      paintList();
+      loadGroup(sig);
+    }));
+  };
+
+  const syncGroupIntoList = (sig, patch) => {
+    if (!payload) return;
+    const g = payload.groups.find((x) => x.signature === sig);
+    if (g) Object.assign(g, patch);
+    paintList();
+  };
+
+  const loadGroup = async (sig) => {
+    const work = $("#trwork"); if (!work) return;
+    work.innerHTML = `<div class="card"><div class="card-bd"><div class="skeleton" style="height:220px"></div></div></div>`;
+    try { detail = await api(`/api/triage/${encodeURIComponent(curRunKey)}/${encodeURIComponent(sig)}`); }
+    catch (e) { work.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; return; }
+    renderWorkspace();
+  };
+
+  const renderWorkspace = () => {
+    const work = $("#trwork"); if (!work || !detail) return;
+    const g = detail.group, ai = g.ai, ki = g.known_issue, vd = detail.verdict;
+    const snippets = detail.snippets || [], signals = detail.signals || [], msgs = detail.messages || [];
+    const aiCfg = (payload && payload.ai_configured) || {};
+    const suiteName = ((g.suites || [])[0] || "cts").toLowerCase();
+    const matchPlan = plans.find((p) => p.name === payload.plan_name) || plans.find((p) => p.suites.some((s) => s.name.toLowerCase() === suiteName)) || plans[0];
+
+    work.innerHTML = `<div class="card">
+      <div class="card-hd" style="align-items:flex-start;gap:12px">
+        <div style="min-width:0;flex:1">
+          <div class="row" style="gap:7px;margin-bottom:6px">
+            <span class="tag" style="background:var(--bad-soft);color:var(--bad);font-size:12px">${num(g.count)} failing test${g.count === 1 ? "" : "s"}</span>
+            ${histPill(g.label)}
+            ${classPill(g.rule_classification, "Level-1 Rule")}
+            ${ai ? classPill(ai.classification, `AI (${Math.round((ai.confidence || 0) * 100)}%)`) : ""}
+            ${vd && vd.classification ? classPill(vd.classification, `Human (${vd.status})`) : vd ? `<span class="pill t-info" style="padding:2px 8px;font-size:11.5px">Human: ${esc(vd.status)}</span>` : ""}
+            <span class="mono muted" style="font-size:12px">sig <code>${esc(g.signature)}</code></span>
+          </div>
+          <h2 class="mono" style="font-size:15.5px;word-break:break-word">${esc(g.title)}</h2>
+          <div class="muted" style="font-size:12.5px;margin-top:5px">
+            Owning team: <b>${esc((g.owner || {}).team || "xts-triage")}</b>${(g.owner || {}).jira_component ? ` (${esc(g.owner.jira_component)})` : ""}
+            · Modules: <span class="mono">${esc((g.modules || []).join(", ") || "–")}</span>
+            ${g.jira_key ? ` · Jira: <code>${esc(g.jira_key)}</code>` : ""}
+          </div>
+        </div>
+        <div class="row" style="gap:7px">
+          ${aiCfg.provider === "none" ? `<a class="btn sm" href="#/settings" title="AI is currently set to Disabled in Settings">${ic("brain")} Enable AI in Settings</a>`
+            : `<button class="btn sm ${ai ? "" : "primary"}" id="trbtnai">${ic("brain")} ${ai ? "Re-run AI RCA" : "Run AI RCA"}</button>`}
+          <button class="btn sm" id="trbtncopy" title="Copy grounded root-cause prompt (stack, logcat &amp; code) to paste into ChatGPT, Gemini, or company web chat">${ic("file")} Copy prompt (ChatGPT)</button>
+          <button class="btn sm" id="trbtnrerun">${ic("play")} Re-run ${g.count > 1 ? `tests (${Math.min(g.count, (g.tests || []).length)})` : "test"}</button>
+          <button class="btn sm" id="trbtnki">${ic("shield")} ${ki ? "Update known issue" : "Promote to known_issues.yaml"}</button>
+        </div>
+      </div>
+
+      ${ki ? `<div class="card-bd" style="padding:10px 18px;background:var(--ok-soft);border-bottom:1px solid var(--border);font-size:13px">
+        <b>Deterministic Known Issue matched (${esc(ki.id)}):</b> ${esc(ki.title)}
+        ${ki.jira ? ` · <code>${esc(ki.jira)}</code>` : ""}${ki.waived ? ' · <span class="pill t-ok" style="padding:1px 7px">WAIVED</span>' : ki.waiver_expired ? ' · <span class="pill t-warn" style="padding:1px 7px">WAIVER EXPIRED</span>' : ""}
+      </div>` : ""}
+
+      <div id="trrerunbox" hidden class="card-bd" style="background:var(--panel-2);border-bottom:1px solid var(--border)">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Re-run this root-cause group's failing test(s)</b><button class="btn sm ghost" id="trrerunclose">Close</button></div>
+        <div class="row" style="gap:12px">
+          <label style="font-size:12.5px">Base plan <select id="trrplan">${plans.map((p) => `<option value="${esc(p.file)}" ${matchPlan && p.file === matchPlan.file ? "selected" : ""}>${esc(p.name)} (${esc(p.file)})</option>`).join("")}</select></label>
+          <label style="font-size:12.5px">Shards <select id="trrsh">
+            <option value="1" selected>1 device (single DUT — recommended to isolate)</option>
+            <option value="auto">All free devices (auto)</option>
+            <option value="2">2 devices</option><option value="4">4 devices</option></select></label>
+          ${onlineDevs.length ? `<label style="font-size:12.5px">Pin device <select id="trrdev"><option value="">Auto-pick free device</option>${onlineDevs.map((d) => `<option value="${esc(d.serial)}">${esc(d.serial)}${d.leased_by ? " (in use)" : " (free)"}</option>`).join("")}</select></label>` : ""}
+          <button class="btn sm primary" id="trrgo">${ic("play")} Launch targeted run</button>
+        </div>
+        <div class="muted mono" style="font-size:11.5px;margin-top:7px">Suite: ${esc(suiteName.toUpperCase())} · Filters (${(g.tests || []).length}): ${esc((g.tests || []).slice(0, 3).join(", "))}${(g.tests || []).length > 3 ? ` … (+${g.tests.length - 3})` : ""}</div>
+      </div>
+
+      <div id="trkibox" hidden class="card-bd" style="background:var(--panel-2);border-bottom:1px solid var(--border)">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Promote signature <code>${esc(g.signature)}</code> to <code>config/known_issues.yaml</code></b><button class="btn sm ghost" id="trkiclose">Close</button></div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Once saved, Level-1 deterministic triage will automatically classify matching failures on every future run without needing AI.</div>
+        <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:10px">
+          <div><div class="flabel">Title</div><input type="text" id="trkititle" value="${esc((ki && ki.title) || (ai && ai.root_cause ? ai.root_cause.slice(0, 140) : g.title))}" style="width:100%"></div>
+          <div><div class="flabel">Classification</div><select id="trkicls" style="width:100%">${(payload.classifications || []).map((c) => `<option value="${c}" ${c === ((vd && vd.classification) || (ai && ai.classification) || g.effective_classification) ? "selected" : ""}>${c}</option>`).join("")}</select></div>
+          <div><div class="flabel">Jira key (optional)</div><input type="text" id="trkijira" class="mono" placeholder="AAOS-1234" value="${esc((ki && ki.jira) || (vd && vd.jira_key) || g.jira_key || "")}" style="width:100%"></div>
+        </div>
+        <div class="row" style="margin-top:10px;gap:14px">
+          <label class="chk" style="margin:0"><input type="checkbox" id="trkiwaive" ${ki && ki.waived ? "checked" : ""}> Add time-boxed waiver (development profile)</label>
+          <span id="trkiwfields" class="row" style="gap:10px" ${ki && ki.waived ? "" : "hidden"}>
+            <label style="font-size:12.5px">Expires <input type="text" id="trkiexp" class="mono" value="${defaultWaiverDate(30)}" placeholder="YYYY-MM-DD" style="width:120px"></label>
+            <label style="font-size:12.5px">Reason <input type="text" id="trkireason" value="${esc(ai && ai.suggested_fix ? ai.suggested_fix.slice(0, 120) : "Known lab/environment issue")}" style="width:260px"></label>
+          </span>
+          <span class="spacer"></span>
+          <button class="btn sm primary" id="trkisave">${ic("check")} Save to known_issues.yaml</button>
+        </div>
+      </div>
+
+      ${ai ? `<div class="card-bd" style="border-bottom:1px solid var(--border)"><div class="aibox">
+        <div class="row" style="gap:8px;margin-bottom:6px">
+          <b>✨ Level-2 AI Root Cause</b>
+          ${classPill(ai.classification)}
+          <span class="tag">${Math.round((ai.confidence || 0) * 100)}% confidence</span>
+          <span class="mono muted" style="font-size:11.5px">${esc(ai.model || "")}</span>
+          ${ai.classification && ai.classification !== g.rule_classification ? `<span class="muted" style="font-size:12px">· differs from Level-1 rule (<code>${esc(g.rule_classification)}</code>)</span>` : ""}
+          <span class="spacer"></span>
+          <button class="btn sm" id="tracceptai" title="Copy AI classification & summary into Human Verdict">${ic("check")} Accept into verdict</button>
+        </div>
+        <div style="font-size:13.5px">${esc(ai.root_cause)}</div>
+        ${ai.suggested_fix ? `<div class="fixbox"><b>Suggested fix:</b> ${esc(ai.suggested_fix)}</div>` : ""}
+        ${ai.evidence ? `<div class="muted" style="font-size:12.5px;margin-top:7px"><b>Evidence:</b> ${esc(ai.evidence)}</div>` : ""}
+      </div></div>` : ""}
+
+      <div class="tabs" id="trtabs">
+        <button data-t="discuss" class="${detailTab === "discuss" ? "on" : ""}">${ic("brain")} Interactive Discussion <span class="cnt" style="background:var(--accent-soft);color:var(--accent)">${msgs.length}</span></button>
+        <button data-t="evidence" class="${detailTab === "evidence" ? "on" : ""}">${ic("search")} Deterministic Evidence &amp; Stack (${num((g.tests || []).length)})</button>
+        <button data-t="source" class="${detailTab === "source" ? "on" : ""}">${ic("terminal")} Source &amp; Logcat (${snippets.length} file${snippets.length === 1 ? "" : "s"}${detail.logcat ? " + logcat" : ""})</button>
+        <button data-t="verdict" class="${detailTab === "verdict" ? "on" : ""}">${ic("check")} Human Verdict ${vd ? `(${esc(vd.status)})` : ""}</button>
+      </div>
+
+      <div class="card-bd" id="trtabbody"></div>
+    </div>`;
+
+    const renderTabBody = () => {
+      const box = $("#trtabbody"); if (!box) return;
+      if (detailTab === "discuss") {
+        box.innerHTML = `
+          <div class="muted" style="font-size:12px;margin-bottom:10px">
+            Grounded context attached automatically: <b>stack trace</b> · <b>${snippets.length} local AOSP/OEM source snippet${snippets.length === 1 ? "" : "s"}</b> · <b>${detail.logcat ? "device logcat excerpt" : "no logcat"}</b> · <b>${signals.length} structural signal${signals.length === 1 ? "" : "s"}</b>
+            · LLM: <code>${esc(aiCfg.model || "not set")}</code> (<a href="#/settings">Settings</a>) · Saved across runs by signature <code>${esc(g.signature)}</code>.
+          </div>
+          <div class="row" style="gap:6px;margin-bottom:12px">${QUICK_PROMPTS.map((qp, i) => `<button type="button" class="qprompt" data-qp="${i}">${esc(qp.length > 52 ? qp.slice(0, 50) + "…" : qp)}</button>`).join("")}</div>
+          <div class="chatlist" id="trchat">
+            ${msgs.length ? msgs.map((m) => {
+              const cls = m.role === "ai" ? "ai" : m.role === "system" ? "sys" : "";
+              const badge = m.role === "ai" ? "🤖 AI" : m.role === "system" ? "📌 Triage event" : "👤 Engineer";
+              return `<div class="chatmsg ${cls}">
+                <div class="row" style="gap:8px;font-size:11.5px;color:var(--muted);margin-bottom:4px">
+                  <b>${badge} · ${esc(m.author)}</b>
+                  <span>${fmtTime(m.created_at)}</span>
+                  ${m.run_key && m.run_key !== detail.run_key ? `<span class="tag" title="Recorded on earlier run ${esc(m.run_key)}">from ${esc(m.run_key)}</span>` : ""}
+                </div>
+                <div>${fmtChatMd(m.content)}</div>
+              </div>`;
+            }).join("") : `<div class="empty" style="padding:22px">No discussion on signature <code>${esc(g.signature)}</code> yet.<br><span style="font-size:12.5px">Click a quick prompt above, ask the local AI about stack/logcat/OEM code, or leave a team triage note.</span></div>`}
+          </div>
+          <div style="margin-top:12px">
+            <textarea id="trmsg" placeholder="Ask AI a follow-up question (grounded on stack, logcat &amp; AOSP/OEM source), or write a team note… (Ctrl+Enter asks AI)" style="min-height:76px;font-family:inherit;font-size:13.5px"></textarea>
+            <div class="row" style="margin-top:8px;justify-content:space-between">
+              <label style="font-size:12px" class="muted">Author <input type="text" id="trauthor" value="${esc((vd && vd.author) || sessionStorage.getItem("xts-triage-author") || "")}" placeholder="optional name" style="width:140px;padding:4px 8px;font-size:12px"></label>
+              <div class="row" style="gap:8px">
+                <button type="button" class="btn" id="trcopyprompt" title="Copy grounded prompt to paste into ChatGPT / Gemini / Web AI">${ic("file")} Copy prompt for ChatGPT</button>
+                <button type="button" class="btn" id="trsendnote">${ic("check")} Add team note (no AI)</button>
+                ${aiCfg.provider === "none" ? "" : `<button type="button" class="btn primary" id="trsendask">${ic("brain")} Ask AI</button>`}
+              </div>
+            </div>
+          </div>`;
+        const chatEl = $("#trchat"); if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+        $$("[data-qp]", box).forEach((b) => b.addEventListener("click", () => { $("#trmsg").value = QUICK_PROMPTS[+b.dataset.qp]; $("#trmsg").focus(); }));
+        const send = async (mode) => {
+          const text = ($("#trmsg").value || "").trim();
+          if (!text) { toast("Write a question or note first", 3000, "bad"); return; }
+          const author = ($("#trauthor").value || "").trim();
+          if (author) try { sessionStorage.setItem("xts-triage-author", author); } catch (e) {}
+          const askBtn = $("#trsendask"), origLabel = askBtn ? askBtn.innerHTML : "";
+          if (askBtn) askBtn.disabled = true;
+          $("#trsendnote").disabled = true;
+          if (mode === "ask" && askBtn) askBtn.innerHTML = `${ic("clock")} Thinking…`;
+          try {
+            const res = await api(`/api/triage/${encodeURIComponent(curRunKey)}/${encodeURIComponent(g.signature)}/discuss`, { body: { message: text, mode, author } });
+            detail.messages = res.messages;
+            syncGroupIntoList(g.signature, { discussion_count: res.messages.length });
+            renderWorkspace();
+          } catch (e) {
+            toast(e.message, 7000, "bad");
+            if (askBtn) { askBtn.disabled = false; askBtn.innerHTML = origLabel; }
+            $("#trsendnote").disabled = false;
+          }
+        };
+        if ($("#trsendask")) $("#trsendask").addEventListener("click", () => send("ask"));
+        $("#trsendnote").addEventListener("click", () => send("note"));
+        $("#trcopyprompt").addEventListener("click", () => copyGroundedPrompt(($("#trmsg").value || "").trim()));
+        $("#trmsg").addEventListener("keydown", (ev) => {
+          if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+            ev.preventDefault();
+            send(aiCfg.provider === "none" ? "note" : "ask");
+          }
+        });
+      } else if (detailTab === "evidence") {
+        box.innerHTML = `
+          <div class="kv" style="margin-top:0;margin-bottom:14px">
+            <span class="muted">Signature</span><span class="mono"><code>${esc(g.signature)}</code></span>
+            <span class="muted">Exception</span><span class="mono">${esc(g.exception || "(assertion / message failure)")}</span>
+            <span class="muted">Normalised</span><span class="mono">${esc(g.message || "–")}</span>
+            <span class="muted">Key frames</span><span class="mono">${esc((g.frames || []).join(" → ") || "–")}</span>
+            <span class="muted">First failed</span><span class="mono">${esc(g.first_fail_build || "–")}</span>
+            <span class="muted">Last passed</span><span class="mono">${esc(g.last_pass_build || "–")}</span>
+          </div>
+          ${signals.length ? `<div style="margin-bottom:14px"><div class="flabel">Deterministic structural signals</div>${signals.map((sg) => `<div class="alert warn" style="margin:6px 0 0">${ic("alert")}<div>${esc(sg)}</div></div>`).join("")}</div>` : ""}
+          <div class="flabel">Sample stack trace</div>
+          <pre class="codebox" style="max-height:320px;overflow:auto">${esc(g.sample_stack || "(no stack trace)")}</pre>
+          <div class="row" style="margin-top:16px;margin-bottom:6px;justify-content:space-between">
+            <span class="flabel" style="margin:0">Failing tests in this root-cause group (${num((g.tests || []).length)}${g.tests_truncated ? ` shown of ${num(g.count)}` : ""})</span>
+          </div>
+          <pre class="codebox" style="max-height:240px;overflow:auto">${esc((g.tests || []).join("\n"))}${g.tests_truncated ? `\n… and ${g.tests_truncated} more` : ""}</pre>`;
+      } else if (detailTab === "source") {
+        const aiRefs = (ai && ai.code_refs) || [];
+        box.innerHTML = `
+          <div class="flabel">Grounded AOSP / OEM source windows (${snippets.length})</div>
+          ${snippets.length ? snippets.map((sn, idx) => `<details ${idx === 0 ? "open" : ""} style="margin-bottom:12px">
+            <summary style="cursor:pointer;font-weight:600;font-size:12.5px"><code>${esc(sn.short)}</code> · line ${sn.start_line} <span class="muted mono" style="font-weight:400">${esc(sn.file)}</span></summary>
+            <pre class="codebox">${sn.lines.map((l) => `<span class="ln">${l.line}</span>${esc(l.text)}`).join("\n")}</pre>
+          </details>`).join("") : aiRefs.length ? `<div style="margin-bottom:14px">${aiRefs.map((r) => `<div class="mono" style="font-size:12.5px;margin-bottom:4px"><code>${esc(r)}</code></div>`).join("")}<div class="muted" style="font-size:12px">Referenced source tree is not mounted in this environment.</div></div>` : `<div class="muted" style="margin-bottom:14px;font-size:12.5px">No local source files matched this stack trace under configured <code>ai_rca.source_code_paths</code>.</div>`}
+          <div class="flabel" style="margin-top:14px">Device logcat around failure</div>
+          ${detail.logcat ? `<pre class="codebox" style="max-height:340px;overflow:auto">${esc(detail.logcat)}</pre>` : `<div class="muted" style="font-size:12.5px">No <code>device_logcat_test_*.txt</code> failure window found in the TradeFed result directory for this group.</div>`}`;
+      } else if (detailTab === "verdict") {
+        const curV = vd || { classification: "", status: "open", jira_key: g.jira_key || "", owner_team: (g.owner || {}).team || "", note: "", author: "" };
+        box.innerHTML = `
+          <div class="muted" style="font-size:12.5px;margin-bottom:12px">Human verdicts are stored in the database by signature <code>${esc(g.signature)}</code>, so recurring failures in future runs automatically show your team's decision.</div>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+            <div><div class="flabel">Status</div><select id="trvst" style="width:100%">${(payload.verdict_statuses || []).map((st) => `<option value="${st}" ${curV.status === st ? "selected" : ""}>${st}</option>`).join("")}</select></div>
+            <div><div class="flabel">Confirmed classification</div><select id="trvcls" style="width:100%"><option value="">Use deterministic/rule (${esc(g.rule_classification)})</option>${(payload.classifications || []).map((c) => `<option value="${c}" ${curV.classification === c ? "selected" : ""}>${c}</option>`).join("")}</select></div>
+            <div><div class="flabel">Jira ticket</div><input type="text" id="trvjira" class="mono" placeholder="AAOS-1234" value="${esc(curV.jira_key || "")}" style="width:100%"></div>
+            <div><div class="flabel">Owning team</div><input type="text" id="trvteam" value="${esc(curV.owner_team || (g.owner || {}).team || "")}" style="width:100%"></div>
+          </div>
+          <div class="flabel" style="margin-top:12px">Engineering triage note</div>
+          <textarea id="trvnote" style="font-family:inherit;font-size:13px;min-height:80px" placeholder="Root-cause conclusion, workaround, CL link, or why waived…">${esc(curV.note || "")}</textarea>
+          <div class="row" style="margin-top:10px;justify-content:space-between">
+            <label style="font-size:12px" class="muted">Reviewer <input type="text" id="trvwho" value="${esc(curV.author || sessionStorage.getItem("xts-triage-author") || "")}" placeholder="optional" style="width:150px"></label>
+            <button class="btn primary" id="trvsave">${ic("check")} Save verdict</button>
+          </div>`;
+        $("#trvsave").addEventListener("click", async () => {
+          const author = ($("#trvwho").value || "").trim();
+          if (author) try { sessionStorage.setItem("xts-triage-author", author); } catch (e) {}
+          $("#trvsave").disabled = true;
+          try {
+            const res = await api("/api/triage/verdict", {
+              body: {
+                signature: g.signature, run_key: detail.run_key,
+                status: $("#trvst").value, classification: $("#trvcls").value,
+                jira_key: $("#trvjira").value.trim(), owner_team: $("#trvteam").value.trim(),
+                note: $("#trvnote").value.trim(), author,
+              },
+            });
+            detail.verdict = res.verdict; detail.messages = res.messages;
+            syncGroupIntoList(g.signature, {
+              verdict: res.verdict,
+              effective_classification: res.verdict.classification || g.rule_classification,
+              actionable: !["waived", "resolved"].includes(res.verdict.status) && !(ki && ki.waived),
+              discussion_count: res.messages.length,
+            });
+            toast("Verdict saved"); renderWorkspace();
+          } catch (e) { toast(e.message, 6000, "bad"); $("#trvsave").disabled = false; }
+        });
+      }
+    };
+
+    $$("#trtabs button").forEach((b) => b.addEventListener("click", () => {
+      detailTab = b.dataset.t;
+      $$("#trtabs button").forEach((x) => x.classList.toggle("on", x === b));
+      renderTabBody();
+    }));
+
+    const copyGroundedPrompt = async (customQ) => {
+      const codeTxt = snippets.map((sn) => `--- ${sn.file} (line ${sn.start_line}) ---\n${sn.lines.map((l) => `${l.line}: ${l.text}`).join("\n")}`).join("\n\n");
+      const q = customQ || "Analyze the root cause step by step, classify into one of [PRODUCT_BUG, ENVIRONMENT_ISSUE, FLAKY_TEST, INFRASTRUCTURE_FAILURE, TEST_BUG], and propose exact adb verification steps + a concrete fix.";
+      const prompt = [
+        `You are an expert Android OS / AAOS Compatibility (CTS/VTS/STS/GTS) engineer. Triage this failure group:`,
+        ``,
+        `- Plan: ${detail.plan_name} (run: ${detail.run_key})`,
+        `- Build fingerprint: ${detail.fingerprint || "unknown"}`,
+        `- Root-cause signature: ${g.signature} (${g.count} failing test(s), history: ${g.label})`,
+        `- Level-1 deterministic classification: ${g.rule_classification} · Owning team: ${(g.owner || {}).team || "xts-triage"}`,
+        `- Exception: ${g.exception || "-"}`,
+        `- Normalized message: ${g.message || "-"}`,
+        signals.length ? `- Structural signals:\n  * ${signals.join("\n  * ")}` : "",
+        `- Failing tests (sample):\n  ${(g.tests || []).slice(0, 12).join("\n  ")}`,
+        ``,
+        `### Sample Stack Trace`,
+        "```",
+        (g.sample_stack || "(empty)").slice(0, 4000),
+        "```",
+        detail.logcat ? `\n### Device Logcat Around Failure\n\`\`\`\n${detail.logcat.slice(0, 2500)}\n\`\`\`` : "",
+        codeTxt ? `\n### Local AOSP / OEM Source Context\n\`\`\`java\n${codeTxt.slice(0, 6000)}\n\`\`\`` : "",
+        ``,
+        `### Question`,
+        q,
+      ].filter(Boolean).join("\n");
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(prompt);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = prompt;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        toast("Copied grounded prompt — paste into ChatGPT / Gemini / Web AI, then record the answer as a Team note or Verdict!");
+      } catch (e) {
+        toast("Could not copy to clipboard: " + e.message, 5000, "bad");
+      }
+    };
+    $("#trbtncopy").addEventListener("click", () => copyGroundedPrompt($("#trmsg") ? ($("#trmsg").value || "").trim() : ""));
+
+    // Header actions
+    if ($("#trbtnai")) $("#trbtnai").addEventListener("click", async () => {
+      $("#trbtnai").disabled = true;
+      $("#trbtnai").innerHTML = `${ic("clock")} Running AI RCA…`;
+      try {
+        const res = await api(`/api/triage/${encodeURIComponent(curRunKey)}/${encodeURIComponent(g.signature)}/analyze`, { body: { force: !!ai } });
+        g.ai = res.ai; detail.messages = res.messages;
+        syncGroupIntoList(g.signature, { ai: res.ai, discussion_count: res.messages.length });
+        toast(`AI RCA: ${res.ai.classification} (${Math.round((res.ai.confidence || 0) * 100)}%)`);
+        renderWorkspace();
+      } catch (e) {
+        toast(e.message, 7000, "bad");
+        $("#trbtnai").disabled = false;
+        $("#trbtnai").innerHTML = `${ic("brain")} ${ai ? "Re-run AI RCA" : "Run AI RCA"}`;
+      }
+    });
+
+    if ($("#tracceptai")) $("#tracceptai").addEventListener("click", async () => {
+      try {
+        const res = await api("/api/triage/verdict", {
+          body: {
+            signature: g.signature, run_key: detail.run_key,
+            status: "confirmed", classification: ai.classification,
+            jira_key: (vd && vd.jira_key) || g.jira_key || "",
+            owner_team: (vd && vd.owner_team) || (g.owner || {}).team || "",
+            note: (vd && vd.note) || ai.root_cause || "",
+            author: sessionStorage.getItem("xts-triage-author") || "",
+          },
+        });
+        detail.verdict = res.verdict; detail.messages = res.messages;
+        syncGroupIntoList(g.signature, { verdict: res.verdict, effective_classification: res.verdict.classification || g.rule_classification, discussion_count: res.messages.length });
+        toast("Copied AI suggestion into Human Verdict"); renderWorkspace();
+      } catch (e) { toast(e.message, 6000, "bad"); }
+    });
+
+    $("#trbtnrerun").addEventListener("click", () => { $("#trrerunbox").hidden = !$("#trrerunbox").hidden; $("#trkibox").hidden = true; });
+    $("#trrerunclose").addEventListener("click", () => { $("#trrerunbox").hidden = true; });
+    $("#trrgo").addEventListener("click", async () => {
+      const planFile = $("#trrplan").value;
+      if (!planFile) { toast("No plan available", 3000, "bad"); return; }
+      const shVal = $("#trrsh").value;
+      const body = {
+        plan: planFile,
+        suite_modules: { [suiteName]: (g.tests || []).slice(0, 100) },
+        shard_count: shVal === "auto" ? "auto" : +shVal,
+        auto_retry: false,
+      };
+      if ($("#trrdev") && $("#trrdev").value) body.serials = [$("#trrdev").value];
+      $("#trrgo").disabled = true;
+      try {
+        const r = await api("/api/launch", { body });
+        toast(`Started targeted re-run ${r.run_id}`);
+        location.hash = "#/live";
+      } catch (e) { toast("Launch failed: " + e.message, 7000, "bad"); $("#trrgo").disabled = false; }
+    });
+
+    $("#trbtnki").addEventListener("click", () => { $("#trkibox").hidden = !$("#trkibox").hidden; $("#trrerunbox").hidden = true; });
+    $("#trkiclose").addEventListener("click", () => { $("#trkibox").hidden = true; });
+    $("#trkiwaive").addEventListener("change", () => { $("#trkiwfields").hidden = !$("#trkiwaive").checked; });
+    $("#trkisave").addEventListener("click", async () => {
+      $("#trkisave").disabled = true;
+      try {
+        const res = await api("/api/triage/known-issue", {
+          body: {
+            signature: g.signature, run_key: detail.run_key,
+            title: $("#trkititle").value.trim(),
+            classification: $("#trkicls").value,
+            jira: $("#trkijira").value.trim(),
+            waive: $("#trkiwaive").checked,
+            waiver_expires: $("#trkiexp").value.trim(),
+            waiver_reason: $("#trkireason").value.trim(),
+            owner_team: (g.owner || {}).team || "",
+            author: sessionStorage.getItem("xts-triage-author") || "",
+          },
+        });
+        toast(`Saved ${res.issue_id} to known_issues.yaml`);
+        await loadRun(curRunKey, g.signature);
+      } catch (e) { toast(e.message, 7000, "bad"); $("#trkisave").disabled = false; }
+    });
+
+    renderTabBody();
+  };
+
+  await loadRun(curRunKey, curSig);
 };
 
 loadOverview(); api("/api/live").then(setActiveCount).catch(() => {}); route();

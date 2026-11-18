@@ -34,6 +34,7 @@ import logging
 import mimetypes
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -43,7 +44,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import yaml
 
@@ -62,10 +63,45 @@ logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 SERVED_SUFFIXES = {".html", ".json", ".xml", ".css", ".js", ".png", ".svg", ".txt", ".log", ".csv"}
+TF_SERVED_SUFFIXES = {".html", ".xml", ".xsl", ".css", ".png", ".svg", ".gif", ".json", ".txt", ".log"}
+GOOGLE_HTML_NAMES = ("test_result_failures_suite.html", "test_result.html")
+TF_STATIC_ASSETS = {"compatibility_result.css", "compatibility_result.xsl", "logo.png"}
+MAX_TF_VIEW_BYTES = 200 * 1024 * 1024
+
+
+def google_suite_links(run_key: str, suite_name: str, results_dir: str) -> Optional[Dict[str, str]]:
+    """URLs for Google's official TradeFed compatibility HTML, XML and submission .zip."""
+    if not run_key or not suite_name or not results_dir:
+        return None
+    rdir = Path(results_dir)
+    try:
+        if not rdir.is_dir():
+            return None
+        html_name = next((n for n in GOOGLE_HTML_NAMES if (rdir / n).is_file()), "")
+        has_xml = (rdir / "test_result.xml").is_file()
+        has_zip = rdir.with_name(rdir.name + ".zip").is_file()
+    except OSError:
+        return None
+    if not (html_name or has_xml or has_zip):
+        return None
+    rk = quote(str(run_key), safe="")
+    sn = quote(str(suite_name), safe="")
+    html_url = f"/tf-results/{rk}/{sn}/{html_name}" if html_name else ""
+    xml_url = f"/tf-results/{rk}/{sn}/test_result.xml" if has_xml else ""
+    zip_url = f"/tf-zip/{rk}/{sn}" if has_zip else ""
+    return {
+        "suite": str(suite_name),
+        "session": rdir.name,
+        "html_url": html_url,
+        "xml_url": xml_url,
+        "zip_url": zip_url,
+        "primary_url": html_url or xml_url,
+    }
 # Module or "Module class#method" include filters, as TradeFed takes them
 _FILTER_RE = re.compile(r"^[A-Za-z0-9_.$#\[\]-]+( [A-Za-z0-9_.$#\[\]-]+){0,2}$")
 _SERIAL_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 MAX_MODULES = 500
+MAX_DEVICES = 64
 _PLAN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,59}$")
 CUSTOM_PLAN_MARKER = "# created by xts-agent ui"
 
@@ -78,6 +114,36 @@ def _clean_filters(items: Any) -> List[str]:
     if bad:
         raise ValueError(f"invalid module filter(s): {', '.join(bad[:3])}")
     return [_abi_first(m) for m in out]
+
+
+def _clean_serials(items: Any) -> List[str]:
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError("serials must be a list of ADB serials")
+    out = list(dict.fromkeys(str(s).strip() for s in items if str(s).strip()))
+    if len(out) > MAX_DEVICES:
+        raise ValueError(f"at most {MAX_DEVICES} devices")
+    bad = [s for s in out if not _SERIAL_RE.match(s)]
+    if bad:
+        raise ValueError(f"invalid device serial(s): {', '.join(bad[:3])}")
+    return out
+
+
+def _clean_shard_count(val: Any) -> Any:
+    if val is None or val == "":
+        return None
+    if isinstance(val, bool):
+        raise ValueError(f"shard_count must be 'auto' or an integer between 1 and {MAX_DEVICES}")
+    if isinstance(val, str) and val.strip().lower() == "auto":
+        return "auto"
+    try:
+        n = int(str(val).strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"shard_count must be 'auto' or an integer between 1 and {MAX_DEVICES}") from None
+    if n < 1 or n > MAX_DEVICES:
+        raise ValueError(f"shard_count must be between 1 and {MAX_DEVICES}")
+    return n
 
 
 _ABI_NAMES = {"x86_64", "x86", "arm64-v8a", "armeabi-v7a", "riscv64"}
@@ -134,9 +200,12 @@ class UiApp:
     """Request-independent state and actions (unit-tested without HTTP)."""
 
     def __init__(self, cfg: UiConfig):
+        from xts_agent.triage.discussion import TriageWorkspace
+
         self.cfg = cfg
         self.runs = RunsView(cfg.results_dir, cfg.db_path)
         self.devices = DevicesView(cfg.lease_dir)
+        self.triage = TriageWorkspace(cfg.root, cfg.results_dir, cfg.db_path)
         self._launch_lock = threading.Lock()
 
     # ----------------------------------------------------------- launch
@@ -160,10 +229,15 @@ class UiApp:
         arch = str(body.get("arch") or "")
         if arch and arch not in host_settings.ARCHES:
             raise ValueError(f"architecture must be one of {', '.join(host_settings.ARCHES)}")
+        shard_count = _clean_shard_count(body.get("shard_count"))
+        serials = _clean_serials(body.get("serials"))
         stamp = time.strftime("%Y%m%d%H%M%S")
         run_id = f"ui-{stamp}-{os.getpid() % 10000:04d}"
-        if modules or suite_modules or ai is not None or arch:
-            plan_path = self._derived_plan(plan_path, modules, ai, run_id, arch, suite_modules)
+        if modules or suite_modules or ai is not None or arch or shard_count is not None or serials:
+            plan_path = self._derived_plan(
+                plan_path, modules, ai, run_id, arch, suite_modules,
+                shard_count=shard_count, serials=serials,
+            )
         cmd = [self.cfg.python, "-m", "xts_agent.cli", "run", "--plan", str(plan_path)]
         if self.cfg.defaults_path:
             cmd += ["--config", self.cfg.defaults_path]
@@ -177,7 +251,9 @@ class UiApp:
         return cmd, log, run_id
 
     def _derived_plan(self, base: Path, modules: List[str], ai: Any, run_id: str, arch: str = "",
-                      suite_modules: Optional[Dict[str, List[str]]] = None) -> Path:
+                      suite_modules: Optional[Dict[str, List[str]]] = None,
+                      shard_count: Any = None,
+                      serials: Optional[List[str]] = None) -> Path:
         data = yaml.safe_load(base.read_text(encoding="utf-8")) or {}
         enabled = [s for s in data.get("suites") or [] if isinstance(s, dict) and s.get("enabled", True)]
         suite_modules = dict(suite_modules or {})
@@ -208,6 +284,29 @@ class UiApp:
             for s in data.get("suites") or []:
                 if isinstance(s, dict):
                     s.pop("arch", None)  # the launch choice applies to every suite
+        if serials or shard_count is not None:
+            raw_devs = data.get("devices") or data.get("device_requirements") or {}
+            devs = dict(raw_devs) if isinstance(raw_devs, dict) else {}
+            data.pop("device_requirements", None)
+            data["devices"] = devs
+            if serials:
+                devs["serials"] = list(serials)
+                if int(devs.get("min_devices") or 1) > len(serials):
+                    devs["min_devices"] = len(serials)
+                if shard_count is None:
+                    for s in data.get("suites") or []:
+                        if isinstance(s, dict) and s.get("enabled", True):
+                            sh = s.setdefault("sharding", {})
+                            sh["enabled"] = True
+                            sh["shard_count"] = len(serials)
+            if shard_count is not None:
+                for s in data.get("suites") or []:
+                    if isinstance(s, dict):
+                        sh = s.setdefault("sharding", {})
+                        sh["enabled"] = True
+                        sh["shard_count"] = shard_count
+                if isinstance(shard_count, int) and int(devs.get("min_devices") or 1) > shard_count:
+                    devs["min_devices"] = shard_count
         out = self.cfg.results_dir / "ui_plans" / f"{base.stem}.{run_id}.yaml"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(f"# generated by xts-agent ui from {base.name}\n" + yaml.safe_dump(data, sort_keys=False),
@@ -254,12 +353,40 @@ class UiApp:
 
     # ----------------------------------------------------------- links
 
+    def resolve_tf_suite_dir(self, run_key: str, suite_name: str) -> Optional[Path]:
+        """Recorded TradeFed results_dir for (run_key, suite_name), or None."""
+        view = self.runs.get(run_key)
+        if view is None and run_key.startswith("db-"):
+            view = self.runs.detail(run_key)
+        if view is None:
+            return None
+        want = str(suite_name or "").lower()
+        suite = next(
+            (s for s in (view.get("suites") or []) if str(s.get("name") or "").lower() == want),
+            None,
+        )
+        if not suite or not suite.get("results_dir"):
+            return None
+        try:
+            rdir = Path(str(suite["results_dir"])).resolve()
+            return rdir if rdir.is_dir() else None
+        except OSError:
+            return None
+
     def decorate(self, view: Dict[str, Any]) -> Dict[str, Any]:
         rd = self.cfg.results_dir
+        rkey = str(view.get("run_id") or view.get("key") or "")
+        google_reports = []
+        for s in view.get("suites") or []:
+            gl = google_suite_links(rkey, str(s.get("name") or ""), str(s.get("results_dir") or ""))
+            s["google"] = gl
+            if gl:
+                google_reports.append(gl)
         view["links"] = {
             "reports": [file_url(p, rd) for p in view.get("reports") or [] if file_url(p, rd)],
             "triage_html": file_url(view.get("triage_html") or "", rd),
             "triage_json": file_url(view.get("triage_json") or "", rd),
+            "google_reports": google_reports,
         }
         return view
 
@@ -289,8 +416,22 @@ class UiApp:
             "paths_local": (local.get("paths") or {}),
             "paths_check": {k: host_settings.check_tool_path(k, str(paths.get(k) or ""))
                             for k in ("xts_packages_dir", "java_home", "android_sdk", "adb_path")},
-            "ai_rca": {"openai_base_url": ai.get("openai_base_url", ""), "openai_model": ai.get("openai_model", ""),
-                       "fallbacks": ai.get("openai_fallbacks") or []},
+            "ai_rca": {
+                "provider": str(ai.get("provider") or "openai_compatible").lower(),
+                "enabled": bool(ai.get("enabled", False)),
+                "allow_external_providers": bool(ai.get("allow_external_providers", False)),
+                "openai_base_url": ai.get("openai_base_url", ""),
+                "openai_model": ai.get("openai_model", ""),
+                "llama_model_path": ai.get("llama_model_path", ""),
+                "llama_n_ctx": int(ai.get("llama_n_ctx") or 16384),
+                "llama_n_gpu_layers": int(ai["llama_n_gpu_layers"]) if ai.get("llama_n_gpu_layers") is not None else -1,
+                "gemini_model": ai.get("gemini_model", "gemini-2.5-flash"),
+                "fallbacks": ai.get("openai_fallbacks") or [],
+                "llama_check": host_settings.check_tool_path("llama_model_path", str(ai.get("llama_model_path") or "")),
+                "has_llama_cpp_pkg": host_settings.has_llama_cpp_pkg(),
+                "has_llm_api_key": bool(os.environ.get("XTS_LLM_API_KEY")),
+                "has_gemini_api_key": bool(os.environ.get("XTS_GEMINI_API_KEY")),
+            },
             "discovered": host_settings.scan(str(paths.get("xts_packages_dir") or "/opt/xts")),
             # What an empty cell falls back to: <xts_packages_dir>/android-<suite>
             "fallback": {
@@ -311,11 +452,12 @@ class UiApp:
         return self.settings()
 
     @staticmethod
-    def _probe_llm(base: str, model: str) -> Dict[str, Any]:
+    def _probe_llm(base: str, model: str, api_key: str = "") -> Dict[str, Any]:
         import requests
 
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
-            resp = requests.get(base + "/models", timeout=5)
+            resp = requests.get(base + "/models", headers=headers, timeout=6)
             resp.raise_for_status()
             models = [m.get("id") for m in (resp.json().get("data") or []) if isinstance(m, dict)]
         except Exception as exc:
@@ -323,17 +465,77 @@ class UiApp:
         return {"ok": True, "models": models[:50], "model_found": (model in models) if model else None}
 
     def test_llm(self, body: Dict[str, Any]) -> Dict[str, Any]:
-        """Probe the endpoint and, when it is down, the configured fallbacks runs would use."""
+        """Probe the configured LLM provider (local HTTP, llama.cpp GGUF, opted-in online API, or disabled)."""
         from xts_agent.rca.llm_provider import is_local_endpoint
+
+        provider = str(body.get("provider") or "openai_compatible").strip().lower()
+        if provider not in host_settings.AI_PROVIDERS:
+            raise ValueError(f"unknown provider {provider!r}")
+        if provider == "none":
+            return {
+                "ok": True,
+                "provider": "none",
+                "models": [],
+                "note": "AI disabled — deterministic Level-1 triage, team notes, verdicts, and Copy-Prompt remain active.",
+            }
+        if provider == "llama_cpp":
+            chk = host_settings.check_tool_path("llama_model_path", str(body.get("llama_model_path") or "").strip())
+            return {
+                "ok": chk["ok"],
+                "provider": "llama_cpp",
+                "models": [],
+                "note": chk["note"],
+                "error": "" if chk["ok"] else chk["note"],
+            }
+        allow_ext = bool(body.get("allow_external_providers"))
+        if provider == "gemini":
+            if not allow_ext:
+                raise ValueError("enable 'Allow external AI API' first before testing Google Gemini")
+            gkey = os.environ.get("XTS_GEMINI_API_KEY", "")
+            if not gkey:
+                return {
+                    "ok": False,
+                    "provider": "gemini",
+                    "models": [],
+                    "error": "XTS_GEMINI_API_KEY environment variable is not set on this host",
+                }
+            import requests
+
+            model = str(body.get("gemini_model") or body.get("model") or "gemini-2.5-flash").strip()
+            try:
+                resp = requests.get(
+                    "https://generativelanguage.googleapis.com/v1beta/models",
+                    headers={"x-goog-api-key": gkey},
+                    timeout=6,
+                )
+                resp.raise_for_status()
+                raw_models = resp.json().get("models") or []
+                models = [str(m.get("name") or "").replace("models/", "") for m in raw_models if isinstance(m, dict)]
+            except Exception as exc:
+                return {"ok": False, "provider": "gemini", "models": [], "error": f"{type(exc).__name__}: Gemini API unreachable or invalid key"}
+            return {"ok": True, "provider": "gemini", "models": models[:50], "model_found": (model in models) if model else None}
 
         base = str(body.get("base_url") or "").rstrip("/")
         if not re.match(r"^https?://", base):
             raise ValueError("base URL must start with http:// or https://")
-        if not is_local_endpoint(base):
-            raise ValueError("only on-prem endpoints (this host or a private network) can be tested from here")
+        local_ep = is_local_endpoint(base)
+        if not local_ep:
+            if not allow_ext or not base.startswith("https://"):
+                raise ValueError(
+                    "only on-prem endpoints (this host or a private network) can be tested unless "
+                    "'Allow external AI API' is enabled with an https:// endpoint"
+                )
+        api_key = os.environ.get("XTS_LLM_API_KEY", "")
+        if not local_ep and not api_key:
+            return {
+                "ok": False,
+                "provider": "openai_compatible",
+                "models": [],
+                "error": "XTS_LLM_API_KEY environment variable is not set on this host",
+            }
         model = str(body.get("model") or "")
-        out = self._probe_llm(base, model)
-        if out["ok"] and out["model_found"] is not False:
+        out = self._probe_llm(base, model, api_key=api_key)
+        if not local_ep or (out["ok"] and out["model_found"] is not False):
             return out
         fallbacks = []
         for fb in (self.effective_defaults().get("ai_rca") or {}).get("openai_fallbacks") or []:
@@ -419,10 +621,17 @@ class UiApp:
         suites = data.get("suites")
         if not isinstance(suites, list) or not suites:
             raise ValueError("a plan needs at least one suite")
+        devs_raw = data.get("devices") or data.get("device_requirements") or {}
+        if isinstance(devs_raw, dict) and devs_raw.get("serials") is not None:
+            raw_ser = devs_raw["serials"]
+            _clean_serials([raw_ser] if isinstance(raw_ser, str) else raw_ser)
         for s in suites:
             name = str((s or {}).get("name", "")).lower() if isinstance(s, dict) else ""
             if name not in host_settings.SUITES:
                 raise ValueError(f"suite name must be one of {', '.join(host_settings.SUITES)} (got {name or 'nothing'})")
+            sharding = s.get("sharding")
+            if isinstance(sharding, dict) and sharding.get("shard_count") is not None:
+                _clean_shard_count(sharding["shard_count"])
             for f in list(s.get("include_filters") or []) + list(s.get("exclude_filters") or []):
                 if not _FILTER_RE.match(str(f)):
                     raise ValueError(f"invalid filter {str(f)[:60]!r}")
@@ -512,6 +721,48 @@ class UiApp:
             "now": time.time(),
         }
 
+    # ----------------------------------------------------------- interactive triage
+
+    def triage_runs(self) -> Dict[str, Any]:
+        return self.triage.list_runs(self.runs)
+
+    def triage_run(self, key: str) -> Dict[str, Any]:
+        out = self.triage.load_triage(key, self.runs, self.effective_defaults())
+        out["triage_html_url"] = file_url(out.get("triage_html") or "", self.cfg.results_dir)
+        view = self.runs.get(key) or (self.runs.detail(key) if key.startswith("db-") else None)
+        google_reports = []
+        if view:
+            rkey = str(view.get("run_id") or view.get("key") or key)
+            for s in view.get("suites") or []:
+                gl = google_suite_links(rkey, str(s.get("name") or ""), str(s.get("results_dir") or ""))
+                if gl:
+                    google_reports.append(gl)
+        out["google_reports"] = google_reports
+        return out
+
+    def triage_group(self, key: str, signature: str) -> Dict[str, Any]:
+        return self.triage.group_detail(key, signature, self.runs, self.effective_defaults())
+
+    def triage_analyze(self, key: str, signature: str, force: bool = False) -> Dict[str, Any]:
+        return self.triage.analyze_group(key, signature, self.runs, self.effective_defaults(), force=force)
+
+    def triage_discuss(self, key: str, signature: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        return self.triage.discuss_group(
+            key=key,
+            signature=signature,
+            message=str(body.get("message") or ""),
+            mode=str(body.get("mode") or "ask"),
+            author=str(body.get("author") or ""),
+            runs_view=self.runs,
+            defaults=self.effective_defaults(),
+        )
+
+    def triage_verdict(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        return self.triage.record_verdict(body, self.effective_defaults())
+
+    def triage_known_issue(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        return self.triage.promote_to_known_issues(body, self.effective_defaults())
+
 
 class Handler(BaseHTTPRequestHandler):
     app: UiApp  # set on the subclass by make_server
@@ -583,7 +834,8 @@ class Handler(BaseHTTPRequestHandler):
                                "script-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"})
         if path == "/healthz":
             return self._json({"ok": True})
-        if not self._authorized(query):
+        is_tf_boilerplate = path.startswith("/tf-results/") and path.rsplit("/", 1)[-1] in TF_STATIC_ASSETS
+        if not is_tf_boilerplate and not self._authorized(query):
             return self._error(HTTPStatus.UNAUTHORIZED, "token required")
         app = self.app
         try:
@@ -597,6 +849,13 @@ class Handler(BaseHTTPRequestHandler):
                 for r in rows:
                     r["report_url"] = file_url(r.get("report", ""), rd)
                     r["triage_url"] = file_url(r.get("triage_html", ""), rd)
+                    gl = google_suite_links(
+                        str(r.get("run_id") or r.get("key") or ""),
+                        str((r.get("suites") or ["cts"])[0]),
+                        str(r.get("results_dir") or ""),
+                    )
+                    r["google_url"] = gl["primary_url"] if gl else ""
+                    r["google_zip_url"] = gl["zip_url"] if gl else ""
                 return self._json(rows)
             m = re.match(r"^/api/runs/([^/]+)$", path)
             if m:
@@ -625,8 +884,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(app.settings())
             if path == "/api/devices":
                 return self._json(app.devices.list(refresh=bool(query.get("refresh"))))
+            if path == "/api/triage/runs":
+                return self._json(app.triage_runs())
+            m = re.match(r"^/api/triage/([^/]+)/([0-9a-f]{8,24})$", path)
+            if m:
+                return self._json(app.triage_group(m.group(1), m.group(2)))
+            m = re.match(r"^/api/triage/([^/]+)$", path)
+            if m:
+                return self._json(app.triage_run(m.group(1)))
             if path.startswith("/files/"):
                 return self._file(path[len("/files/"):])
+            m = re.match(r"^/tf-results/([^/]+)/([^/]+)/(.+)$", path)
+            if m:
+                return self._tf_file(m.group(1), m.group(2), m.group(3))
+            m = re.match(r"^/tf-zip/([^/]+)/([^/]+)$", path)
+            if m:
+                return self._tf_zip(m.group(1), m.group(2))
         except (ValueError, KeyError) as exc:
             return self._error(400, str(exc).strip("'\""))
         except LookupError as exc:  # suite not installed, plan not found
@@ -657,7 +930,7 @@ class Handler(BaseHTTPRequestHandler):
                 value = str(body.get("path") or "")
                 if kind == "suite":
                     return self._json(host_settings.inspect_package(value, str(body.get("suite") or "")))
-                if kind not in ("xts_packages_dir", "java_home", "android_sdk", "adb_path"):
+                if kind not in ("xts_packages_dir", "java_home", "android_sdk", "adb_path", "llama_model_path"):
                     return self._error(400, "unknown kind")
                 return self._json(host_settings.check_tool_path(kind, value))
             if path == "/api/plans/validate":
@@ -684,6 +957,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(app.delete_plan(str(body.get("file") or "")))
             if path == "/api/settings/test-llm":
                 return self._json(app.test_llm(body))
+            if path == "/api/triage/verdict":
+                return self._json(app.triage_verdict(body))
+            if path == "/api/triage/known-issue":
+                return self._json(app.triage_known_issue(body))
+            m = re.match(r"^/api/triage/([^/]+)/([0-9a-f]{8,24})/analyze$", path)
+            if m:
+                return self._json(app.triage_analyze(m.group(1), m.group(2), force=bool(body.get("force"))))
+            m = re.match(r"^/api/triage/([^/]+)/([0-9a-f]{8,24})/discuss$", path)
+            if m:
+                return self._json(app.triage_discuss(m.group(1), m.group(2), body))
             m = re.match(r"^/api/runs/([^/]+)/stop$", path)
             if m:
                 return self._json(app.stop(m.group(1), force=bool(body.get("force"))))
@@ -714,6 +997,47 @@ class Handler(BaseHTTPRequestHandler):
         # Reports are self-contained; sandbox them from the UI's origin
         extra = {"Content-Security-Policy": "sandbox allow-scripts allow-popups"} if target.suffix == ".html" else {}
         self._send(200, target.read_bytes(), ctype, extra)
+
+    def _tf_file(self, run_key: str, suite_name: str, rel: str) -> None:
+        base = self.app.resolve_tf_suite_dir(run_key, suite_name)
+        if base is None:
+            return self._error(404, "not found")
+        target = (base / rel).resolve()
+        if not _under(target, base) or target.suffix.lower() not in TF_SERVED_SUFFIXES or not target.is_file():
+            return self._error(404, "not found")
+        if target.stat().st_size > MAX_TF_VIEW_BYTES:
+            return self._error(413, "result file too large to stream inline; download the submission .zip instead")
+        ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        if target.suffix == ".xsl":
+            ctype = "application/xslt+xml"
+        elif target.suffix in (".log", ".txt"):
+            ctype = "text/plain"
+        if ctype.startswith("text/") or ctype in ("application/json", "application/xml", "application/xslt+xml"):
+            ctype += "; charset=utf-8"
+        extra = {
+            "Content-Security-Policy": "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"
+        }
+        self._send(200, target.read_bytes(), ctype, extra)
+
+    def _tf_zip(self, run_key: str, suite_name: str) -> None:
+        base = self.app.resolve_tf_suite_dir(run_key, suite_name)
+        if base is None:
+            return self._error(404, "not found")
+        tf_zip = base.with_name(base.name + ".zip")
+        if not tf_zip.is_file():
+            return self._error(404, "submission zip not found")
+        size = tf_zip.stat().st_size
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", tf_zip.name)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Length", str(size))
+        self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if self.command != "HEAD":
+            with open(tf_zip, "rb") as fh:
+                shutil.copyfileobj(fh, self.wfile, length=65536)
 
 
 def _under(path: Path, base: Path) -> bool:

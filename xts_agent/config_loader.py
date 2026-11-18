@@ -170,6 +170,7 @@ class DeviceRequirements:
     reboot_between_suites: bool = False
     min_battery_level: int = 20
     properties: Dict[str, str] = field(default_factory=dict)
+    serials: List[str] = field(default_factory=list)
     # Apply the device_prep profile to allocated devices before each suite
     prepare: bool = True
 
@@ -567,6 +568,13 @@ class ConfigLoader:
                 ),
                 **device_raw,
             }
+            if "serials" in merged_devices:
+                raw_serials = merged_devices["serials"]
+                if isinstance(raw_serials, str):
+                    raw_serials = [raw_serials]
+                merged_devices["serials"] = list(
+                    dict.fromkeys(str(s).strip() for s in (raw_serials or []) if str(s).strip())
+                )
         else:
             merged_devices = {}
         devices = DeviceRequirements(**_filter_dataclass_kwargs(DeviceRequirements, merged_devices))

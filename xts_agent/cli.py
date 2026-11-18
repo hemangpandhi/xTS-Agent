@@ -305,14 +305,21 @@ def ui(config_path, host, port, token, plans_dir):
     """Web console: launch runs, watch them live, browse results and devices."""
     from pathlib import Path
 
-    import yaml
-
+    from xts_agent.config_loader import ConfigLoader
     from xts_agent.ui.server import UiConfig, make_server
 
     defaults_file = Path(config_path or "config/default_config.yaml")
-    defaults: dict = {}
-    if defaults_file.exists():
-        defaults = yaml.safe_load(defaults_file.read_text(encoding="utf-8")) or {}
+    defaults = ConfigLoader("unused.yaml", defaults_file).load_defaults() if defaults_file.exists() else {}
+    paths_cfg = defaults.get("paths") or {}
+    extra_bins = []
+    if paths_cfg.get("adb_path"):
+        adb_p = Path(str(paths_cfg["adb_path"]))
+        extra_bins.append(str(adb_p.parent if adb_p.name == "adb" else adb_p))
+    if paths_cfg.get("android_sdk"):
+        extra_bins.append(str(Path(str(paths_cfg["android_sdk"])) / "platform-tools"))
+    existing_bins = [p for p in extra_bins if Path(p).is_dir()]
+    if existing_bins:
+        os.environ["PATH"] = os.pathsep.join(existing_bins + [os.environ.get("PATH", "")])
     agent = defaults.get("agent") or {}
     results_dir = Path(agent.get("results_dir") or "results")
     db = agent.get("database_path") or str(results_dir / "xts_agent.db")

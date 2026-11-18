@@ -172,6 +172,74 @@ class SettingsApiTests(unittest.TestCase):
             out = app.test_llm({"base_url": "http://127.0.0.1:9/v1", "model": "m"})  # nothing listens on :9
             self.assertFalse(out["ok"])
 
+    def test_multi_provider_ai_settings_llama_cpp_online_and_disabled(self):
+        from xts_agent.settings import check_tool_path, merge_into_defaults, validate
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("XTS_LOCAL_SETTINGS", None)
+            os.environ.pop("XTS_LLM_API_KEY", None)
+            os.environ.pop("XTS_GEMINI_API_KEY", None)
+            app, root = self._app(tmp)
+            gguf = root / "model.gguf"
+            gguf.write_bytes(b"GGUF" * 512)
+
+            # 1) llama_cpp GGUF validation & tool check
+            v_llama = validate({
+                "ai_rca": {
+                    "provider": "llama_cpp",
+                    "llama_model_path": str(gguf),
+                    "llama_n_ctx": 16384,
+                    "llama_n_gpu_layers": -1,
+                    "enabled": True,
+                }
+            })
+            self.assertEqual(v_llama["ai_rca"]["provider"], "llama_cpp")
+            self.assertEqual(v_llama["ai_rca"]["llama_model_path"], str(gguf))
+            with self.assertRaises(ValueError):
+                validate({"ai_rca": {"provider": "llama_cpp"}})  # missing path
+            with self.assertRaises(ValueError):
+                validate({"ai_rca": {"provider": "llama_cpp", "llama_model_path": "rel/model.gguf"}})
+            chk_missing = check_tool_path("llama_model_path", str(root / "nope.gguf"))
+            self.assertFalse(chk_missing["ok"])
+            with patch("xts_agent.settings.has_llama_cpp_pkg", return_value=True):
+                t_llama = app.test_llm({"provider": "llama_cpp", "llama_model_path": str(gguf)})
+                self.assertTrue(t_llama["ok"])
+
+            # 2) Online API (ChatGPT / Gemini) requires explicit allow_external_providers + https + env key
+            v_online = validate({
+                "ai_rca": {
+                    "provider": "openai_compatible",
+                    "openai_base_url": "https://api.openai.com/v1",
+                    "openai_model": "gpt-4.1-mini",
+                    "allow_external_providers": True,
+                }
+            })
+            self.assertTrue(v_online["ai_rca"]["allow_external_providers"])
+            with self.assertRaises(ValueError):
+                app.test_llm({"provider": "openai_compatible", "base_url": "https://api.openai.com/v1", "allow_external_providers": False})
+            no_key = app.test_llm({"provider": "openai_compatible", "base_url": "https://api.openai.com/v1", "allow_external_providers": True})
+            self.assertFalse(no_key["ok"])
+            self.assertIn("XTS_LLM_API_KEY", no_key["error"])
+
+            with self.assertRaises(ValueError):
+                app.test_llm({"provider": "gemini", "allow_external_providers": False})
+            no_gkey = app.test_llm({"provider": "gemini", "allow_external_providers": True})
+            self.assertFalse(no_gkey["ok"])
+            self.assertIn("XTS_GEMINI_API_KEY", no_gkey["error"])
+
+            # 3) Disabled mode ("none") forces enabled: False and succeeds cleanly on test_llm
+            v_none = validate({"ai_rca": {"provider": "none", "enabled": True}})
+            self.assertEqual(v_none["ai_rca"]["provider"], "none")
+            self.assertFalse(v_none["ai_rca"]["enabled"])
+            self.assertTrue(app.test_llm({"provider": "none"})["ok"])
+
+            # 4) merge_into_defaults clears default vLLM openai_extra_body when URL changes (e.g. to api.openai.com)
+            merged = merge_into_defaults(
+                {"ai_rca": {"openai_base_url": "http://127.0.0.1:8011/v1", "openai_extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}},
+                v_online,
+            )
+            self.assertEqual(merged["ai_rca"]["openai_extra_body"], {})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -144,6 +144,19 @@ class ConfigKeyTests(unittest.TestCase):
             self.assertIn(flag, cmd)
         self.assertEqual(cmd[cmd.index("--logcat-on-failure-size") + 1], str(2 * 1024 * 1024))
 
+    def test_devices_serials_loaded_without_unknown_key_warning(self):
+        import yaml
+
+        from xts_agent.config_loader import _plan_schema, warn_unknown_keys
+
+        raw = "name: t\ndevices:\n  min_devices: 1\n  serials:\n    - 0.0.0.0:6520\n    - 0.0.0.0:6521\nsuites:\n  - name: cts\n"
+        self.assertEqual(warn_unknown_keys(yaml.safe_load(raw), _plan_schema(), Path("p.yaml")), [])
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "p.yaml"
+            p.write_text(raw, encoding="utf-8")
+            plan = ConfigLoader(p).load_plan()
+        self.assertEqual(plan.devices.serials, ["0.0.0.0:6520", "0.0.0.0:6521"])
+
 
 class AiRcaConfigTests(unittest.TestCase):
     def _load(self, defaults: str, plan: str):

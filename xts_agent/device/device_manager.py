@@ -399,6 +399,7 @@ class DeviceManager:
         devices: List[DeviceInfo],
         device_type: str = "any",
         required_props: Optional[Dict[str, str]] = None,
+        serials: Optional[List[str]] = None,
     ) -> List[DeviceInfo]:
         """Largest set of matching devices that all run the same build.
 
@@ -406,6 +407,13 @@ class DeviceManager:
         ``ro.build.fingerprint``; mixing builds silently corrupts a run.
         """
         matching = [d for d in devices if device_type == "any" or d.device_type == device_type]
+        if serials:
+            wanted = list(dict.fromkeys(str(s).strip() for s in serials if str(s).strip()))
+            by_serial = {d.serial: d for d in matching}
+            missing = [s for s in wanted if s not in by_serial]
+            if missing:
+                logger.warning("Pinned device(s) not available/matching: %s", missing)
+            matching = [by_serial[s] for s in wanted if s in by_serial]
         if required_props:
             matching = [d for d in matching if self._has_props(d.serial, required_props)]
 

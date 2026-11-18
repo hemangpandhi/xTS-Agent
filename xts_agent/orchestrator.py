@@ -458,7 +458,7 @@ class Orchestrator:
 
     def _run_group_ai(self, report, results: Optional[PlanResult] = None) -> None:
         cfg = self.plan.ai_rca
-        if not cfg.enabled:
+        if not cfg.enabled or str(cfg.provider).lower() in ("none", "disabled", "off"):
             return
         from xts_agent.rca.llm_provider import get_llm_provider
         from xts_agent.triage.ai_rca import GroupAIAnalyzer

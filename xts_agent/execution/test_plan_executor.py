@@ -196,7 +196,10 @@ class TestPlanExecutor:
         if plan.devices.health_check:
             available = self.device_manager.filter_healthy(available)
         return self.device_manager.select_shard_pool(
-            available, plan.devices.device_type or "any", required
+            available,
+            plan.devices.device_type or "any",
+            required,
+            serials=list(getattr(plan.devices, "serials", None) or []) or None,
         )
 
     def _execute_parallel(
@@ -325,15 +328,22 @@ class TestPlanExecutor:
 
             if dry_run:
                 # Resolve shard intent without requiring live ADB
+                pinned = list(getattr(self.config.devices, "serials", None) or [])
                 configured = suite_config.sharding.shard_count
-                if isinstance(configured, str) and configured.lower() == "auto":
-                    shard_count = max(int(self.config.devices.min_devices), 1)
+                if not suite_config.sharding.enabled:
+                    shard_count = 1
+                elif isinstance(configured, str) and configured.lower() == "auto":
+                    shard_count = len(pinned) if pinned else max(int(self.config.devices.min_devices), 1)
                 else:
                     try:
                         shard_count = max(int(configured), 1)
                     except (TypeError, ValueError):
-                        shard_count = max(int(self.config.devices.min_devices), 1)
-                serials = [f"dry-run-device-{i}" for i in range(shard_count)]
+                        shard_count = len(pinned) if pinned else max(int(self.config.devices.min_devices), 1)
+                if pinned:
+                    shard_count = min(shard_count, len(pinned))
+                    serials = pinned[:shard_count]
+                else:
+                    serials = [f"dry-run-device-{i}" for i in range(shard_count)]
                 retry_dict = dataclasses.asdict(suite_config.retry)
                 cmd = runner.build_run_command(
                     plan=plan_name,
@@ -383,7 +393,10 @@ class TestPlanExecutor:
                 if entry and entry.get("fingerprint"):
                     # A resumed session may only continue on the build it started on
                     required_props["ro.build.fingerprint"] = entry["fingerprint"]
-                pool = self.device_manager.select_shard_pool(available, device_type, required_props)
+                pinned_serials = list(getattr(self.config.devices, "serials", None) or []) or None
+                pool = self.device_manager.select_shard_pool(
+                    available, device_type, required_props, serials=pinned_serials
+                )
             if assigned_devices is None and len(pool) < self.config.devices.min_devices:
                 raise ValueError(
                     f"Need at least {self.config.devices.min_devices} {device_type} device(s) "

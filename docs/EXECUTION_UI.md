@@ -16,8 +16,8 @@ host setup and the validation stages, see [EXECUTION_GUIDE.md](EXECUTION_GUIDE.m
 | 5. Launch | **Launch**: pick a plan and the device architecture, optionally pick modules from the suite's own list, tick auto-retry, **Start run**. Reusable selections: **Plans → New plan** | console (or `xts-agent run --plan …` in a shell, or CI) | **Live** shows the run within seconds |
 | 6. Watch | **Live**: phase, per-suite status, the module each device is running, failures so far, TradeFed console | console | Heartbeat stays fresh; "Log quiet" stays low |
 | 7. Stop or resume if needed | **Stop** on the run card, later **Launch → Resume** (or `run --resume`) | console | Card shows `CANCELLED`; resume continues from the partial result |
-| 8. Review | **Runs → run**: totals, module table, failed tests, links to the HTML report and the **triage page** | console | Triage page groups the failures with owners and AI root cause |
-| 9. Act | File or update Jira from the triage page (dry-run first), fix lab issues, rerun the failing modules from **Launch** | console / Jira | Next run's triage labels the group `PERSISTENT`, `FLAKY` or gone |
+| 8. Review | **Runs → run**: totals, module table, failed tests, links to the **Official Google report** (`test_result_failures_suite.html` / `.zip`), agent HTML report and **Interactive triage** | console | Triage groups failures deterministically by signature first, with owners and optional AI root cause |
+| 9. Act & Discuss | **Triage**: inspect deterministic root-cause groups, discuss with grounded local AI or add team notes, save human verdicts, promote signatures to `config/known_issues.yaml`, or 1-click re-run a group's failing tests | console / Jira | Next run's Level-1 triage recognizes promoted signatures deterministically |
 
 Every run, however it was started, writes `results/run_state/<plan>.json`
 while it runs and archives it to `results/run_state/history/<run_id>.json` when
@@ -65,6 +65,10 @@ the progress line in the job log stays at `ops.progress_interval_secs`.
 Lists every plan in `config/test_plans/`. Options:
 
 - **Device architecture**: picks the suite packages (see Settings).
+- **Shards / device count & Pin specific device(s)**: choose `Plan default`,
+  `1 device (single DUT, no sharding)`, `All free devices (auto)`, or a fixed/custom
+  shard count, and optionally tick specific attached ADB serials under **3 · Devices**
+  (`devices.serials`) to pin execution to exact DUTs.
 - **Run only some modules**: the module list comes from the installed suite
   itself (`<suite>-tradefed list modules`, about 4 seconds, then cached per
   suite build; **Refresh** runs it again). Search it, tick modules, or use
@@ -117,10 +121,31 @@ device count and links to the HTML report and triage page. Opening a run shows:
   failures or incomplete modules and sortable;
 - the failed tests with their first message line (the first 300; the triage page
   has all of them, grouped);
-- **Export JSON** and **Export modules CSV**.
+- **Export JSON** and **Export modules CSV**;
+- **Official Google / TradeFed reports**: opens TradeFed's native
+  `test_result_failures_suite.html` (with `compatibility_result.css` and `logo.png`),
+  `test_result.xml`, and streams the official `<session>.zip` submission archive.
 
 A full CTS result takes a few seconds to read the first time it is opened, then
 it is cached.
+
+### Interactive Triage & Discussion (`#/triage`)
+
+A two-level triage workspace:
+
+1. **Level 1 (always deterministic)**: collapses failing tests into ranked
+   root-cause groups by normalised signature, applies regex rules, matches
+   `config/known_issues.yaml` waivers and `config/ownership.yaml` teams, and
+   computes `NEW` / `PERSISTENT` / `FLAKY` history labels—computing directly from
+   `test_result.xml` on the fly if no `triage_*.json` file was written.
+2. **Level 2 (on-demand AI & team discussion)**: per root-cause group, inspect
+   numbered AOSP/OEM source windows and `device_logcat_test_*.txt` slices, run
+   on-demand structured AI RCA, chat multi-turn with the configured LLM (or leave
+   offline team notes) persisted by `signature` across runs, click **Copy prompt
+   (ChatGPT)** to copy a self-contained grounded prompt for any browser-based AI
+   chat without needing an API key, record human verdicts, **re-run just that
+   group's failing tests**, or **promote the signature to
+   `config/known_issues.yaml`** as a deterministic Level-1 rule.
 
 ### Devices
 
@@ -147,9 +172,20 @@ a shell or CI. Runs already in progress keep the settings they started with.
   and fills a cell with **Use for x86_64 / arm64**.
 - **Host tools**: suite packages folder, JDK, Android SDK (`aapt2`) and `adb`,
   each validated.
-- **AI root-cause analysis**: the local LLM server and model, with **Test**
-  listing the models the server offers. Only servers on this host or a private
-  network can be tested or used.
+- **AI root-cause analysis (optional)**: choose any of four modes:
+  - **Local Server (`llama.cpp` `llama-server`, `Ollama`, `vLLM`, `LM Studio`)** —
+    1-click presets (`:8080`, `:11434`, `:8011`, `:1234`) plus **Test** to verify
+    reachability and list models; logs and source never leave your network.
+  - **`llama.cpp` GGUF Path (`provider: llama_cpp`)** — direct `.gguf` file path
+    loaded in-process via `llama-cpp-python` (cached across interactive triage
+    questions), with live file/size/package validation, `n_ctx` and `n_gpu_layers`.
+  - **Online API (`ChatGPT / OpenAI`, `Google Gemini`, `OpenRouter`)** — requires
+    ticking **Allow sending failure context to this external AI API** and setting
+    `XTS_LLM_API_KEY` or `XTS_GEMINI_API_KEY` in the server environment (API keys
+    are never written to YAML).
+  - **Disabled (`provider: none`)** — 100% deterministic Level-1 triage, history,
+    waivers, verdicts, team notes, and 1-click **Copy prompt for ChatGPT** with
+    zero LLM calls.
 
 A suite's package path is chosen in this order: a `package_path` written in the
 plan itself, then the Settings path for the run's architecture, then the

@@ -389,6 +389,34 @@ class ShardPoolTests(unittest.TestCase):
             pool = DeviceManager().select_shard_pool(devices, required_props={"ro.product.model": "HU-B"})
         self.assertEqual([d.serial for d in pool], ["s2"])
 
+    def test_pinned_serials_filter_and_preserve_order(self):
+        from xts_agent.device.device_manager import DeviceManager
+
+        fp = "x:user/release-keys"
+        devices = [self._dev("s1", fp), self._dev("s2", fp), self._dev("s3", fp)]
+        with self.assertLogs("xts_agent.device.device_manager", "WARNING") as logs:
+            pool = DeviceManager().select_shard_pool(devices, serials=["s3", "missing", "s1"])
+        self.assertEqual([d.serial for d in pool], ["s3", "s1"])
+        self.assertTrue(any("missing" in m for m in logs.output))
+
+    def test_executor_dry_run_and_live_pass_pinned_serials(self):
+        from xts_agent.config_loader import DeviceRequirements, PathsConfig, ShardingConfig, TestPlanConfig
+
+        suite = SuiteConfig(name="cts", plan="cts", sharding=ShardingConfig(shard_count="auto"))
+        plan = TestPlanConfig(
+            name="pinned",
+            suites=[suite],
+            devices=DeviceRequirements(min_devices=1, serials=["0.0.0.0:6523", "0.0.0.0:6521"]),
+            paths=PathsConfig(),
+        )
+        dm = MagicMock()
+        executor = TestPlanExecutor(
+            plan, dm, ShardManager(dm), None, MagicMock(get_suite=MagicMock(return_value=None)),
+            results_dir="/tmp/xts-results",
+        )
+        dry = executor.execute_plan(plan, dry_run=True)
+        self.assertEqual(dry.device_serials, ["0.0.0.0:6523", "0.0.0.0:6521"])
+
     def test_user_build_warning(self):
         from xts_agent.execution.test_plan_executor import _warn_if_not_user_build
 

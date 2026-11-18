@@ -270,7 +270,11 @@ class FallbackProvider(LLMProvider):
 def get_llm_provider(config) -> LLMProvider:
     """Provider for ``config`` (an AiRcaConfig); with ``openai_fallbacks`` a FallbackProvider chain."""
     primary = _single_provider(config)
-    fallbacks = list(getattr(config, "openai_fallbacks", None) or [])
+    fallbacks = (
+        list(getattr(config, "openai_fallbacks", None) or [])
+        if str(getattr(config, "provider", "")).lower() == "openai_compatible"
+        else []
+    )
     if not fallbacks:
         return primary
     import dataclasses
@@ -288,8 +292,13 @@ def get_llm_provider(config) -> LLMProvider:
     return FallbackProvider(chain)
 
 
+DISABLED_PROVIDERS = frozenset({"none", "disabled", "off"})
+
+
 def _single_provider(config) -> LLMProvider:
     provider = str(config.provider).lower()
+    if provider in DISABLED_PROVIDERS:
+        raise ValueError("AI provider is disabled (ai_rca.provider='none')")
     base_url = str(getattr(config, "openai_base_url", "") or "")
     external = provider in EXTERNAL_PROVIDERS or (
         provider == "openai_compatible" and not is_local_endpoint(base_url)

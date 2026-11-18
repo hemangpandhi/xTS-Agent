@@ -166,6 +166,61 @@ class UiAppTests(unittest.TestCase):
             self.assertFalse(derived["ai_rca"]["enabled"])
             self.assertIn("[2 modules]", derived["name"])
 
+    def test_launch_and_validate_shard_count_and_pinned_serials(self):
+        import yaml
+
+        from xts_agent.ui.data import list_plans
+        from xts_agent.ui.server import UiApp
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            (fx.plans / "cert6.yaml").write_text(
+                "plan:\n  name: Cert6\nprofile: certification\ndevice_requirements:\n  min_devices: 6\n"
+                "  reboot_between_suites: true\nsuites:\n  - name: cts\n    plan: cts\n    sharding:\n      shard_count: auto\n",
+                encoding="utf-8",
+            )
+            app = UiApp(fx.config())
+            for bad in (
+                {"plan": "smoke.yaml", "shard_count": "banana"},
+                {"plan": "smoke.yaml", "shard_count": 0},
+                {"plan": "smoke.yaml", "shard_count": 99},
+                {"plan": "smoke.yaml", "shard_count": True},
+                {"plan": "smoke.yaml", "serials": ["0.0.0.0:6520; whoami"]},
+                {"plan": "smoke.yaml", "serials": "0.0.0.0:6520"},
+            ):
+                with self.assertRaises(ValueError, msg=bad):
+                    app.build_launch(bad)
+
+            # Override shard_count to 1 on a min_devices=6 plan caps min_devices while keeping reboot_between_suites
+            cmd, _, _ = app.build_launch({"plan": "cert6.yaml", "shard_count": 1})
+            derived = yaml.safe_load(Path(cmd[5]).read_text(encoding="utf-8"))
+            self.assertEqual(derived["devices"]["min_devices"], 1)
+            self.assertTrue(derived["devices"]["reboot_between_suites"])
+            self.assertEqual(derived["suites"][0]["sharding"]["shard_count"], 1)
+
+            # Pinning specific serials without explicit shard_count sets serials and matches shard_count to len(serials)
+            cmd2, _, _ = app.build_launch({"plan": "cert6.yaml", "serials": ["0.0.0.0:6523", "0.0.0.0:6521"]})
+            derived2 = yaml.safe_load(Path(cmd2[5]).read_text(encoding="utf-8"))
+            self.assertEqual(derived2["devices"]["serials"], ["0.0.0.0:6523", "0.0.0.0:6521"])
+            self.assertEqual(derived2["devices"]["min_devices"], 2)
+            self.assertEqual(derived2["suites"][0]["sharding"]["shard_count"], 2)
+
+            # validate_plan accepts valid shard_count + devices.serials and rejects typos
+            valid_yaml = (
+                "name: pinned\ndevices:\n  min_devices: 1\n  serials: ['0.0.0.0:6520']\n"
+                "suites:\n- name: cts\n  plan: cts\n  sharding:\n    shard_count: 1\n"
+            )
+            self.assertEqual(app.validate_plan(valid_yaml)["name"], "pinned")
+            with self.assertRaises(ValueError):
+                app.validate_plan("name: bad\nsuites:\n- name: cts\n  sharding: {shard_count: nope}\n")
+            with self.assertRaises(ValueError):
+                app.validate_plan("name: bad\ndevices: {serials: ['bad serial']}\nsuites:\n- name: cts\n")
+
+            (fx.plans / "pinned.yaml").write_text(valid_yaml, encoding="utf-8")
+            plans = {p["file"]: p for p in list_plans(fx.plans)}
+            self.assertEqual(plans["pinned.yaml"]["serials"], ["0.0.0.0:6520"])
+            self.assertEqual(plans["cert6.yaml"]["min_devices"], 6)
+
     def test_launch_spawns_detached_with_run_id_and_refuses_duplicates(self):
         from xts_agent.ui.server import UiApp
 
@@ -306,6 +361,187 @@ class LiveStatusTests(unittest.TestCase):
             self.assertGreaterEqual(len(updates), 3)
             self.assertEqual(updates[0]["log"], str(log))  # published before the first tick
             self.assertEqual(updates[-1]["current"], {"s1": "CtsFoo"})
+
+
+class InteractiveTriageTests(unittest.TestCase):
+    TWO_SAME_ROOT_CAUSE_XML = """<?xml version='1.0' encoding='UTF-8'?>
+<Result start_display="now" end_display="later" suite_name="CTS">
+  <Build build_fingerprint="generic/cf_auto:16/B/1:userdebug/test-keys" device_serial="0.0.0.0:6520" />
+  <Summary pass="10" failed="2" skipped="0" modules_done="1" modules_total="1" />
+  <Module name="CtsCarTestCases" abi="x86_64" done="true" pass="10" fail="2" runtime="100">
+    <TestCase name="com.example.car.FooTest">
+      <Test result="fail" name="testOne">
+        <Failure message="java.lang.IllegalStateException: Rotary IME missing 1">
+          <StackTrace>java.lang.IllegalStateException: Rotary IME missing 1
+\tat com.example.car.RotaryHelper.assertReady(FooTest.java:10)
+\tat com.example.car.FooTest.testOne(FooTest.java:18)</StackTrace>
+        </Failure>
+      </Test>
+      <Test result="fail" name="testTwo">
+        <Failure message="java.lang.IllegalStateException: Rotary IME missing 2">
+          <StackTrace>java.lang.IllegalStateException: Rotary IME missing 2
+\tat com.example.car.RotaryHelper.assertReady(FooTest.java:10)
+\tat com.example.car.FooTest.testTwo(FooTest.java:24)</StackTrace>
+        </Failure>
+      </Test>
+    </TestCase>
+  </Module>
+</Result>
+"""
+
+    def test_deterministic_grouping_discussion_ai_verdict_and_known_issue_promotion(self):
+        from xts_agent.ui.server import UiApp
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            cfg_dir = fx.root / "config"
+            cfg_dir.mkdir()
+            src_dir = fx.root / "src" / "com" / "example" / "car"
+            src_dir.mkdir(parents=True)
+            java_file = src_dir / "FooTest.java"
+            java_file.write_text(
+                "\n".join([f"// line {i}" for i in range(1, 9)] + [
+                    "class RotaryHelper {",
+                    "  static void assertReady() { throw new IllegalStateException(\"Rotary IME missing\"); }",
+                    "}",
+                ] + [f"// tail {i}" for i in range(12, 30)]),
+                encoding="utf-8",
+            )
+            defaults_path = cfg_dir / "default_config.yaml"
+            defaults_path.write_text(
+                f"triage:\n  known_issues_file: {cfg_dir / 'known_issues.yaml'}\n"
+                f"ai_rca:\n  provider: openai_compatible\n  openai_base_url: http://127.0.0.1:11434/v1\n"
+                f"  openai_model: coder\n  source_code_paths:\n    - {fx.root / 'src'}\n",
+                encoding="utf-8",
+            )
+
+            rdir = fx.root / "tf" / "2026.11.18_01.00.00.000_1"
+            rdir.mkdir(parents=True)
+            (rdir / "test_result.xml").write_text(self.TWO_SAME_ROOT_CAUSE_XML, encoding="utf-8")
+            (rdir / "device_logcat_test_1.txt").write_text(
+                "11-18 01:00:01 I/RotaryService: no touch IME configured\n"
+                "11-18 01:00:02 I/TestRunner: failed: testOne(com.example.car.FooTest)\n"
+                "11-18 01:00:02 E/RotaryHelper: missing IME\n"
+                "11-18 01:00:03 I/TestRunner: finished: testOne(com.example.car.FooTest)\n",
+                encoding="utf-8",
+            )
+
+            # Run 1 archived WITH NO triage_*.json: Level-1 deterministic grouping runs on the fly
+            done1 = _state(pid=1, phase="done", overall_status="FAILED",
+                           totals={"pass": 10, "fail": 2, "skip": 0, "duration": 30})
+            done1["run_id"] = "ui-20261118-0100"
+            done1["suites"]["cts"].update({"status": "FAILED", "results_dir": str(rdir)})
+            (fx.state_dir / "history" / "ui-20261118-0100.json").write_text(json.dumps(done1), encoding="utf-8")
+
+            # Clean passing run (newer) — default_key must still pick the failing run
+            clean = _state(pid=2, phase="done", overall_status="PASSED", started_at=2000.0,
+                           totals={"pass": 9, "fail": 0, "skip": 0, "duration": 10})
+            clean["run_id"] = "ui-20261118-0200"
+            (fx.state_dir / "history" / "ui-20261118-0200.json").write_text(json.dumps(clean), encoding="utf-8")
+
+            app = UiApp(fx.config(defaults_path=str(defaults_path)))
+            runs_meta = app.triage_runs()
+            self.assertEqual(runs_meta["default_key"], "ui-20261118-0100")
+
+            tr = app.triage_run("ui-20261118-0100")
+            self.assertEqual(tr["triage_source"], "computed_deterministic")
+            self.assertEqual(tr["summary"]["failures"], 2)
+            self.assertEqual(tr["summary"]["groups"], 1)  # 2 tests collapsed into 1 root cause!
+            sig = tr["groups"][0]["signature"]
+
+            gd = app.triage_group("ui-20261118-0100", sig)
+            self.assertIn("RotaryService: no touch IME", gd["logcat"])
+            self.assertTrue(any("FooTest.java" in s["file"] for s in gd["snippets"]))
+
+            # 1) Offline human note works without LLM
+            note_res = app.triage_discuss("ui-20261118-0100", sig, {"message": "Reproduced on CVD #1", "mode": "note", "author": "alice"})
+            self.assertEqual(len(note_res["messages"]), 1)
+            self.assertEqual(note_res["messages"][0]["author"], "alice")
+
+            # 2) Failed LLM raises RuntimeError without adding orphan question to DB
+            fake_bad = MagicMock(model_id="openai:coder")
+            fake_bad.generate.return_value = "Failed to generate RCA: ConnectionError"
+            with patch("xts_agent.triage.discussion.get_llm_provider", return_value=fake_bad), \
+                    self.assertRaises(RuntimeError):
+                app.triage_discuss("ui-20261118-0100", sig, {"message": "Why did this fail?", "mode": "ask"})
+            self.assertEqual(len(app.triage_group("ui-20261118-0100", sig)["messages"]), 1)
+
+            # 3) On-demand structured AI RCA + interactive multi-turn Ask AI
+            fake_llm = MagicMock(model_id="openai:coder")
+            fake_llm.generate.side_effect = [
+                json.dumps({
+                    "root_cause": "Touch IME missing on Cuttlefish auto build.",
+                    "classification": "ENVIRONMENT_ISSUE",
+                    "confidence": 0.92,
+                    "suggested_fix": "Add CarLatinIME to product packages.",
+                    "evidence": "FooTest.java:10 & RotaryService logcat",
+                }),
+                "Check `device/google/cuttlefish/shared/auto/device_vendor.mk` for `CarLatinIME`.",
+            ]
+            with patch("xts_agent.triage.discussion.get_llm_provider", return_value=fake_llm):
+                ai_res = app.triage_analyze("ui-20261118-0100", sig)
+                self.assertEqual(ai_res["ai"]["classification"], "ENVIRONMENT_ISSUE")
+                chat_res = app.triage_discuss("ui-20261118-0100", sig,
+                                              {"message": "Which makefile enables it?", "mode": "ask", "author": "bob"})
+            self.assertIn("CarLatinIME", chat_res["messages"][-1]["content"])
+            # Prior note ("Reproduced on CVD #1") + source snippet ("FooTest.java") were grounded in the prompt
+            sent_prompt = fake_llm.generate.call_args_list[-1][0][0]
+            self.assertIn("Reproduced on CVD #1", sent_prompt)
+            self.assertIn("FooTest.java", sent_prompt)
+
+            # 4) Second run with same signature inherits discussion & cached AI, then promotes to known_issues.yaml
+            done2 = _state(pid=3, phase="done", overall_status="FAILED", started_at=3000.0,
+                           totals={"pass": 10, "fail": 2, "skip": 0, "duration": 25})
+            done2["run_id"] = "ui-20261118-0300"
+            done2["suites"]["cts"].update({"status": "FAILED", "results_dir": str(rdir)})
+            (fx.state_dir / "history" / "ui-20261118-0300.json").write_text(json.dumps(done2), encoding="utf-8")
+
+            tr2 = app.triage_run("ui-20261118-0300")
+            self.assertEqual(tr2["groups"][0]["ai"]["classification"], "ENVIRONMENT_ISSUE")
+            self.assertGreaterEqual(tr2["groups"][0]["discussion_count"], 4)
+
+            ki_res = app.triage_known_issue({
+                "signature": sig,
+                "run_key": "ui-20261118-0300",
+                "title": "Cuttlefish Auto missing default touch IME",
+                "classification": "ENVIRONMENT_ISSUE",
+                "jira": "AAOS-404",
+                "waive": True,
+                "waiver_expires": "2027-12-31",
+                "waiver_reason": "AOSP Cuttlefish lab image",
+                "author": "bob",
+            })
+            self.assertEqual(ki_res["issue_id"], "KI-0001")
+
+            # Reloading triage now deterministically matches KI-0001 and marks it waived & non-actionable!
+            tr3 = app.triage_run("ui-20261118-0300")
+            g3 = tr3["groups"][0]
+            self.assertEqual(g3["known_issue"]["id"], "KI-0001")
+            self.assertTrue(g3["known_issue"]["waived"])
+            self.assertFalse(g3["actionable"])
+            self.assertEqual(g3["effective_classification"], "ENVIRONMENT_ISSUE")
+
+            # 5) Official Google TradeFed report links (HTML, XML, submission .zip) & path resolution
+            (rdir / "test_result_failures_suite.html").write_text("<html>Google CTS</html>", encoding="utf-8")
+            rdir.with_name(rdir.name + ".zip").write_bytes(b"PK\x03\x04")
+            detail = app.decorate(app.runs.detail("ui-20261118-0300"))
+            (g_link,) = detail["links"]["google_reports"]
+            self.assertEqual(g_link["html_url"], "/tf-results/ui-20261118-0300/cts/test_result_failures_suite.html")
+            self.assertEqual(g_link["xml_url"], "/tf-results/ui-20261118-0300/cts/test_result.xml")
+            self.assertEqual(g_link["zip_url"], "/tf-zip/ui-20261118-0300/cts")
+            self.assertEqual(app.resolve_tf_suite_dir("ui-20261118-0300", "cts"), rdir.resolve())
+            self.assertIsNone(app.resolve_tf_suite_dir("ui-20261118-0300", "../etc"))
+            self.assertEqual(app.triage_run("ui-20261118-0300")["google_reports"][0]["primary_url"], g_link["html_url"])
+
+            # 6) Optional AI Disabled mode ("provider: none") keeps deterministic triage & notes working
+            app.save_settings({"ai_rca": {"provider": "none"}})
+            tr_none = app.triage_run("ui-20261118-0300")
+            self.assertEqual(tr_none["ai_configured"]["provider"], "none")
+            self.assertFalse(tr_none["ai_configured"]["enabled"])
+            note_res = app.triage_discuss("ui-20261118-0300", sig, {"message": "Offline note", "mode": "note", "author": "qa"})
+            self.assertEqual(note_res["messages"][-1]["content"], "Offline note")
+            with self.assertRaisesRegex(RuntimeError, "Disabled in Settings"):
+                app.triage_analyze("ui-20261118-0300", sig, force=True)
 
 
 class _null:

@@ -425,13 +425,23 @@ def list_plans(plans_dir: Path) -> List[Dict[str, Any]]:
                     "max_retries": (s.get("retry") or {}).get("max_retries"),
                 }
             )
+        devs_raw = data.get("devices") or data.get("device_requirements") or {}
+        if not isinstance(devs_raw, dict):
+            devs_raw = {}
+        raw_serials = devs_raw.get("serials")
+        serials = (
+            [str(x).strip() for x in raw_serials if str(x).strip()]
+            if isinstance(raw_serials, list)
+            else ([str(raw_serials).strip()] if raw_serials else [])
+        )
         out.append(
             {
                 "file": path.name,
-                "name": data.get("name") or path.stem,
-                "description": data.get("description", ""),
+                "name": data.get("name") or ((data.get("plan") or {}).get("name") if isinstance(data.get("plan"), dict) else "") or path.stem,
+                "description": data.get("description") or ((data.get("plan") or {}).get("description") if isinstance(data.get("plan"), dict) else "") or "",
                 "profile": data.get("profile", "development"),
-                "min_devices": (data.get("devices") or {}).get("min_devices"),
+                "min_devices": devs_raw.get("min_devices"),
+                "serials": serials,
                 "ai_rca": bool((data.get("ai_rca") or {}).get("enabled")),
                 "suites": suites,
             }

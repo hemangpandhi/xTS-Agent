@@ -182,7 +182,145 @@ against fake `cts-tradefed` and `adb` scripts.
 
 ---
 
-## Path A — New machine **without Docker** (hardware)
+## Office Deployment — Step-by-Step Procedure
+
+Follow these 8 steps to deploy `xts-agent` and the Web Console on an office test workstation or lab server.
+
+### Step 1. Install host prerequisites & Python virtual environment
+
+```bash
+git clone https://github.com/hemangpandhi/xTS-Agent.git
+cd xTS-Agent
+
+# One-time Ubuntu/Debian packages (JDK 17+, adb udev rules, /opt/xts directory)
+sudo ./scripts/setup_environment.sh
+
+# Create virtualenv & install hash-verified dependencies
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install --require-hashes -r requirements.lock
+pip install --no-deps -e .
+
+# OPTIONAL: only if you want in-process GGUF loading (`provider: llama_cpp`) or RAG vector indexing.
+# Not needed if you run `llama-server` (llama.cpp HTTP binary), Ollama, vLLM, Online API, or Disabled mode!
+# pip install -e ".[ai]"
+```
+
+### Step 2. Extract Google xTS suites & connect DUTs
+
+Unzip your Google compatibility suites (`android-cts`, `android-vts`, `android-sts`, `android-gts`, `android-ats`, `android-catbox`) under `/opt/xts` (if you test both Cuttlefish `x86_64` and physical `arm64` head units/phones, keep separate folders such as `/opt/xts/x86_64/android-cts` and `/opt/xts/arm64/android-cts`):
+
+```bash
+adb devices -l                  # verify all USB / TCP / Cuttlefish DUTs show `device`
+./scripts/preflight.sh          # verifies JDK, aapt2, adb, suite binaries, and Python imports
+```
+
+### Step 3. Choose your AI Triage mode (Optional — Level-1 Triage is always deterministic)
+
+Level-1 triage (stack-signature grouping, regex classification, `NEW`/`PERSISTENT`/`FLAKY` build history, `known_issues.yaml` waivers, and team ownership) is **100% deterministic** and works with **no AI at all**. For Level-2 root-cause analysis & interactive discussion, pick whichever matches your office setup:
+
+| Office Setup | Recommended Mode in UI **Settings** (`#/settings`) | How to run / configure |
+|---|---|---|
+| **You already have `llama.cpp` (`llama-server` binary)** *(Recommended for `llama.cpp`)* | **Local Server** → click preset **`llama.cpp server (:8080)`** | Start your office binary:<br>`llama-server -m /path/to/model.gguf --port 8080 -c 16384 -ngl 99`<br>Set URL `http://127.0.0.1:8080/v1`, Model `local-model`, click **Test** → **Save**. |
+| **You have a `.gguf` file and want Python to load it directly** | **`llama.cpp` GGUF Path** (`provider: llama_cpp`) | Install `pip install -e ".[ai]"`, paste the absolute `.gguf` path (e.g. `/opt/models/qwen2.5-coder-32b-q4_k_m.gguf`), set `n_ctx` (`16384`) & `n_gpu_layers` (`-1` = GPU, `0` = CPU), click **Verify** → **Save**. |
+| **Ollama / vLLM / LM Studio** on localhost or office LAN | **Local Server** → click **`Ollama (:11434)`** or **`vLLM (:8011)`** | e.g. `ollama pull qwen2.5-coder:32b` → URL `http://127.0.0.1:11434/v1` (or `http://<lan-gpu-ip>:11434/v1`), click **Test** → **Save**. |
+| **Online AI API** (ChatGPT / OpenAI, Google Gemini, OpenRouter) | **Online API** → choose **ChatGPT / OpenAI** or **Gemini**, tick **Allow external AI API** | Export API key before starting UI/CLI (never saved in YAML):<br>`export XTS_LLM_API_KEY="sk-..."` *(OpenAI/OpenRouter)* or<br>`export XTS_GEMINI_API_KEY="AIza..."` *(Gemini)*. |
+| **Browser ChatGPT / Company Web AI** *(no API key & no local GPU)* | **Disabled** (`provider: none`) | Open **`#/triage`** on any failure group and click **Copy prompt for ChatGPT** — pastes grounded stack + logcat + source snippet into your browser chat in 1 click; save the conclusion back as a **Team note** or **Verdict**. |
+
+### Step 4. Start the Web Console (`xts-agent ui`)
+
+**Single workstation (loopback only):**
+```bash
+source .venv/bin/activate
+xts-agent ui --port 8765
+# Open http://127.0.0.1:8765/
+```
+
+**Shared office LAN server (token-protected):**
+```bash
+export XTS_UI_TOKEN="$(openssl rand -hex 20)"
+xts-agent ui --host 0.0.0.0 --port 8765
+# Share with teammates: http://<office-server-ip>:8765/#token=<XTS_UI_TOKEN>
+```
+
+<details>
+<summary><b>Optional: Keep <code>xts-agent ui</code> running permanently via <code>systemd</code></b></summary>
+
+Create `/etc/systemd/system/xts-agent-ui.service` (adjust `User`, `WorkingDirectory`, and paths):
+
+```ini
+[Unit]
+Description=xTS Agent Web Console
+After=network.target
+
+[Service]
+Type=simple
+User=xts
+WorkingDirectory=/opt/xTS-Agent
+Environment="XTS_UI_TOKEN=replace-with-random-hex-token"
+# Optional if using Online ChatGPT / Gemini API:
+# Environment="XTS_LLM_API_KEY=sk-..."
+ExecStart=/opt/xTS-Agent/.venv/bin/xts-agent ui --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now xts-agent-ui
+```
+</details>
+
+### Step 5. First-time Host Setup in `#/settings`
+
+1. Open **Settings** (`http://127.0.0.1:8765/#/settings`).
+2. Under **Find suite packages**, click **Scan** on `/opt/xts` and click **Use for x86_64** or **Use for arm64** for each installed suite (green build badge confirms `tools/tradefed.jar` and ABIs).
+3. Verify **Host tools** (`JDK`, `Android SDK` with `aapt2`, `adb`) show green checks.
+4. Pick your **AI root-cause analysis** mode (Step 3 above), optionally add local AOSP/OEM paths under `ai_rca.source_code_paths` in `config/default_config.yaml` so stack traces link directly to local source files, and click **Save settings** (writes `config/local_settings.yaml`).
+
+### Step 6. Configure Ownership & Launch Your First Run (`#/launch` or `#/plans`)
+
+1. *(Optional)* Edit `config/ownership.yaml` to map Android packages/modules to your office teams & Jira components.
+2. Open **Launch** (`#/launch`):
+   - Pick a plan (start with `smoke_test.yaml` for a 2-minute sanity check, then `cts_only.yaml` or create a custom plan in **Plans → New plan**).
+   - Choose **Shards / device count**:
+     - `1 device (single DUT, no sharding)` — runs on one device, ideal for reproducing a bug or quick module checks.
+     - `All free devices (auto)` — shards across all healthy online DUTs running the same build fingerprint.
+     - `2 / 4 / 6 / custom` — caps shard count so remaining lab devices stay free for teammates.
+   - *(Optional)* Under **3 · Devices**, tick **Pin specific device(s)** to target exact ADB serials (`devices.serials`).
+   - Click **Start run** and monitor per-device progress and live TradeFed logs on **Live** (`#/live`).
+
+### Step 7. Review Official Google Reports & Interactive Triage (`#/runs` & `#/triage`)
+
+1. **Official Google / TradeFed Format (`#/runs` & `#/run/<id>`):**
+   - Click **Official Google HTML** (`test_result_failures_suite.html`), **`test_result.xml`**, or **Submission `.zip`** (`<session>.zip`) to inspect or archive the unmodified Google certification artifacts.
+2. **2-Level Interactive Triage (`#/triage`):**
+   - **Left pane (Level 1 — Deterministic):** Every failing test is collapsed by normalized stack signature (e.g., 500 failures → 25 root-cause groups), ranked by impact with `NEW` / `PERSISTENT` / `FLAKY` badges.
+   - **Right pane (Level 2 — AI & Team Workspace):**
+     - Inspect stack traces, matched local AOSP/OEM source lines, and `device_logcat_test_*.txt` excerpts.
+     - Click **Run AI RCA** or **Ask AI** for multi-turn grounded Q&A, **Copy prompt for ChatGPT** for browser AI, or **Add team note (no AI)** for offline collaboration.
+     - Save a **Human Verdict** (`confirmed` / `waived` / `resolved`), **Re-run** just that group's failing test(s) on 1 DUT, or click **Promote to `known_issues.yaml`** so every future run classifies or waives that signature deterministically at Level 1!
+
+### Step 8. Weekly Lab Maintenance
+
+```bash
+source .venv/bin/activate
+# Preview and prune old TradeFed result folders (always keeps newest 3 per suite + resumable runs)
+xts-agent cleanup --prune-results --keep-days 14 --dry-run
+xts-agent cleanup --prune-results --keep-days 14
+
+# Check or release quarantined devices (also available in Web UI -> Devices)
+xts-agent quarantine
+```
+
+---
+
+## Path A — CLI Reference **without Docker** (hardware)
 
 > First time? Follow [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) end to end; it adds pass criteria and the validation stages. This section is the short reference.
 
@@ -497,19 +635,17 @@ export XTS_DATABASE_URL="postgresql://xts:<password>@db.lab.example:5432/xts"
 
 Tables are created on first use. Credentials are masked in logs.
 
-## AI RCA (on-prem by default)
+## AI RCA (optional, on-prem by default)
 
-`ai_rca` defaults to `provider: llama_cpp`, so failure logs, stack traces and
-retrieved OEM source never leave the host. External providers (`gemini`, or an
-`openai_compatible` endpoint that is not on this host or a private network) are
-refused unless `ai_rca.allow_external_providers: true` is set explicitly —
-get your security/legal sign-off before enabling it.
+Level-1 triage is always deterministic. Level-2 AI RCA is completely optional and configurable in **Settings (`#/settings`)** (`config/local_settings.yaml`) or `config/default_config.yaml`. External providers (`gemini`, or an `openai_compatible` endpoint outside localhost / RFC-1918 private networks) are refused unless `ai_rca.allow_external_providers: true` is set explicitly — obtain your security/legal sign-off before enabling external APIs.
 
-| Provider | Runs where | Typical use |
-|----------|-----------|-------------|
-| `llama_cpp` | In-process, GGUF file on the GPU | Air-gapped lab |
-| `openai_compatible` | Any chat-completions server: Ollama, vLLM, llama.cpp server, LM Studio (on-prem, no opt-in) or OpenAI / Gemini's OpenAI endpoint / OpenRouter (hosted, opt-in) | Shared lab LLM server, or a hosted model for a demo |
-| `gemini` | Google API (opt-in) | Hosted |
+| Provider (`ai_rca.provider`) | Runs where | Typical office setup |
+|---|---|---|
+| `openai_compatible` *(local/LAN)* | `llama-server` (`:8080`), `Ollama` (`:11434`), `vLLM` (`:8011`), `LM Studio` (`:1234`) | **Recommended on-prem**: run `llama.cpp`'s `llama-server -m model.gguf --port 8080` or Ollama on the host/LAN GPU |
+| `llama_cpp` | In-process `.gguf` file via `llama-cpp-python` (`llama_model_path`) | Air-gapped single host loading `.gguf` directly inside Python |
+| `openai_compatible` *(online, opt-in)* | `https://api.openai.com/v1` (ChatGPT / `gpt-4.1` / `gpt-4o`), OpenRouter, etc. | Cloud API with `allow_external_providers: true` + `XTS_LLM_API_KEY` |
+| `gemini` *(online, opt-in)* | Google Gemini API (`gemini-2.5-flash` / `gemini-2.5-pro`) | Cloud API with `allow_external_providers: true` + `XTS_GEMINI_API_KEY` |
+| `none` *(disabled)* | No LLM calls (100% deterministic) | Strict air-gapped / no-GPU host; optional 1-click **Copy prompt for ChatGPT** in `#/triage` |
 
 Example with a local vLLM server, an Ollama fallback and the AOSP/OEM source
 indexed for retrieval:
@@ -651,13 +787,15 @@ graph TD
 
 | Package | Role |
 |---------|------|
-| `xts_agent/cli.py`, `orchestrator.py`, `config_loader.py` | Commands, run sequence, configuration |
+| `xts_agent/cli.py`, `orchestrator.py`, `config_loader.py`, `settings.py` | Commands, run sequence, configuration, host settings (`local_settings.yaml`) |
+| `xts_agent/ui/` | Zero-dependency web console (`xts-agent ui`): live monitoring, launch/sharding/pinning, official Google reports, 2-level interactive triage & discussion |
 | `xts_agent/device/` | ADB, discovery, health gate, leases, prep, quarantine ledger |
 | `xts_agent/execution/` | Plan executor, TradeFed runner, heartbeat, checkpoints, cancel, sharding |
 | `xts_agent/retry/` | Suite retry and isolation |
 | `xts_agent/results/` | `test_result.xml` parser, per-suite run store |
-| `xts_agent/triage/` | Signatures, history, known issues, ownership, AI RCA, Jira |
-| `xts_agent/rca/` | Rule-based classification, LLM providers, source-code index |
+| `xts_agent/triage/` | Signatures, history, known issues, ownership, AI RCA, interactive discussion & verdicts, Jira |
+| `xts_agent/rca/` | Rule-based classification, LLM providers (`llama.cpp`, `Ollama`/`vLLM`, OpenAI/Gemini), source-code index |
+| `xts_agent/fixloop/` | Closed-loop test diagnosis, catalog remediation, OEM patch/build/flash verification |
 | `xts_agent/reporting/` | HTML, JSON, JUnit, dashboard, Prometheus, Slack |
 | `xts_agent/storage/` | SQL layer, artifact archive |
 
