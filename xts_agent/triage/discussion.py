@@ -1058,7 +1058,12 @@ class TriageWorkspace:
             waiver_block = {"reason": reason, "expires": exp_date.isoformat(), "profiles": profiles}
             builds_re = str(body.get("builds_regex") or "").strip()
             if builds_re:
-                re.compile(builds_re)
+                if len(builds_re) > 200:
+                    raise ValueError("builds_regex is too long (max 200 chars)")
+                try:
+                    re.compile(builds_re)
+                except re.error as exc:
+                    raise ValueError(f"builds_regex is not a valid regular expression: {exc}") from None
                 waiver_block["builds_regex"] = builds_re
 
         t_cfg, _, _ = self._triage_configs(defaults)

@@ -554,3 +554,20 @@ class _null:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WaiverRegexTests(unittest.TestCase):
+    def test_bad_builds_regex_is_a_validation_error(self):
+        import tempfile
+        from pathlib import Path
+
+        from xts_agent.triage.discussion import TriageWorkspace
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = TriageWorkspace(Path(tmp), Path(tmp) / "results", None)
+            body = {"signature": "abcdef0123456789", "title": "t", "waive": True,
+                    "waiver_expires": "2099-01-01", "builds_regex": "("}
+            with self.assertRaisesRegex(ValueError, "builds_regex"):
+                ws.promote_to_known_issues(body, {})
+            with self.assertRaisesRegex(ValueError, "too long"):
+                ws.promote_to_known_issues({**body, "builds_regex": "a" * 201}, {})

@@ -533,8 +533,22 @@ class UiApp:
                 "models": [],
                 "error": "XTS_LLM_API_KEY environment variable is not set on this host",
             }
+        # The key leaves this host only for the endpoint an admin saved in Settings:
+        # a request must not be able to point it at another URL.
+        saved_ai = self.effective_defaults().get("ai_rca") or {}
+        saved_base = str(saved_ai.get("openai_base_url") or "").rstrip("/")
+        key_allowed = bool(api_key) and base == saved_base and (
+            local_ep or bool(saved_ai.get("allow_external_providers"))
+        )
+        if not local_ep and not key_allowed:
+            return {
+                "ok": False,
+                "provider": "openai_compatible",
+                "models": [],
+                "error": "Save these settings first: the API key is only sent to the saved endpoint",
+            }
         model = str(body.get("model") or "")
-        out = self._probe_llm(base, model, api_key=api_key)
+        out = self._probe_llm(base, model, api_key=api_key if key_allowed else "")
         if not local_ep or (out["ok"] and out["model_found"] is not False):
             return out
         fallbacks = []
@@ -904,6 +918,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(400, str(exc).strip("'\""))
         except LookupError as exc:  # suite not installed, plan not found
             return self._error(404, str(exc))
+        except Exception:
+            logger.exception("GET %s failed", path)
+            return self._error(500, "internal error; see the console's log")
         return self._error(404, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -982,6 +999,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(409, str(exc))
         except (ValueError, json.JSONDecodeError) as exc:
             return self._error(400, str(exc))
+        except Exception:
+            logger.exception("POST %s failed", path)
+            return self._error(500, "internal error; see the console's log")
         return self._error(404, "not found")
 
     def _file(self, rel: str) -> None:

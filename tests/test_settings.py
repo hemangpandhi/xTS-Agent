@@ -243,3 +243,31 @@ class SettingsApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LlmKeyScopeTests(unittest.TestCase):
+    """XTS_LLM_API_KEY only ever goes to the endpoint saved in Settings."""
+
+    def test_key_not_sent_to_an_unsaved_endpoint(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _ = SettingsApiTests()._app(tmp)
+            app.save_settings({"ai_rca": {"provider": "openai_compatible", "openai_model": "m",
+                                          "openai_base_url": "https://llm.example.com/v1",
+                                          "allow_external_providers": True}})
+            ok = {"ok": True, "models": ["m"], "model_found": True}
+            with mock.patch.dict("os.environ", {"XTS_LLM_API_KEY": "secret"}), \
+                    mock.patch.object(type(app), "_probe_llm", return_value=ok) as probe:
+                # another external URL in the request: refused, nothing sent
+                out = app.test_llm({"base_url": "https://evil.example.net/v1", "allow_external_providers": True})
+                self.assertFalse(out["ok"])
+                self.assertIn("Save these settings first", out["error"])
+                probe.assert_not_called()
+                # an unsaved on-prem URL is probed, but without the key
+                app.test_llm({"base_url": "http://10.0.0.9:8000/v1", "model": "m"})
+                self.assertEqual(probe.call_args.kwargs["api_key"], "")
+                # the saved endpoint gets it
+                app.test_llm({"base_url": "https://llm.example.com/v1/", "model": "m",
+                              "allow_external_providers": True})
+                self.assertEqual(probe.call_args.kwargs["api_key"], "secret")
